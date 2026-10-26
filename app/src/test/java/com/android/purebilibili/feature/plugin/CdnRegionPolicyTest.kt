@@ -6,6 +6,7 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -452,5 +453,76 @@ class CdnRegionPolicyTest {
 
         assertEquals("backup.bilivideo.com", hostFromCdnUrl(preferred.first().videoUrl))
         assertEquals("base.bilivideo.com", hostFromCdnUrl(preferred.last().videoUrl))
+    }
+
+    @Test
+    fun `custom preference rewrites bilivideo sources to arbitrary host keeping path and query`() {
+        val original = buildPlaybackCdnCandidates(
+            videoUrls = listOf("https://upos-sz-mirrorali.bilivideo.com/upgcxcode/1/2/video.m4s?deadline=1&gen=playurl"),
+            audioUrls = listOf("https://upos-sz-mirrorali.bilivideo.com/upgcxcode/1/2/audio.m4s?deadline=1&gen=playurl"),
+        )
+
+        val preferred = applyPlaybackCdnPreference(
+            candidates = original,
+            preference = PlaybackCdnPreference.CUSTOM,
+            customHost = "cdn.example.net",
+        )
+
+        assertEquals(
+            "https://cdn.example.net/upgcxcode/1/2/video.m4s?deadline=1&gen=playurl",
+            preferred.first().videoUrl,
+        )
+        assertEquals(
+            "https://cdn.example.net/upgcxcode/1/2/audio.m4s?deadline=1&gen=playurl",
+            preferred.first().audioUrl,
+        )
+        assertTrue(preferred.drop(1).any { it.videoUrl == original.first().videoUrl })
+    }
+
+    @Test
+    fun `custom preference rewrites non-bilivideo sources without domain restriction`() {
+        val original = buildPlaybackCdnCandidates(
+            videoUrls = listOf("https://123.45.67.89/mcdn/video.m4s?sign=abc", "https://backup.example.com/video.m4s?sign=abc"),
+            audioUrls = emptyList(),
+        )
+
+        val preferred = applyPlaybackCdnPreference(
+            candidates = original,
+            preference = PlaybackCdnPreference.CUSTOM,
+            customHost = "proxy.internal:8443",
+        )
+
+        assertEquals("https://proxy.internal:8443/mcdn/video.m4s?sign=abc", preferred.first().videoUrl)
+    }
+
+    @Test
+    fun `custom preference without a valid host keeps original candidates`() {
+        val original = buildPlaybackCdnCandidates(
+            videoUrls = listOf("https://upos-sz-mirrorali.bilivideo.com/video.m4s?deadline=1"),
+            audioUrls = emptyList(),
+        )
+
+        assertEquals(original, applyPlaybackCdnPreference(original, PlaybackCdnPreference.CUSTOM, customHost = null))
+        assertEquals(original, applyPlaybackCdnPreference(original, PlaybackCdnPreference.CUSTOM, customHost = "   "))
+        assertEquals(original, applyPlaybackCdnPreference(original, PlaybackCdnPreference.CUSTOM, customHost = "bad host"))
+    }
+
+    @Test
+    fun `normalize playback cdn host accepts host port and full urls`() {
+        assertEquals("cdn.example.net", normalizePlaybackCdnHost("CDN.Example.NET"))
+        assertEquals("cdn.example.net:8443", normalizePlaybackCdnHost("  cdn.example.net:8443  "))
+        assertEquals("123.45.67.89", normalizePlaybackCdnHost("123.45.67.89"))
+        assertEquals("123.45.67.89:8080", normalizePlaybackCdnHost("123.45.67.89:8080"))
+        assertEquals("[::1]:8443", normalizePlaybackCdnHost("[::1]:8443"))
+        // 允许用户直接粘贴完整链接，只取主机部分。
+        assertEquals("proxy.example.com", normalizePlaybackCdnHost("https://proxy.example.com/upgcxcode/video.m4s?sign=1"))
+        assertNull(normalizePlaybackCdnHost(null))
+        assertNull(normalizePlaybackCdnHost(""))
+        assertNull(normalizePlaybackCdnHost("https://proxy.example.com:99999/path"))
+        assertNull(normalizePlaybackCdnHost("user:pass@proxy.example.com"))
+        assertNull(normalizePlaybackCdnHost("bad host"))
+        assertNull(normalizePlaybackCdnHost("-leading-dash.example.com"))
+        assertNull(normalizePlaybackCdnHost("proxy.example.com:0"))
+        assertNull(normalizePlaybackCdnHost("proxy.example.com:notaport"))
     }
 }

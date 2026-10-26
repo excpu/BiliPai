@@ -367,6 +367,7 @@ class VideoComposerDraftStateTest {
         val application = mockk<Application>(relaxed = true)
         every { application.applicationContext } returns application
         every { SettingsManager.getPlaybackCdnPreference(application) } returns flowOf("base_url")
+        every { SettingsManager.getPlaybackCdnCustomHost(application) } returns flowOf("")
         coEvery { CommentRepository.getEmotePackages() } returns Result.success(emptyList())
         var viewModel: VideoPlaybackViewModel? = null
         try {

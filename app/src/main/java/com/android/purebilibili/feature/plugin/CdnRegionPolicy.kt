@@ -60,7 +60,10 @@ enum class PlaybackCdnPreference(
     ALIOV("aliov", "aliov（阿里云海外）", "upos-sz-mirroraliov.bilivideo.com"),
     COSOV("cosov", "cosov（腾讯云海外）", "upos-sz-mirrorcosov.bilivideo.com"),
     HWOV("hwov", "hwov（华为云海外）", "upos-sz-mirrorhwov.bilivideo.com"),
-    HK_BCACHE("hk_bcache", "hk_bcache（Bilibili海外）", "cn-hk-eq-bcache-01.bilivideo.com");
+    HK_BCACHE("hk_bcache", "hk_bcache（Bilibili海外）", "cn-hk-eq-bcache-01.bilivideo.com"),
+
+    /** 用户手动输入的线路，主机单独存放在 playback_cdn_custom_host，不写进本枚举的 host 字段。 */
+    CUSTOM("custom", "自定义线路（手动输入）");
 
     companion object {
         fun fromStorageValue(value: String?): PlaybackCdnPreference =
@@ -68,21 +71,71 @@ enum class PlaybackCdnPreference(
     }
 }
 
+/**
+ * 应用全局 CDN 线路偏好。
+ *
+ * 内置线路只改写 B 站镜像域名（[rewriteBilivideoHost]），避免把 mcdn/IP 源改写成无效镜像；
+ * [PlaybackCdnPreference.CUSTOM] 走 [rewriteCdnUrlHost]，不做任何域名限制，用户输入什么主机就替换成
+ * 什么主机，路径与签名参数原样保留。自定义主机非法或未填写时不改写，保持原始候选顺序回退。
+ */
 internal fun applyPlaybackCdnPreference(
     candidates: List<PlaybackCdnCandidate>,
     preference: PlaybackCdnPreference,
+    customHost: String? = null,
 ): List<PlaybackCdnCandidate> {
     if (candidates.isEmpty() || preference == PlaybackCdnPreference.BASE_URL) return candidates
     if (preference == PlaybackCdnPreference.BACKUP_URL) {
         return candidates.drop(1) + candidates.take(1)
     }
-    val host = preference.host ?: return candidates
+    val host = if (preference == PlaybackCdnPreference.CUSTOM) {
+        normalizePlaybackCdnHost(customHost) ?: return candidates
+    } else {
+        preference.host ?: return candidates
+    }
+    val useCustomHost = preference == PlaybackCdnPreference.CUSTOM
     val source = candidates.first()
     val preferred = source.copy(
-        videoUrl = rewriteBilivideoHost(source.videoUrl, host) ?: return candidates,
-        audioUrl = source.audioUrl?.let { rewriteBilivideoHost(it, host) ?: it },
+        videoUrl = rewriteCandidateHost(source.videoUrl, host, useCustomHost) ?: return candidates,
+        audioUrl = source.audioUrl?.let { rewriteCandidateHost(it, host, useCustomHost) ?: it },
     )
     return (listOf(preferred) + candidates).distinctBy { it.videoUrl to it.audioUrl }
+}
+
+private fun rewriteCandidateHost(url: String, host: String, unrestricted: Boolean): String? =
+    if (unrestricted) rewriteCdnUrlHost(url, host) else rewriteBilivideoHost(url, host)
+
+private val playbackCdnHostNamePattern =
+    Regex("^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$")
+private val playbackCdnIpv6Pattern = Regex("^\\[[0-9A-Fa-f:.]+]$")
+
+/**
+ * 归一化手动输入的 CDN 主机：允许 `host`、`host:port`、`[ipv6]:port`，也容忍用户粘贴完整 URL
+ * （只取其中的 authority）。不做域名白名单限制。非法或留空返回 null。
+ */
+internal fun normalizePlaybackCdnHost(input: String?): String? {
+    val raw = input.orEmpty().trim()
+    if (raw.isEmpty()) return null
+    val authority = raw.substringAfter("://", raw)
+        .substringBefore('/')
+        .substringBefore('?')
+        .substringBefore('#')
+        .trim()
+        .lowercase()
+    if (authority.isEmpty() || authority.contains('@') || authority.any { it.isWhitespace() }) return null
+    val hostPart = if (authority.startsWith("[")) authority.substringBefore(']', authority) else authority.substringBefore(':')
+    val portPart = if (authority.startsWith("[")) authority.substringAfter(']', "").removePrefix(":")
+    else if (hostPart == authority) "" else authority.substringAfter(':')
+    val hostValid = if (hostPart.startsWith("[")) {
+        hostPart.endsWith("]") && hostPart.matches(playbackCdnIpv6Pattern)
+    } else {
+        !hostPart.contains('[') && !hostPart.contains(']') && hostPart.matches(playbackCdnHostNamePattern)
+    }
+    if (!hostValid) return null
+    if (portPart.isNotEmpty()) {
+        val port = portPart.toIntOrNull() ?: return null
+        if (port !in 1..65535 || portPart.length > 5) return null
+    }
+    return authority
 }
 
 data class CdnCustomRuleValidation(
@@ -693,15 +746,26 @@ private fun rewriteBilivideoHost(url: String, newHost: String): String? {
     val uri = runCatching { URI(url) }.getOrNull() ?: return null
     val originalHost = uri.host ?: return null
     if (originalHost != "bilivideo.com" && !originalHost.endsWith(".bilivideo.com")) return null
-    if (newHost.isBlank()) return null
+    return rewriteCdnUrlHost(url, newHost)
+}
 
-    val scheme = uri.scheme ?: return null
+/**
+ * 用 [newHost] 替换 URL 的主机部分，不做任何域名限制：任意来源（bilivideo 镜像、mcdn、IP 直连）
+ * 都可被替换，路径、查询串（含签名参数）与片段原样保留。仅用于用户手动输入的自定义线路。
+ */
+private fun rewriteCdnUrlHost(url: String, newHost: String): String? {
+    val host = normalizePlaybackCdnHost(newHost) ?: return null
+    val uri = runCatching { URI(url) }.getOrNull() ?: return null
+    val scheme = uri.scheme?.lowercase() ?: return null
+    if (scheme != "http" && scheme != "https") return null
+    if (uri.host.isNullOrEmpty()) return null
+
     val userInfo = uri.rawUserInfo?.let { "$it@" }.orEmpty()
-    val port = if (uri.port >= 0) ":${uri.port}" else ""
+    val port = if (host.contains(':') || uri.port < 0) "" else ":${uri.port}"
     val path = uri.rawPath.orEmpty()
     val query = uri.rawQuery?.let { "?$it" }.orEmpty()
     val fragment = uri.rawFragment?.let { "#$it" }.orEmpty()
-    return "$scheme://$userInfo$newHost$port$path$query$fragment"
+    return "$scheme://$userInfo$host$port$path$query$fragment"
 }
 
 internal fun hostFromCdnUrl(url: String): String {

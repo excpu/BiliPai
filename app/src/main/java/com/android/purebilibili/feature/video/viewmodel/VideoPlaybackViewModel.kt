@@ -53,6 +53,7 @@ import com.android.purebilibili.plugin.sdk.CdnLineDiagnostic
 import com.android.purebilibili.plugin.sdk.PlaybackCdnPlugin
 import com.android.purebilibili.feature.plugin.PlaybackCdnPreference
 import com.android.purebilibili.feature.plugin.applyPlaybackCdnPreference
+import com.android.purebilibili.feature.plugin.normalizePlaybackCdnHost
 import com.android.purebilibili.feature.plugin.buildPlaybackCdnCacheKeys
 import com.android.purebilibili.feature.plugin.buildCdnLineDiagnostics
 import com.android.purebilibili.feature.plugin.buildCdnTrackCacheKey
@@ -1369,6 +1370,10 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
         .getPlaybackCdnPreference(application.applicationContext)
         .map { PlaybackCdnPreference.fromStorageValue(it) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, PlaybackCdnPreference.BASE_URL)
+    private val playbackCdnCustomHost = SettingsManager
+        .getPlaybackCdnCustomHost(application.applicationContext)
+        .map { normalizePlaybackCdnHost(it) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     // HDR auto-upgrade state
     private val attemptedUpgradeKeys = mutableSetOf<String>()
@@ -9217,6 +9222,7 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
         val preferredCandidates = applyPlaybackCdnPreference(
             candidates = cdnRewrite?.candidates ?: originalCandidates,
             preference = playbackCdnPreference.value,
+            customHost = playbackCdnCustomHost.value,
         )
         val allVideoUrls = preferredCandidates.map { it.videoUrl }
         val allAudioUrls = preferredCandidates.map { it.audioUrl.orEmpty() }

@@ -137,6 +137,7 @@ internal val settingsStaticDescriptionIndex: Map<String, String> = mapOf(
     "playback.next_watch_hint_enabled" to "最后 5 秒提示下一集或相关推荐，关闭不影响自动续播",
     "playback.pause_on_player_collapse_enabled" to "浏览推荐并缩小画面时暂停，展开后恢复；关闭后缩小播放器时仍继续播放",
     "playback.pip_no_danmaku_enabled" to "开启后台播放后，小窗和画中画相关设置才会生效；小窗和画中画中不显示弹幕；小窗和画中画中也显示弹幕；选择小窗或画中画模式后生效",
+    "playback.playback_cdn_custom_host" to "任意 host[:port]，保留播放路径与鉴权参数；留空则回退原始线路",
     "playback.playback_cdn_preference" to "新视频优先使用此线路；不可用时换备用线路",
     "playback.playback_completion_behavior" to "“自动”会在单个视频结束后暂停，在分P或合集内继续下一集",
     "playback.player_control_visibility.compact_player_chrome" to "减少按钮间距和遮罩；分享移至“更多”",

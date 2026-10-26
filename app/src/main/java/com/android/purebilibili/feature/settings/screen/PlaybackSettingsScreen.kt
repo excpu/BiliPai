@@ -70,6 +70,8 @@ import com.android.purebilibili.feature.screenshot.AppScreenshotGestureMode
 import com.android.purebilibili.feature.video.subtitle.SubtitleAutoPreference
 import com.android.purebilibili.feature.video.subtitle.isSubtitleFeatureEnabledForUser
 import com.android.purebilibili.feature.plugin.PlaybackCdnPreference
+import com.android.purebilibili.feature.plugin.normalizePlaybackCdnHost
+import com.android.purebilibili.core.ui.AppAlertDialog
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import com.android.purebilibili.core.ui.components.*
@@ -222,6 +224,11 @@ fun PlaybackSettingsContent(
             AppSegmentOption(preference, preference.displayName)
         }
     }
+    val playbackCdnCustomHost by remember(context) { SettingsManager.getPlaybackCdnCustomHost(context) }
+        .collectAsStateWithLifecycle(initialValue = "")
+    var showPlaybackCdnCustomHostDialog by rememberSaveable { mutableStateOf(false) }
+    var playbackCdnCustomHostDraft by rememberSaveable { mutableStateOf("") }
+    var playbackCdnCustomHostError by remember { mutableStateOf<String?>(null) }
 
     // ... [保留原有逻辑: checkPipPermission, gotoPipSettings] ...
 
@@ -275,6 +282,58 @@ fun PlaybackSettingsContent(
                     AppText("暂不开启", color = AppContentColors.secondaryText())
                 }
             }
+        )
+    }
+
+    if (showPlaybackCdnCustomHostDialog) {
+        AppAlertDialog(
+            onDismissRequest = { showPlaybackCdnCustomHostDialog = false },
+            title = { AppText("自定义 CDN 主机") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AppOutlinedTextField(
+                        value = playbackCdnCustomHostDraft,
+                        onValueChange = {
+                            playbackCdnCustomHostDraft = it
+                            playbackCdnCustomHostError = null
+                        },
+                        singleLine = true,
+                        label = { AppText("主机及可选端口") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    AppText(
+                        playbackCdnCustomHostError
+                            ?: "支持任意 host 或 host:port（不做域名限制），也可粘贴完整链接只取主机。留空则回退原始线路。",
+                        color = AppContentColors.secondaryText(),
+                    )
+                }
+            },
+            confirmButton = {
+                AppTextButton(onClick = {
+                    val draft = playbackCdnCustomHostDraft
+                    if (draft.isBlank()) {
+                        playbackInsightScope.launch {
+                            SettingsManager.setPlaybackCdnCustomHost(context, null)
+                            showPlaybackCdnCustomHostDialog = false
+                        }
+                    } else {
+                        val normalized = normalizePlaybackCdnHost(draft)
+                        if (normalized == null) {
+                            playbackCdnCustomHostError = "主机格式无效，请检查后重试"
+                        } else {
+                            playbackInsightScope.launch {
+                                SettingsManager.setPlaybackCdnCustomHost(context, normalized)
+                                showPlaybackCdnCustomHostDialog = false
+                            }
+                        }
+                    }
+                }) { AppText("保存") }
+            },
+            dismissButton = {
+                AppTextButton(onClick = { showPlaybackCdnCustomHostDialog = false }) {
+                    AppText("取消", color = AppContentColors.secondaryText())
+                }
+            },
         )
     }
 
@@ -1007,10 +1066,34 @@ SettingsSingleChoicePreference(
                                         preference.storageValue,
                                     )
                                 }
+                                if (preference == PlaybackCdnPreference.CUSTOM) {
+                                    playbackCdnCustomHostDraft = playbackCdnCustomHost
+                                    playbackCdnCustomHostError = null
+                                    showPlaybackCdnCustomHostDialog = true
+                                }
                             },
                             iconTint = AppContentColors.secondaryText(),
                         )
 }
+
+                        if (playbackCdnPreference == PlaybackCdnPreference.CUSTOM) {
+                            AppPreferenceDivider()
+
+                            SettingsItemAnchor("playback.playback_cdn_custom_host") {
+                                AppPreference(
+                                    icon = com.android.purebilibili.feature.settings.rememberMaterialSymbol(com.android.purebilibili.R.drawable.ms_edit_note_24),
+                                    title = "自定义 CDN 主机",
+                                    subtitle = "任意 host[:port]，保留播放路径与鉴权参数；留空则回退原始线路",
+                                    value = playbackCdnCustomHost.ifBlank { "未设置" },
+                                    onClick = {
+                                        playbackCdnCustomHostDraft = playbackCdnCustomHost
+                                        playbackCdnCustomHostError = null
+                                        showPlaybackCdnCustomHostDialog = true
+                                    },
+                                    iconTint = AppContentColors.secondaryText(),
+                                )
+                            }
+                        }
 
                         AppPreferenceDivider()
 

@@ -98,6 +98,7 @@ class VideoPlaybackViewModelPluginSessionTest {
         val application = mockk<Application>(relaxed = true)
         every { application.applicationContext } returns application
         every { SettingsManager.getPlaybackCdnPreference(application) } returns flowOf("base_url")
+        every { SettingsManager.getPlaybackCdnCustomHost(application) } returns flowOf("")
         val definition = Definition()
         val enabled = MutableStateFlow(listOf(PluginInfo(definition, true)))
         every { PluginManager.pluginsFlow } returns enabled

@@ -7601,6 +7601,7 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
     private val KEY_DASH_SEGMENT_REQUESTS_ENABLED =
         booleanPreferencesKey("dash_segment_requests_enabled")
     private val KEY_PLAYBACK_CDN_PREFERENCE = stringPreferencesKey("playback_cdn_preference")
+    private val KEY_PLAYBACK_CDN_CUSTOM_HOST = stringPreferencesKey("playback_cdn_custom_host")
     private val KEY_QUALITY_SWITCH_FAILURE_DIALOG_ENABLED =
         booleanPreferencesKey("quality_switch_failure_dialog_enabled")
     private val KEY_QUALITY_SWITCH_FAILURE_DIALOG_ONCE_ENABLED =
@@ -8108,6 +8109,20 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
     suspend fun setPlaybackCdnPreference(context: Context, preference: String) {
         context.settingsDataStore.edit { preferences ->
             preferences[KEY_PLAYBACK_CDN_PREFERENCE] = preference
+        }
+    }
+
+    /** 手动输入的自定义 CDN 主机（host[:port]），仅在 playback_cdn_preference 为 custom 时生效。 */
+    fun getPlaybackCdnCustomHost(context: Context): Flow<String> =
+        context.settingsDataStore.data.map { preferences ->
+            preferences[KEY_PLAYBACK_CDN_CUSTOM_HOST] ?: ""
+        }
+
+    suspend fun setPlaybackCdnCustomHost(context: Context, host: String?) {
+        context.settingsDataStore.edit { preferences ->
+            val normalized = host?.trim()
+            if (normalized.isNullOrEmpty()) preferences.remove(KEY_PLAYBACK_CDN_CUSTOM_HOST)
+            else preferences[KEY_PLAYBACK_CDN_CUSTOM_HOST] = normalized
         }
     }
 
@@ -8811,6 +8826,8 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
             IntShareablePreferenceDefinition(KEY_LIVE_WIFI_QUALITY, SettingsShareSection.PLAYBACK),
             IntShareablePreferenceDefinition(KEY_LIVE_MOBILE_QUALITY, SettingsShareSection.PLAYBACK),
             StringShareablePreferenceDefinition(KEY_LIVE_CDN_HOST, SettingsShareSection.PLAYBACK),
+            StringShareablePreferenceDefinition(KEY_PLAYBACK_CDN_PREFERENCE, SettingsShareSection.PLAYBACK),
+            StringShareablePreferenceDefinition(KEY_PLAYBACK_CDN_CUSTOM_HOST, SettingsShareSection.PLAYBACK),
             BooleanShareablePreferenceDefinition(KEY_LIVE_SUPER_CHAT_ENABLED, SettingsShareSection.PLAYBACK),
             BooleanShareablePreferenceDefinition(KEY_LIVE_AUTO_MINI_PLAYER_ENABLED, SettingsShareSection.PLAYBACK),
             BooleanShareablePreferenceDefinition(KEY_NEXT_WATCH_HINT_ENABLED, SettingsShareSection.PLAYBACK),
