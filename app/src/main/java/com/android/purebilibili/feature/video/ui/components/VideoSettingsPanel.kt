@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PhotoCamera
 import com.android.purebilibili.core.ui.AppModalBottomSheet
@@ -202,6 +203,7 @@ private fun rememberVideoSettingsPanelVisualSpec(): VideoSettingsPanelVisualSpec
 
 @Composable
 private fun videoSettingsChipContainerColor(isSelected: Boolean): Color {
+    if (isMiuixNonGlassEnabled()) return playerOptionContainerColor(isSelected, AppSurfaceTokens.surfaceContainerHigh())
     val usesTonalContainerTreatment = rememberAppPlayerChromeProfile()
         .effects
         .usesTonalContainerTreatment
@@ -214,6 +216,7 @@ private fun videoSettingsChipContainerColor(isSelected: Boolean): Color {
 
 @Composable
 private fun videoSettingsChipContentColor(isSelected: Boolean): Color {
+    if (isMiuixNonGlassEnabled()) return playerOptionContentColor(isSelected, AppContentColors.secondaryText())
     val usesTonalContainerTreatment = rememberAppPlayerChromeProfile()
         .effects
         .usesTonalContainerTreatment
@@ -449,13 +452,16 @@ fun VideoSettingsPanel(
         playerBounds = playerBounds,
     ) {
         LazyColumn(
-            modifier = Modifier.fillMaxWidth().navigationBarsPadding(),
-            contentPadding = PaddingValues(vertical = 14.dp),
+            // 同窗玻璃菜单由覆盖层避让系统栏，列表只保留紧凑留白；原生面板沿用原参数。
+            modifier = Modifier.fillMaxWidth().then(
+                if (LocalPlayerGlassSettingsSurface.current) Modifier else Modifier.navigationBarsPadding()
+            ),
+            contentPadding = PaddingValues(vertical = if (LocalPlayerGlassSettingsSurface.current) 6.dp else 14.dp),
         ) {
             if (page != "advanced") {
                 item {
                     if (page != "main") PlayerSettingsRow("返回", onClick = { page = "main" })
-                    val submenuTitle = when (page) { "quality" -> "选择画质"; "audio" -> "选择音质"; "codec" -> "选择解码格式"; "cdn" -> "CDN 设置"; else -> null }
+                    val submenuTitle = when (page) { "quality" -> "选择画质"; "audio" -> "选择音质"; "codec" -> "选择解码格式"; "cdn" -> "CDN 设置"; "transform" -> "画面变换"; else -> null }
                     submenuTitle?.let { title ->
                         Box(Modifier.fillMaxWidth().height(45.dp), contentAlignment = Alignment.Center) { Text(title, fontSize = 14.sp) }
                     }
@@ -472,6 +478,7 @@ fun VideoSettingsPanel(
                             onDownloadVideo?.let { action -> PlayerSettingsRow("离线缓存") { onDismiss(); action() } }
                             PlayerSettingsRow("保存封面") { onDismiss(); onSaveCover() }
                             PlayerSettingsRow("定时关闭", sleepTimerMinutes?.let { "剩余 $it 分钟" }) { page = "sleep" }
+                            onEditPlayUrl?.let { action -> PlayerSettingsRow("播放地址") { onDismiss(); action() } }
                             onChapterDisplayModeChange?.let { onModeChange ->
                                 PlayerSettingsPopupRow(
                                     title = playbackSettingTitle("playback.chapter_display_mode"),
@@ -479,7 +486,6 @@ fun VideoSettingsPanel(
                                     options = ChapterDisplayMode.entries.map { it.label },
                                 ) { index -> onModeChange(ChapterDisplayMode.entries[index]) }
                             }
-                            onEditPlayUrl?.let { action -> PlayerSettingsRow("播放地址") { onDismiss(); action() } }
                             PlayerSettingsRow("重载视频") { onDismiss(); onReload() }
                             PlayerSettingsPopupRow(
                                 "超分辨率",
@@ -505,14 +511,13 @@ fun VideoSettingsPanel(
                                 PlayerSettingsRow("播放器音量", playerVolumeUnavailableReason, onClick = null)
                             }
                             if (cdnCount > 0 || cdnServiceLabels.isNotEmpty()) PlayerSettingsRow("CDN 设置", "当前：${cdnServiceLabels.getOrNull(currentCdnServiceIndex) ?: "线路 ${currentCdnIndex + 1}"}，无法播放请切换") { page = "cdn" }
-                            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                FilterChip(isFlippedHorizontal, onFlipHorizontal, label = { Text("左右翻转") })
-                                FilterChip(isFlippedVertical, onFlipVertical, label = { Text("上下翻转") })
-                                FilterChip(isAudioOnly, onAudioOnlyToggle, label = { Text("听视频") })
-                                onBackgroundPlaybackChange?.let { change ->
-                                    FilterChip(isBackgroundPlaybackEnabled, { change(!isBackgroundPlaybackEnabled) }, label = { Text("后台播放") })
-                                }
-                            }
+                            PlayerSettingsRow(
+                                "画面变换",
+                                buildList {
+                                    if (isFlippedHorizontal) add("左右翻转")
+                                    if (isFlippedVertical) add("上下翻转")
+                                }.joinToString("、").ifEmpty { "默认" },
+                            ) { page = "transform" }
                             if (qualityLabels.isNotEmpty()) PlayerSettingsRow("选择画质", "当前画质 $currentQualityLabel") { page = "quality" }
                             if (playableAudioQualities.isNotEmpty()) PlayerSettingsRow("选择音质", playableAudioQualities.firstOrNull { it.preferenceId == selectedAudioQuality }?.label ?: "当前音质未知") { page = "audio" }
                             PlayerSettingsRow("解码格式", "当前解码格式 ${piliCodecLabel(playingVideoCodec)}") {
@@ -528,6 +533,16 @@ fun VideoSettingsPanel(
                             onShowPlaybackInfo?.let { action -> PlayerSettingsRow("播放信息") { action() } }
                             onReport?.let { action -> PlayerSettingsRow("举报") { onDismiss(); action() } }
                             PlayerSettingsRow("高级设置") { page = "advanced" }
+                        }
+                        "transform" -> {
+                            VideoSettingsSwitchRow(flipHorizontalIcon, "左右翻转", null, isFlippedHorizontal) { onFlipHorizontal() }
+                            VideoSettingsSwitchRow(flipVerticalIcon, "上下翻转", null, isFlippedVertical) { onFlipVertical() }
+                            if (isFlippedHorizontal || isFlippedVertical) {
+                                PlayerSettingsRow("恢复默认") {
+                                    if (isFlippedHorizontal) onFlipHorizontal()
+                                    if (isFlippedVertical) onFlipVertical()
+                                }
+                            }
                         }
                         "sleep" -> PlayerSleepTimerSettings(
                             sleepTimerMinutes, onSleepTimerChange,
@@ -814,17 +829,7 @@ fun VideoSettingsPanel(
                         policy = actionPolicy
                     )
 
-                    // 听视频（音频模式）
-                    FlipButton(
-                        icon = headphonesIcon,
-                        label = "听视频",
-                        isActive = isAudioOnly,
-                        onClick = {
-                            onAudioOnlyToggle()
-                            onDismiss()
-                        },
-                        policy = actionPolicy
-                    )
+
                 }
                 SettingsDivider()
             }
@@ -896,7 +901,7 @@ fun VideoSettingsPanel(
                                         }
                                     },
                                     enabled = isSelected || isEnabled,
-                                    shape = RoundedCornerShape(panelSpec.chipCornerRadius),
+                                    shape = playerOptionShape(RoundedCornerShape(panelSpec.chipCornerRadius)),
                                     color = containerColor,
                                     modifier = Modifier.height(panelSpec.chipHeight)
                                 ) {
@@ -971,8 +976,9 @@ fun VideoSettingsPanel(
                             val isSelected = currentCodec == codec
                             AppSurface(
                                 onClick = { onCodecChange(codec) },
-                                shape = AppShapes.container(ContainerLevel.Card),
-                                color = if (isSelected) AppContentColors.accent() else MaterialTheme.colorScheme.surfaceVariant,
+                                shape = playerOptionShape(AppShapes.container(ContainerLevel.Card)),
+                                color = playerOptionContainerColor(isSelected,
+                                    if (isSelected) AppContentColors.accent() else MaterialTheme.colorScheme.surfaceVariant),
                                 modifier = Modifier.height(
                                     if (useMiuixNonGlassPresentation) panelSpec.chipHeight else 32.dp
                                 )
@@ -991,7 +997,8 @@ fun VideoSettingsPanel(
                                         text = label,
                                         role = VideoSettingsPanelTextRole.OPTION,
 
-                                        color = if (isSelected) AppContentColors.onAccent() else AppContentColors.secondaryText()
+                                        color = playerOptionContentColor(isSelected,
+                                            if (isSelected) AppContentColors.onAccent() else AppContentColors.secondaryText())
                                     )
                                 }
                             }
@@ -1053,8 +1060,9 @@ fun VideoSettingsPanel(
                             val isSelected = currentSecondCodec == codec
                             AppSurface(
                                 onClick = { onSecondCodecChange(codec) },
-                                shape = AppShapes.container(ContainerLevel.Card),
-                                color = if (isSelected) AppContentColors.accent() else MaterialTheme.colorScheme.surfaceVariant,
+                                shape = playerOptionShape(AppShapes.container(ContainerLevel.Card)),
+                                color = playerOptionContainerColor(isSelected,
+                                    if (isSelected) AppContentColors.accent() else MaterialTheme.colorScheme.surfaceVariant),
                                 modifier = Modifier.height(
                                     if (useMiuixNonGlassPresentation) panelSpec.chipHeight else 32.dp
                                 )
@@ -1073,7 +1081,8 @@ fun VideoSettingsPanel(
                                         text = label,
                                         role = VideoSettingsPanelTextRole.OPTION,
 
-                                        color = if (isSelected) AppContentColors.onAccent() else AppContentColors.secondaryText()
+                                        color = playerOptionContentColor(isSelected,
+                                            if (isSelected) AppContentColors.onAccent() else AppContentColors.secondaryText())
                                     )
                                 }
                             }
@@ -1132,8 +1141,9 @@ fun VideoSettingsPanel(
                             val isSelected = currentAudioQuality == option.preferenceId
                             AppSurface(
                                 onClick = { onAudioQualityChange(option.preferenceId) },
-                                shape = AppShapes.container(ContainerLevel.Card),
-                                color = if (isSelected) AppContentColors.accent() else MaterialTheme.colorScheme.surfaceVariant,
+                                shape = playerOptionShape(AppShapes.container(ContainerLevel.Card)),
+                                color = playerOptionContainerColor(isSelected,
+                                    if (isSelected) AppContentColors.accent() else MaterialTheme.colorScheme.surfaceVariant),
                                 modifier = Modifier.height(48.dp)
                             ) {
                                 Row(
@@ -1145,7 +1155,8 @@ fun VideoSettingsPanel(
                                         text = option.label,
                                         role = VideoSettingsPanelTextRole.OPTION,
 
-                                        color = if (isSelected) AppContentColors.onAccent() else AppContentColors.secondaryText()
+                                        color = playerOptionContentColor(isSelected,
+                                            if (isSelected) AppContentColors.onAccent() else AppContentColors.secondaryText())
                                     )
                                     if (option.isHiRes) {
                                         HiResBadge()
@@ -1203,8 +1214,9 @@ fun VideoSettingsPanel(
                                 val isSelected = currentAudioLang == item.langCode
                                 AppSurface(
                                     onClick = { onAudioLangChange(item.langCode) },
-                                    shape = AppShapes.container(ContainerLevel.Card),
-                                    color = if (isSelected) AppContentColors.accent() else MaterialTheme.colorScheme.surfaceVariant,
+                                    shape = playerOptionShape(AppShapes.container(ContainerLevel.Card)),
+                                    color = playerOptionContainerColor(isSelected,
+                                    if (isSelected) AppContentColors.accent() else MaterialTheme.colorScheme.surfaceVariant),
                                     modifier = Modifier.height(
                                         if (useMiuixNonGlassPresentation) panelSpec.chipHeight else 32.dp
                                     )
@@ -1223,7 +1235,8 @@ fun VideoSettingsPanel(
                                             text = item.langDoc,
                                             role = VideoSettingsPanelTextRole.OPTION,
 
-                                            color = if (isSelected) AppContentColors.onAccent() else AppContentColors.secondaryText()
+                                            color = playerOptionContentColor(isSelected,
+                                            if (isSelected) AppContentColors.onAccent() else AppContentColors.secondaryText())
                                         )
                                     }
                                 }
@@ -1766,7 +1779,7 @@ private fun SleepTimerOptions(
             val isSelected = currentMinutes == minutes
             AppSurface(
                 onClick = { onSelect(minutes) },
-                shape = RoundedCornerShape(spec.chipCornerRadius),
+                shape = playerOptionShape(RoundedCornerShape(spec.chipCornerRadius)),
                 color = videoSettingsChipContainerColor(isSelected),
                 modifier = Modifier.height(spec.chipHeight)
             ) {
@@ -1811,7 +1824,7 @@ private fun SpeedOptions(
             val isSelected = currentSpeed == speed
             AppSurface(
                 onClick = { onSelect(speed) },
-                shape = RoundedCornerShape(spec.chipCornerRadius),
+                shape = playerOptionShape(RoundedCornerShape(spec.chipCornerRadius)),
                 color = videoSettingsChipContainerColor(isSelected),
                 modifier = Modifier.heightIn(min = 48.dp)
             ) {
@@ -1951,7 +1964,7 @@ private fun SeekSecondsOptions(
             val isSelected = currentSeconds == seconds
             AppSurface(
                 onClick = { onSelect(seconds) },
-                shape = RoundedCornerShape(spec.chipCornerRadius),
+                shape = playerOptionShape(RoundedCornerShape(spec.chipCornerRadius)),
                 color = videoSettingsChipContainerColor(isSelected),
                 modifier = Modifier.height(spec.chipHeight)
             ) {

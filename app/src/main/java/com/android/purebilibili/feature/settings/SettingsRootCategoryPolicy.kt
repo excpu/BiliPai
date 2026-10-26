@@ -124,6 +124,8 @@ internal fun resolveSettingsRootCategoryForSearchTarget(
 
     SettingsSearchTarget.PRIVACY_PERMISSION,
     SettingsSearchTarget.PERMISSION,
+    SettingsSearchTarget.SPACE_PRIVACY,
+    SettingsSearchTarget.LOGIN_ACTIVITY,
     SettingsSearchTarget.BLOCKED_LIST,
     SettingsSearchTarget.MESSAGE_NOTIFICATION -> SettingsRootCategory.PRIVACY_PERMISSION
 

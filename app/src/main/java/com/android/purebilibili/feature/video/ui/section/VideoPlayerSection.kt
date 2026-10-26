@@ -2431,8 +2431,10 @@ private fun VideoPlayerSectionContent(
                     dragStartX = -1f
                 }
                 if (!isInPipMode) {
+                    var portraitFullscreenTriggered = false
                     detectDragGestures(
                         onDragStart = { offset ->
+                            portraitFullscreenTriggered = false
                             // [新增] 如果处于缩放状态，禁用常规拖拽手势，优先处理平移
                             if (scale > 1.01f) {  // 留一点浮点数buffer
                                 return@detectDragGestures
@@ -2562,7 +2564,7 @@ private fun VideoPlayerSectionContent(
                                 } else {
                                     sharedSeekSession = cancelPlaybackSeekInteraction(sharedSeekSession)
                                 }
-                            } else if (completedGestureMode == VideoGestureMode.SwipeToFullscreen) {
+                            } else if (completedGestureMode == VideoGestureMode.SwipeToFullscreen && !portraitFullscreenTriggered) {
                                 //  阈值判定：上滑超过一定距离触发全屏
                                 val swipeThreshold = SwipeToFullscreenDragThresholdDp.toPx()
                                 if (
@@ -2620,6 +2622,10 @@ private fun VideoPlayerSectionContent(
                         },
                         //  [修复点] 使用 dragAmount 而不是 change.positionChange()
                         onDrag = { change, dragAmount ->
+                            if (portraitFullscreenTriggered) {
+                                change.consume()
+                                return@detectDragGestures
+                            }
                             if (shouldConsumeExclusiveLongPressSpeedDrag(
                                     isLongPressing = isLongPressing,
                                     longPressSpeedLocked = longPressSpeedLocked
@@ -2674,8 +2680,22 @@ private fun VideoPlayerSectionContent(
                             // [修复] 等待累积一定距离后再确定手势类型，避免初始噪声导致误判
                             val minDragThreshold = 20.dp.toPx()
                             val totalDrag = kotlin.math.hypot(totalDragDistanceX, totalDragDistanceY)
+                            val portraitEntryStartX = if (dragStartX >= 0f) dragStartX else change.position.x
+                            val portraitEntryBoundary = uiLayoutPolicy.gestureBoundaryPaddingDp.dp.toPx()
+                            val portraitEntryInCenter = portraitEntryStartX >= (size.width / 3f - portraitEntryBoundary).coerceAtLeast(0f) &&
+                                portraitEntryStartX <= (size.width * 2f / 3f + portraitEntryBoundary).coerceAtMost(size.width.toFloat())
+                            val portraitEntryDirectionConfirmed = portraitEntryInCenter &&
+                                (centerSwipeToFullscreenEnabled || (portraitSwipeToFullscreenEnabled && !fullscreenGestureReverse)) &&
+                                shouldTriggerPortraitFullscreenDuringDrag(
+                                    isFullscreen = isFullscreen,
+                                    isVerticalVideo = isVerticalVideo,
+                                    reverseGesture = fullscreenGestureReverse,
+                                    totalDragDistanceX = totalDragDistanceX,
+                                    totalDragDistanceY = totalDragDistanceY,
+                                    thresholdPx = 2.5.dp.toPx(),
+                                )
 
-                            if (gestureMode == VideoGestureMode.None && totalDrag >= minDragThreshold) {
+                            if (gestureMode == VideoGestureMode.None && (totalDrag >= minDragThreshold || portraitEntryDirectionConfirmed)) {
                                 // [修复] 使用累积距离判断方向，而非单帧增量
                                 if (shouldEngageHorizontalPlayerSeek(totalDragDistanceX, totalDragDistanceY)) {
                                     gestureMode = VideoGestureMode.Seek
@@ -2696,7 +2716,7 @@ private fun VideoPlayerSectionContent(
                                     val boundaryPadding = uiLayoutPolicy.gestureBoundaryPaddingDp.dp.toPx()
                                     val leftZoneEnd = (width / 3f - boundaryPadding).coerceAtLeast(0f)
                                     val rightZoneStart = (width * 2f / 3f + boundaryPadding).coerceAtMost(width)
-                                    val isSwipeUp = totalDragDistanceY < -minDragThreshold
+                                    val isSwipeUp = totalDragDistanceY < -(if (portraitEntryDirectionConfirmed) 2.5.dp.toPx() else minDragThreshold)
 
                                     gestureMode = resolveVerticalGestureMode(
                                         isFullscreen = isFullscreen,
@@ -2753,6 +2773,15 @@ private fun VideoPlayerSectionContent(
 
                             when (gestureMode) {
                                 VideoGestureMode.SwipeToFullscreen -> {
+                                    if (portraitEntryDirectionConfirmed) {
+                                        portraitFullscreenTriggered = true
+                                        isGestureVisible = false
+                                        gestureMode = VideoGestureMode.None
+                                        change.consume()
+                                        latestOnPortraitFullscreen()
+                                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                        return@detectDragGestures
+                                    }
                                     // 累积 Y 轴距离已在上方处理；这里驱动跟随提示进度。
                                     swipeToFullscreenHintFraction = resolveSwipeToFullscreenHintFraction(
                                         isFullscreen = isFullscreen,
@@ -3964,6 +3993,9 @@ private fun VideoPlayerSectionContent(
                 // Keep the viewport and cover mounted while the persisted surface choice loads.
                 if (isPlayerSurfaceReady) AndroidView(
                     factory = { ctx ->
+                        // 复用底部入口的播放器可能在绑定输出时立即派发首帧。
+                        // 先注册持久首帧监听，不能等父级 DisposableEffect 才订阅。
+                        playerState.attachPlayerListeners()
                         hasCurrentOutputFrame = false
                         val basePlayerView = if (useTextureSurface) {
                             LayoutInflater.from(ctx)
@@ -4007,6 +4039,8 @@ private fun VideoPlayerSectionContent(
                         }
                     },
                     update = { playerView ->
+                        // 同一 PlayerView 换用新的状态持有者时也必须先订阅再绑定。
+                        playerState.attachPlayerListeners()
                         playerViewRef = playerView
                         playerView.player = if (shouldBindDirectPlayerView) playerState.player else null
                         playerView.setKeepContentOnPlayerReset(

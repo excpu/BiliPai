@@ -540,10 +540,12 @@ fun LiveListScreen(
     LaunchedEffect(state.refreshCompletion) {
         if (state.refreshCompletion > 0L) followRowState.scrollToItem(0)
     }
-    suspend fun scrollLiveHomeToTop() {
+    suspend fun scrollLiveHomeToTop(refreshAtTop: Boolean = true) {
         val atTop = liveGridState.firstVisibleItemIndex == 0 &&
             liveGridState.firstVisibleItemScrollOffset < 50
-        if (!atTop) {
+        if (!refreshAtTop) {
+            liveGridState.scrollToItem(0)
+        } else if (!atTop) {
             liveGridState.animateScrollToTop()
         } else {
             viewModel.refresh()
@@ -551,7 +553,7 @@ fun LiveListScreen(
     }
     LaunchedEffect(scrollToTopRequestId) {
         if (scrollToTopRequestId <= 0) return@LaunchedEffect
-        scrollLiveHomeToTop()
+        scrollLiveHomeToTop(refreshAtTop = false)
     }
     LaunchedEffect(scrollToTopChannel) {
         scrollToTopChannel?.receiveAsFlow()?.collect {

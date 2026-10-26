@@ -180,6 +180,7 @@ fun BottomControlBar(
     currentRatio: VideoAspectRatio = VideoAspectRatio.FIT,
     currentQualityLabel: String = "",
     onSpeedClick: () -> Unit = {},
+    onPortraitFullscreen: (() -> Unit)? = null,
     onRatioClick: () -> Unit = {},
     onQualityClick: () -> Unit = {},
     hasEpisodeEntry: Boolean = false,
@@ -294,7 +295,7 @@ fun BottomControlBar(
                 )
             }
             PiliPlayerBar(
-                groupGlassControls = glass && !viewportIsLandscape,
+                groupGlassControls = false,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp).height(PILI_PLAYER_BOTTOM_ROW_HEIGHT_DP.dp)
                     .testTag("player_control_row"),
                 left = {
@@ -379,6 +380,15 @@ fun BottomControlBar(
                         text = "${currentSpeed}X", description = "倍速", onClick = onSpeedClick,
                         modifier = anchor(PlayerControlAnchor.SPEED, "player_speed_action"),
                     )
+                    // 竖屏详情入口共用同一动作，玻璃与原生只由按钮材质决定外观。
+                    if (!isFullscreen && LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT) {
+                        onPortraitFullscreen?.let { enterPortrait ->
+                            PlayerControlTextAction(
+                                text = "竖屏", description = "竖屏播放", onClick = enterPortrait,
+                                modifier = Modifier.testTag("player_portrait_fullscreen"),
+                            )
+                        }
+                    }
                     if (showExtendedOptions && currentQualityLabel.isNotEmpty()) {
                         PlayerControlTextAction(
                             text = currentQualityLabel, description = "画质", onClick = onQualityClick,

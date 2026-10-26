@@ -165,8 +165,8 @@ private fun WeeklySeriesContent(
                 displayMode = homeSettings.displayMode,
                 fixedColumnCount = resolveHomeFeedStoredColumnCount(
                     widthSizeClass = windowSizeClass.widthSizeClass,
-                    compactColumnCount = homeSettings.gridColumnCountCompact,
-                    defaultColumnCount = homeSettings.gridColumnCount,
+                    compactColumnCount = homeSettings.effectiveGridColumnCountCompact,
+                    defaultColumnCount = homeSettings.effectiveGridColumnCount,
                 ),
                 cardWidthPreset = homeSettings.homeFeedCardWidthPreset,
                 widthSizeClass = windowSizeClass.widthSizeClass,

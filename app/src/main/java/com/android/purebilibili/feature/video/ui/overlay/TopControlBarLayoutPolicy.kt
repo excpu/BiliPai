@@ -27,7 +27,7 @@ internal fun resolveTopControlBarLayoutPolicy(
     isUgc: Boolean = true,
     showFullscreenActionItems: Boolean = true,
 ): TopControlBarLayoutPolicy = TopControlBarLayoutPolicy(
-    showHome = false,
+    showHome = !isPortrait,
     showTitle = isFullscreen || (!horizontalScreen && !isPortrait),
     showStatus = !isPortrait && (isFullscreen || !horizontalScreen),
     showAudio = !isFileSource && !isFullscreen && isUgc,

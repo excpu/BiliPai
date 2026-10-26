@@ -140,6 +140,8 @@ internal data class SettingsRootCategoryActions(
     val onPlaybackClick: () -> Unit,
     val onBottomBarClick: () -> Unit,
     val onPermissionClick: () -> Unit,
+    val onSpacePrivacyClick: () -> Unit,
+    val onLoginActivityClick: () -> Unit,
     val onMessageNotificationClick: () -> Unit,
     val onBlockedListClick: () -> Unit,
     val onCommentFraudHistoryClick: () -> Unit,
@@ -602,6 +604,8 @@ internal fun SettingsRootCategoryContent(
                             onSearchSuggestionsChange = actions.onSearchSuggestionsChange,
                             onPrivacyContentAuthenticationChange = actions.onPrivacyContentAuthenticationChange,
                             onPermissionClick = actions.onPermissionClick,
+                            onSpacePrivacyClick = actions.onSpacePrivacyClick,
+                            onLoginActivityClick = actions.onLoginActivityClick,
                             onMessageNotificationClick = actions.onMessageNotificationClick,
                             onBlockedListClick = actions.onBlockedListClick,
                             onCommentFraudHistoryClick = actions.onCommentFraudHistoryClick // [New]
@@ -825,6 +829,8 @@ internal fun SettingsRootCategoryContent(
                             onSearchSuggestionsChange = actions.onSearchSuggestionsChange,
                             onPrivacyContentAuthenticationChange = actions.onPrivacyContentAuthenticationChange,
                             onPermissionClick = actions.onPermissionClick,
+                            onSpacePrivacyClick = actions.onSpacePrivacyClick,
+                            onLoginActivityClick = actions.onLoginActivityClick,
                             onMessageNotificationClick = actions.onMessageNotificationClick,
                             onBlockedListClick = actions.onBlockedListClick,
                             onCommentFraudHistoryClick = actions.onCommentFraudHistoryClick // [New]
@@ -1350,6 +1356,8 @@ fun PrivacySection(
     onSearchSuggestionsChange: (Boolean) -> Unit,
     onPrivacyContentAuthenticationChange: (Boolean) -> Unit,
     onPermissionClick: () -> Unit,
+    onSpacePrivacyClick: () -> Unit,
+    onLoginActivityClick: () -> Unit,
     onMessageNotificationClick: () -> Unit,
     onBlockedListClick: () -> Unit, // [New]
     onCommentFraudHistoryClick: () -> Unit // [New]
@@ -1364,10 +1372,14 @@ fun PrivacySection(
     }.collectAsStateWithLifecycle(initialValue = false)
     val siblingTints = rememberSettingsSiblingIconTints(4, paletteOffset = 4)
     val permissionVisual = rememberSettingsEntryVisual(SettingsSearchTarget.PERMISSION)
+    val spacePrivacyVisual = rememberSettingsEntryVisual(SettingsSearchTarget.SPACE_PRIVACY)
+    val loginActivityVisual = rememberSettingsEntryVisual(SettingsSearchTarget.LOGIN_ACTIVITY)
     val messageNotificationVisual =
         rememberSettingsEntryVisual(SettingsSearchTarget.MESSAGE_NOTIFICATION)
     val blockedListVisual = rememberSettingsEntryVisual(SettingsSearchTarget.BLOCKED_LIST)
-    val visibilityOffIcon = rememberSettingsSemanticIcon(SettingsIconRole.PRIVACY_HISTORY)
+    val historyIcon = rememberSettingsSemanticIcon(SettingsIconRole.PRIVACY_HISTORY)
+    val searchRecommendationIcon = rememberSettingsSemanticIcon(SettingsIconRole.PRIVACY_SEARCH_RECOMMENDATION)
+    val personalRecapIcon = rememberSettingsSemanticIcon(SettingsIconRole.PERSONAL_RECAP)
     val contentAuthenticationIcon = rememberSettingsSemanticIcon(
         SettingsIconRole.PRIVACY_CONTENT_AUTHENTICATION,
     )
@@ -1389,7 +1401,7 @@ fun PrivacySection(
 
         SettingsItemAnchor("privacy.search_suggestions_enabled") {
             SettingSwitchItem(
-                icon = visibilityOffIcon,
+                icon = searchRecommendationIcon,
                 title = settingItemTitle("privacy.search_suggestions_enabled"),
                 subtitle = "开启时使用官方搜索推荐；关闭后改用公开热搜词",
                 checked = searchSuggestionsEnabled,
@@ -1400,7 +1412,7 @@ fun PrivacySection(
         SettingsAdaptiveDivider()
         SettingsItemAnchor("privacy.privacy_mode_enabled") {
             SettingSwitchItem(
-                icon = visibilityOffIcon,
+                icon = historyIcon,
                 title = settingItemTitle("privacy.privacy_mode_enabled"),
                 subtitle = "开启后不再新增播放和搜索历史，已有记录不会被删除",
                 checked = privacyModeEnabled,
@@ -1410,7 +1422,7 @@ fun PrivacySection(
         }
         SettingsAdaptiveDivider()
         SettingSwitchItem(
-            icon = visibilityOffIcon,
+            icon = personalRecapIcon,
             title = "我的回顾",
             subtitle = "在历史页显示阅读与观看统计、趋势图和最近爱看的 UP 主",
             checked = personalRecapEnabled,
@@ -1430,6 +1442,24 @@ fun PrivacySection(
                 iconTint = siblingTints[1]
             )
         }
+        SettingsAdaptiveDivider()
+        SettingClickableItem(
+            icon = spacePrivacyVisual.icon,
+            iconPainter = spacePrivacyVisual.iconResId?.let { painterResource(id = it) },
+            title = settingsDestinationCopy(SettingsSearchTarget.SPACE_PRIVACY).title,
+            subtitle = settingsDestinationCopy(SettingsSearchTarget.SPACE_PRIVACY).summary,
+            onClick = onSpacePrivacyClick,
+            iconTint = spacePrivacyVisual.iconTint,
+        )
+        SettingsAdaptiveDivider()
+        SettingClickableItem(
+            icon = loginActivityVisual.icon,
+            iconPainter = loginActivityVisual.iconResId?.let { painterResource(id = it) },
+            title = settingsDestinationCopy(SettingsSearchTarget.LOGIN_ACTIVITY).title,
+            subtitle = settingsDestinationCopy(SettingsSearchTarget.LOGIN_ACTIVITY).summary,
+            onClick = onLoginActivityClick,
+            iconTint = loginActivityVisual.iconTint,
+        )
         SettingsAdaptiveDivider()
         SettingClickableItem(
             icon = permissionVisual.icon,

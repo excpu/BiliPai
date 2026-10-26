@@ -3,6 +3,13 @@ package com.android.purebilibili.feature.video.player
 
 import android.content.Context
 import com.android.purebilibili.core.util.Logger
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
@@ -307,9 +314,29 @@ object PlaylistManager {
     private var appContext: Context? = null
     private val json = Json { ignoreUnknownKeys = true }
 
+    // 应用级单例负责串行落盘；合并尚未写入的中间队列，主线程只提交不可变快照。
+    private val persistenceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val persistenceRequests = Channel<PlaylistSnapshot>(Channel.CONFLATED)
+    private var persistenceJob: Job? = null
+
     fun init(context: Context) {
-        appContext = context.applicationContext
+        if (appContext != null) return
+        val applicationContext = context.applicationContext
+        appContext = applicationContext
         restoreState()
+        persistenceJob = persistenceScope.launch {
+            for (snapshot in persistenceRequests) {
+                try {
+                    val raw = json.encodeToString(snapshot)
+                    applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                        .edit().putString(KEY_SNAPSHOT, raw).apply()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    Logger.e(TAG, "Failed to persist playlist state", error)
+                }
+            }
+        }
     }
     
     // ========== 公共 API ==========
@@ -764,24 +791,15 @@ object PlaylistManager {
     }
 
     private fun persistState() {
-        val context = appContext ?: return
-        runCatching {
-            val snapshot = PlaylistSnapshot(
-                playlist = _playlist.value,
-                currentIndex = _currentIndex.value,
-                playMode = _playMode.value,
-                isExternalPlaylist = _isExternalPlaylist.value,
-                externalPlaylistSource = _externalPlaylistSource.value,
-                shuffleEnabled = _shuffleEnabled.value
-            )
-            val raw = json.encodeToString(snapshot)
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .putString(KEY_SNAPSHOT, raw)
-                .apply()
-        }.onFailure { e ->
-            Logger.e(TAG, "⚠️ Failed to persist playlist state", e)
-        }
+        if (appContext == null) return
+        persistenceRequests.trySend(PlaylistSnapshot(
+            playlist = _playlist.value,
+            currentIndex = _currentIndex.value,
+            playMode = _playMode.value,
+            isExternalPlaylist = _isExternalPlaylist.value,
+            externalPlaylistSource = _externalPlaylistSource.value,
+            shuffleEnabled = _shuffleEnabled.value,
+        ))
     }
 
     private fun restoreState() {

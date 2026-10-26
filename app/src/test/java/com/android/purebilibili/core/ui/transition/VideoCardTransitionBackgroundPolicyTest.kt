@@ -12,6 +12,66 @@ import kotlin.test.assertTrue
 
 class VideoCardTransitionBackgroundPolicyTest {
     @Test
+    fun reversingAtAnyDepthKeepsTheSameBlurRadiusAcrossPhasesAndDensities() {
+        for (density in listOf(1f, 1.5f, 2.75f, 3f)) {
+            for (step in 0..240) {
+                val depth = step / 240f
+                val opening = resolveVideoCardTransitionBackgroundFrame(
+                    progress = depth,
+                    phase = VideoCardTransitionBackgroundPhase.OPENING,
+                    sdkInt = 35,
+                    density = density,
+                )
+                for (phase in listOf(
+                    VideoCardTransitionBackgroundPhase.RETURNING,
+                    VideoCardTransitionBackgroundPhase.HELD,
+                )) {
+                    val reversed = resolveVideoCardTransitionBackgroundFrame(
+                        progress = depth,
+                        phase = phase,
+                        isGestureRestoreInProgress = true,
+                        sdkInt = 35,
+                        density = density,
+                    )
+                    assertEquals(opening.blurRadiusPx, reversed.blurRadiusPx)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun clearingPreservesFineDetailBeforeTheFinalSharpFrame() {
+        val radii = listOf(0f, 0.5f, 1f, 1.5f, 2f, 2.5f, 3f, 3.5f, 4f).map { radius ->
+            resolveVideoCardTransitionBackgroundFrame(
+                progress = radius / 12f,
+                phase = VideoCardTransitionBackgroundPhase.RETURNING,
+                sdkInt = 35,
+            ).blurRadiusPx
+        }
+        assertEquals(listOf(0f, 0.5f, 1f, 1.5f, 2f, 2.5f, 3f, 3.5f, 4f), radii)
+    }
+
+    @Test
+    fun backdropHandoffHasGentleEndpointsAndRemainsReversible() {
+        val start = VideoCardTransitionVisualTimeline.WHOLE_SOURCE_CARD_RETURN_START
+        val end = VideoCardTransitionVisualTimeline.WHOLE_SOURCE_CARD_RETURN_END
+        val window = end - start
+        fun alphaAt(settle: Float, exposure: VideoCardTransitionExposure) =
+            resolveVideoCardTransitionFrozenLayerAlpha(exposure, 1f - settle)
+
+        // 交接窗刚开始/将结束时，每 1% 窗口的透明度变化应小于 0.1%。
+        assertTrue(1f - alphaAt(start + window * .01f, VideoCardTransitionExposure.Returning) < .001f)
+        assertTrue(alphaAt(end - window * .01f, VideoCardTransitionExposure.Returning) < .001f)
+        val samples = (0..100).map { start + window * it / 100f }
+        val forward = samples.map { alphaAt(it, VideoCardTransitionExposure.Returning) }
+        val reversed = samples.reversed().map { alphaAt(it, VideoCardTransitionExposure.Restoring) }
+        assertEquals(forward, reversed.reversed())
+        assertTrue(forward.zipWithNext().all { (a, b) -> b <= a })
+        assertEquals(1f, forward.first(), .0001f)
+        assertEquals(0f, forward.last(), .0001f)
+    }
+
+    @Test
     fun hiddenFrozenLayerIsSkippedUntilAnInterruptedReturnRevealsItAgain() {
         for (exposure in listOf(
             VideoCardTransitionExposure.BackPreview,
@@ -692,8 +752,8 @@ class VideoCardTransitionBackgroundPolicyTest {
             assertEquals(0f, radii.first())
             assertEquals(12f * density, radii.last(), 0.001f)
             assertTrue(radii.zipWithNext().all { (a, b) -> b >= a })
-            // At 3x density, at most 19 radii instead of the previous 37.
-            assertTrue(radii.distinct().size <= 19)
+            // 仅 0–4px 细分；3x 密度仍限制为 25 档，不逐帧创建新 effect。
+            assertTrue(radii.distinct().size <= 25)
         }
     }
 
@@ -955,8 +1015,8 @@ class VideoCardTransitionBackgroundPolicyTest {
             motionTier = MotionTier.Normal,
             sdkInt = 35,
         )
-        // 0.2 × 12dp = 2.4 → 量化到 2px。
-        assertEquals(2f, early.blurRadiusPx, 0.01f)
+        // 清晰附近采用 0.5px 步长，2.4px → 2.5px。
+        assertEquals(2.5f, early.blurRadiusPx, 0.01f)
         assertTrue(early.scrimAlpha > 0f)
         assertTrue(early.blurRadiusPx > 0f)
         assertEquals(4.8f, early.cornerRadiusPx, 0.01f)
@@ -1086,8 +1146,7 @@ class VideoCardTransitionBackgroundPolicyTest {
         )
 
         assertEquals(12f, start.blurRadiusPx)
-        // RETURNING 使用 4px 量化：progress=0.5 → raw≈6 → quantize 到 4 或 8。
-        assertTrue(middle.blurRadiusPx in setOf(4f, 8f))
+        assertEquals(6f, middle.blurRadiusPx)
         assertTrue(middle.blurRadiusPx in 1f..<start.blurRadiusPx)
         assertEquals(0f, end.blurRadiusPx)
         assertTrue(start.scrimAlpha > middle.scrimAlpha)

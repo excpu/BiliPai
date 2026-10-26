@@ -12,6 +12,7 @@ import com.android.purebilibili.core.util.applyPlayerRequestedOrientation
 import android.content.res.Configuration
 import android.os.Build
 import android.util.Rational
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,6 +41,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
@@ -226,7 +228,10 @@ fun AudioModeScreen(
             playerChromeProfile.effects.supportsIndependentLiquidGlass,
         androidNativeLiquidGlassEnabled = homeSettings.androidNativeLiquidGlassEnabled,
     )
-    var cachedSuccessState by remember { mutableStateOf<VideoPlaybackUiState.Success?>(null) }
+    var cachedSuccessState by remember(initialBvid, initialCid) {
+        mutableStateOf<VideoPlaybackUiState.Success?>(null)
+    }
+    var initialSourceResolved by remember(initialBvid, initialCid) { mutableStateOf(initialBvid.isBlank()) }
 
     LaunchedEffect(subjectSnapshot, uiState) {
         val subject = subjectSnapshot ?: return@LaunchedEffect
@@ -242,10 +247,16 @@ fun AudioModeScreen(
         )
     }
 
-    LaunchedEffect(uiState) {
-        if (uiState is VideoPlaybackUiState.Success) cachedSuccessState = uiState as VideoPlaybackUiState.Success
+    LaunchedEffect(uiState, initialBvid, initialCid) {
+        val success = uiState as? VideoPlaybackUiState.Success ?: return@LaunchedEffect
+        if (matchesAudioModeInitialSource(initialBvid, initialCid, success.info.bvid, success.info.cid)) {
+            initialSourceResolved = true
+        }
+        if (initialSourceResolved) cachedSuccessState = success
     }
-    val displayState = (uiState as? VideoPlaybackUiState.Success) ?: cachedSuccessState
+    val displayState = if (initialSourceResolved) {
+        (uiState as? VideoPlaybackUiState.Success) ?: cachedSuccessState
+    } else null
     val shouldCreateStandalonePlayer = remember(initialBvid) {
         shouldCreateAudioModeStandalonePlayer(
             hasPlayer = viewModel.currentPlayer != null,
@@ -266,7 +277,7 @@ fun AudioModeScreen(
     val player = standalonePlayerState?.player ?: viewModel.currentPlayer
 
     LaunchedEffect(initialBvid, initialCid, initialResumePositionMs, shouldCreateStandalonePlayer) {
-        if (!shouldCreateStandalonePlayer && displayState == null && initialBvid.isNotBlank()) {
+        if (!shouldCreateStandalonePlayer && initialBvid.isNotBlank()) {
             viewModel.loadVideo(
                 bvid = initialBvid,
                 cid = initialCid,
@@ -334,7 +345,7 @@ private fun AudioModeInitialState(
     onBack: () -> Unit,
     onRetry: () -> Unit
 ) {
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().background(com.android.purebilibili.feature.audio.lyrics.halcyon.PlayerPalette.Default.middle)) {
         AppTextButton(
             onClick = onBack,
             modifier = Modifier
@@ -342,7 +353,7 @@ private fun AudioModeInitialState(
                 .padding(top = 40.dp, start = 12.dp)
                 .height(48.dp)
         ) {
-            AppText("返回")
+            AppText("返回", color = Color.White)
         }
         Column(
             modifier = Modifier.align(Alignment.Center).padding(horizontal = 32.dp),
@@ -351,17 +362,17 @@ private fun AudioModeInitialState(
         ) {
             when (state) {
                 is VideoPlaybackUiState.Error -> {
-                    AppText("音频加载失败", style = MaterialTheme.typography.headlineSmall)
-                    AppText(state.msg, color = AppContentColors.secondaryText())
+                    AppText("音频加载失败", style = MaterialTheme.typography.headlineSmall, color = Color.White)
+                    AppText(state.msg, color = Color.White.copy(alpha = 0.72f))
                     if (state.canRetry) {
-                        AppTextButton(onClick = onRetry, modifier = Modifier.height(48.dp)) { AppText("重试") }
+                        AppTextButton(onClick = onRetry, modifier = Modifier.height(48.dp)) { AppText("重试", color = Color.White) }
                     }
                 }
                 else -> {
                     AdaptiveLoadingIndicator()
-                    AppText(title)
+                    AppText(title, color = Color.White)
                     if (title != "正在加载音频") {
-                        AppText("正在加载音频", color = AppContentColors.secondaryText())
+                        AppText("正在加载音频", color = Color.White.copy(alpha = 0.72f))
                     }
                 }
             }

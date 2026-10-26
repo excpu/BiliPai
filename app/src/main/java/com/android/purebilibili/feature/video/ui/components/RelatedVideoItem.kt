@@ -155,6 +155,13 @@ internal fun resolveRelatedVideoSharedElementSourceRoute(sourceRoute: String?): 
         ?: VideoRoute.base
 }
 
+/** 同页切集只改变播放内容；来源身份始终属于承载相关推荐的导航 entry。 */
+internal fun resolveRelatedVideoCardHostRoute(entryRoute: String?, displayedBvid: String): String {
+    val route = entryRoute?.substringBefore('?')?.trim()
+    return route?.takeIf { it.startsWith("video/") && it.removePrefix("video/").isNotBlank() }
+        ?: "video/${displayedBvid.trim()}"
+}
+
 internal fun chunkRelatedVideosForHomeStyleGrid(
     videos: List<RelatedVideo>,
 ): List<List<RelatedVideo>> {

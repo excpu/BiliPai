@@ -300,7 +300,7 @@ internal fun HomeTopTabFloatingDock(
         // Glass retains its neutral lens and MD3 retains its own renderer defaults.
         indicatorIdleSurfaceColorOverride = if (
             LocalAppUiStyle.current == AppUiStyle.MIUIX && !liquidGlassEffectsEnabled
-        ) MaterialTheme.colorScheme.secondaryContainer else null,
+        ) AppSurfaceTokens.selectionContainer() else null,
         selectedTextColorOverride = selectedContentColor,
         unselectedTextColorOverride = unselectedContentColor,
         indicatorPositionProvider = indicatorPositionProvider,

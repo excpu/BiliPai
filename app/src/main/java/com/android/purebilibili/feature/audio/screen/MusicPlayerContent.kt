@@ -452,7 +452,8 @@ internal fun MusicPlayerContent(
     val state = if (playbackPositionSource == null) sourceState
         else sourceState.copy(positionMs = livePositionMs)
     val context = LocalContext.current
-    val themeSurfaceColor = MaterialTheme.colorScheme.surface
+    // 播放器使用沉浸式浅色前景，封面未就绪时也保持统一的暗色底。
+    val themeSurfaceColor = com.android.purebilibili.feature.audio.lyrics.halcyon.PlayerPalette.Default.middle
     val adaptiveInfo = LocalAppWindowAdaptiveInfo.current
     val density = LocalDensity.current
     var paletteColor by remember(themeSurfaceColor) { mutableStateOf(themeSurfaceColor) }
@@ -576,9 +577,11 @@ internal fun MusicPlayerContent(
         animationSpec = if (effectiveReduceMotion) snap() else AppMotionTokens.emphasizedSpec(),
         label = "music_palette"
     )
-    androidx.compose.runtime.DisposableEffect(backgroundColor) {
+    androidx.compose.runtime.SideEffect {
         com.android.purebilibili.feature.audio.player.AudioNowPlayingSession
             .publishImmersiveBackdropColor(backgroundColor)
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) {
         onDispose {
             com.android.purebilibili.feature.audio.player.AudioNowPlayingSession
                 .publishImmersiveBackdropColor(null)
@@ -677,9 +680,9 @@ internal fun MusicPlayerContent(
                     .background(pageBackground)
             ) {
                 MusicArtworkBackground(
-                    coverUrl = state.coverUrl,
                     bitmap = artworkBitmap,
                     palette = playerPalette,
+                    fallbackColor = backgroundColor,
                     isPlaying = state.isPlaying,
                     atmosphereEnabled = audioSpectrumEnabled,
                     reduceMotion = effectiveReduceMotion,
@@ -2087,7 +2090,7 @@ private fun ImmersiveBottomQueueShelf(
 
 @Composable
 private fun MusicArtworkBackground(
-    coverUrl: String,
+    fallbackColor: Color,
     bitmap: ImageBitmap? = null,
     palette: com.android.purebilibili.feature.audio.lyrics.halcyon.PlayerPalette =
         com.android.purebilibili.feature.audio.lyrics.halcyon.PlayerPalette.Default,
@@ -2106,25 +2109,17 @@ private fun MusicArtworkBackground(
         lyricsPageProgress = lyricsPageProgress,
         modifier = Modifier.fillMaxSize(),
     ) { audioEnergy ->
-        if (coverBitmap != null) {
-            com.android.purebilibili.feature.audio.lyrics.halcyon.AppleCoverFlowBackground(
-                coverBitmap = coverBitmap,
-                backgroundColor = palette.middle,
-                isDark = !palette.isLight,
-                isPlaying = isPlaying,
-                animate = isPlaying && !reduceMotion,
-                audioEnergyProvider = audioEnergy,
-                modifier = Modifier.fillMaxSize(),
-            )
-        } else {
-            // No artwork: keep the existing palette fallback. Do not invent audio colours.
-            com.android.purebilibili.feature.audio.lyrics.halcyon.PlayerBlurBackground(
-                palette = palette,
-                coverBitmap = null,
-                animate = false,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
+        com.android.purebilibili.feature.audio.lyrics.halcyon.AppleCoverFlowBackground(
+            coverBitmap = coverBitmap,
+            backgroundColor = palette.middle,
+            fallbackColor = fallbackColor,
+            isDark = !palette.isLight,
+            isPlaying = isPlaying,
+            animate = isPlaying && !reduceMotion,
+            reduceMotion = reduceMotion,
+            audioEnergyProvider = audioEnergy,
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 

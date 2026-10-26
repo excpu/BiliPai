@@ -18,6 +18,8 @@ enum class SettingsSearchTarget {
     PLAYBACK,
     BOTTOM_BAR,
     PERMISSION,
+    SPACE_PRIVACY,
+    LOGIN_ACTIVITY,
     MESSAGE_NOTIFICATION,
     BLOCKED_LIST,
     SETTINGS_SHARE,
@@ -417,6 +419,22 @@ private val SETTINGS_SEARCH_INDEX: List<SettingsSearchEntry> = listOf(
             "底栏显示",
             "悬浮底栏",
         )
+    ),
+    SettingsSearchEntry(
+        settingId = "privacy.login_activity",
+        target = SettingsSearchTarget.LOGIN_ACTIVITY,
+        title = settingsDestinationCopy(SettingsSearchTarget.LOGIN_ACTIVITY).title,
+        subtitle = settingsDestinationCopy(SettingsSearchTarget.LOGIN_ACTIVITY).summary,
+        section = "隐私与安全",
+        aliases = listOf("登录设备", "登录记录", "登录历史", "登录IP", "登录地区", "登录时间", "账号安全"),
+    ),
+    SettingsSearchEntry(
+        settingId = "privacy.space_visibility",
+        target = SettingsSearchTarget.SPACE_PRIVACY,
+        title = settingsDestinationCopy(SettingsSearchTarget.SPACE_PRIVACY).title,
+        subtitle = settingsDestinationCopy(SettingsSearchTarget.SPACE_PRIVACY).summary,
+        section = "隐私与安全",
+        aliases = listOf("空间隐私", "公开范围", "公开收藏", "公开追番", "公开点赞", "公开投币", "关注列表", "粉丝列表", "学校信息"),
     ),
     SettingsSearchEntry(
         settingId = "legacy.016",

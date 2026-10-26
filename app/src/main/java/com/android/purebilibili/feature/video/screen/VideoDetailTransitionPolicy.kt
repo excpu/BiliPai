@@ -323,7 +323,8 @@ internal fun resolveVideoDetailReturnMediaFrame(
     } else resolveVideoCardLiveReturnVisualHandoffAlpha(transitionProgress)
     return VideoDetailReturnMediaFrame(
         coverAlpha = coverTakeover,
-        playerAlpha = 1f - coverTakeover,
+        // 封面覆盖在视频上。两层互补淡出会在中点只剩 75% 合成不透明度。
+        playerAlpha = if (coverTakeover < 1f) 1f else 0f,
     )
 }
 

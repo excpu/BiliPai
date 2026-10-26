@@ -94,11 +94,17 @@ internal const val VIDEO_CARD_RETURN_CHROME_REVEAL_START =
  */
 internal fun resolveVideoCardSourceChromeReturnAlpha(
     morphDepthProgress: Float,
-): Float = resolveVideoCardTimelineWindowProgress(
-    progress = resolveVideoCardReturnSettleFromMorphDepth(morphDepthProgress),
-    start = VideoCardTransitionVisualTimeline.SOURCE_CHROME_RETURN_START,
-    end = VideoCardTransitionVisualTimeline.SOURCE_CHROME_RETURN_END,
-)
+): Float = resolveVideoCardLiveReturnVisualHandoffAlpha(morphDepthProgress)
+
+/** 交接窗两端斜率归零；只用于内容叠化，不改变跟手几何。 */
+private fun resolveVideoCardSmoothHandoffProgress(
+    progress: Float,
+    start: Float,
+    end: Float,
+): Float {
+    val u = resolveVideoCardTimelineWindowProgress(progress, start, end)
+    return u * u * (3f - 2f * u)
+}
 
 /**
  * 飞行卡内部内容形变窗口。详情控制器/信息在此窗口退出，来源卡标题/统计按互补
@@ -124,7 +130,7 @@ internal const val VIDEO_CARD_LIVE_RETURN_VISUAL_HANDOFF_START =
  */
 internal fun resolveVideoCardLiveReturnVisualHandoffAlpha(
     morphDepthProgress: Float,
-): Float = resolveVideoCardTimelineWindowProgress(
+): Float = resolveVideoCardSmoothHandoffProgress(
     progress = resolveVideoCardReturnSettleFromMorphDepth(morphDepthProgress),
     start = VideoCardTransitionVisualTimeline.MEDIA_RETURN_START,
     end = VideoCardTransitionVisualTimeline.MEDIA_RETURN_END,

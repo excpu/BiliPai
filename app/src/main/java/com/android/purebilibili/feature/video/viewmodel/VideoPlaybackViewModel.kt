@@ -85,6 +85,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -1909,7 +1910,21 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
     private val _isInAudioMode = MutableStateFlow(false)
     val isInAudioMode = _isInAudioMode.asStateFlow()
     
+    private var audioProgressJob: Job? = null
+
     fun setAudioMode(enabled: Boolean) {
+        if (_isInAudioMode.value && !enabled) saveCurrentPosition()
+        if (enabled && audioProgressJob?.isActive != true) {
+            audioProgressJob = viewModelScope.launch {
+                while (kotlinx.coroutines.currentCoroutineContext().isActive) {
+                    delay(5_000L)
+                    if (exoPlayer?.isPlaying == true) saveCurrentPosition()
+                }
+            }
+        } else if (!enabled) {
+            audioProgressJob?.cancel()
+            audioProgressJob = null
+        }
         _isInAudioMode.value = enabled
         if (enabled) {
             val current = _uiState.value as? VideoPlaybackUiState.Success ?: return
@@ -2481,6 +2496,7 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
         }
         
         override fun onIsPlayingChanged(isPlaying: Boolean) {
+            if (!isPlaying && _isInAudioMode.value) saveCurrentPosition()
             samplePlaybackAnalytics()
             syncHeartbeatPlaybackTracking(
                 isActivelyPlaying = isPlaying && !BackgroundManager.isInBackground
@@ -2520,6 +2536,7 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
             ) {
                 samplePlaybackAnalytics(ended = true, positionMs = oldPosition.positionMs)
             }
+            if (reason == Player.DISCONTINUITY_REASON_SEEK && _isInAudioMode.value) saveCurrentPosition()
             // Rebase on every position jump, including source replacement and plugin skips.
             samplePlaybackAnalytics(discontinuity = true, positionMs = newPosition.positionMs)
         }
@@ -3563,7 +3580,7 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
                     )
                 }
                 // 🛡️ [修复] 增加超时保护，防止加载无限挂起
-                val loadResult = kotlinx.coroutines.withTimeout(15000L) {
+                val initialLoadResult = kotlinx.coroutines.withTimeout(15000L) {
                     playbackLoader.load(
                         request = playbackRequest,
                         cachedPositionMs = cachedPosition,
@@ -3571,6 +3588,26 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
                     )
                 }
 
+                val loadResult = if (initialLoadResult is PlaybackLoadResult.Success &&
+                    _isInAudioMode.value && fallbackResumePositionMs <= 0L && !playbackRequest.ignoreSavedProgress
+                ) {
+                    val info = initialLoadResult.payload.info
+                    val checkpoint = appContext?.let { context ->
+                        try {
+                            com.android.purebilibili.core.store.AudioPlaybackProgressStore.read(
+                                context, com.android.purebilibili.core.store.TokenManager.midCache ?: 0L,
+                                info.bvid, info.cid,
+                            )
+                        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            Logger.w("PlayerVM", "Audio resume checkpoint unavailable", error)
+                            null
+                        }
+                    }
+                    if (checkpoint != null) initialLoadResult.copy(cachedPositionMs = checkpoint.positionMs)
+                    else initialLoadResult
+                } else initialLoadResult
                 when (loadResult) {
                     is PlaybackLoadResult.Success -> {
                         val result = loadResult.payload
@@ -5037,13 +5074,16 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
         val voteCount: Int = 0,
         val hasLiked: Boolean = false,
         val voteLoading: Boolean = false,
-        val canVote: Boolean = false
+        val canVote: Boolean = false,
+        val tapAnchor: com.android.purebilibili.feature.video.danmaku.DanmakuTapAnchor? = null,
+        val expandedActions: Boolean = false,
     )
     
     private val _danmakuMenuState = MutableStateFlow(DanmakuMenuState())
     val danmakuMenuState = _danmakuMenuState.asStateFlow()
     
-    fun showDanmakuMenu(dmid: Long, text: String, userHash: String = "", isSelf: Boolean = false) {
+    fun showDanmakuMenu(dmid: Long, text: String, userHash: String = "", isSelf: Boolean = false,
+        tapAnchor: com.android.purebilibili.feature.video.danmaku.DanmakuTapAnchor? = null) {
         val supportsVote = dmid > 0L && currentCid > 0L
         danmakuThumbupJob?.cancel()
         val cachedVote = danmakuThumbupStates[currentCid to dmid]
@@ -5053,10 +5093,11 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
             dmid = dmid,
             userHash = userHash,
             isSelf = isSelf,
-            voteCount = cachedVote?.likes ?: 0,
+            voteCount = cachedVote?.likes ?: tapAnchor?.likeCount ?: 0,
             hasLiked = cachedVote?.liked ?: (dmid in _likedDanmakuIds.value),
             voteLoading = (currentCid to dmid) in pendingDanmakuLikes,
-            canVote = supportsVote
+            canVote = supportsVote,
+            tapAnchor = tapAnchor,
         )
         if (supportsVote && (currentCid to dmid) !in pendingDanmakuLikes) {
             refreshDanmakuThumbupState(dmid)
@@ -5065,6 +5106,10 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
         // if (exoPlayer?.isPlaying == true) exoPlayer?.pause()
     }
     
+    fun expandDanmakuMenu() {
+        _danmakuMenuState.update { it.copy(expandedActions = true) }
+    }
+
     fun hideDanmakuMenu() {
         _danmakuMenuState.value = _danmakuMenuState.value.copy(visible = false)
         // 恢复播放?
@@ -7942,7 +7987,7 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
         val previousCid = currentCid
         if (targetBvid.isNotEmpty() && previousCid > 0L) {
             flushPlaybackHeartbeatSnapshot(reason = "switch_page")
-            playbackUseCase.savePosition(targetBvid, previousCid)
+            saveCurrentPosition()
         }
         _uiState.value = subtitleClearedState.copy(
             isQualitySwitching = true,
@@ -7997,8 +8042,23 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
                         isHevcSupported = isHevcSupported,
                         isAv1Supported = isAv1Supported
                     )
+                    val sharedAudioPosition = if (_isInAudioMode.value && !ignoreSavedProgress) {
+                        appContext?.let { context ->
+                            try {
+                                com.android.purebilibili.core.store.AudioPlaybackProgressStore.read(
+                                    context, com.android.purebilibili.core.store.TokenManager.midCache ?: 0L,
+                                    targetBvid, page.cid,
+                                )?.positionMs
+                            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                                throw cancelled
+                            } catch (error: Exception) {
+                                Logger.w("PlayerVM", "Audio part checkpoint unavailable", error)
+                                null
+                            }
+                        }
+                    } else null
                     val restoredPosition = resolvePageSwitchStartPositionMs(
-                        cachedPositionMs = playbackUseCase.getCachedPosition(targetBvid, page.cid),
+                        cachedPositionMs = sharedAudioPosition ?: playbackUseCase.getCachedPosition(targetBvid, page.cid),
                         pageDurationSeconds = page.duration,
                         ignoreSavedProgress = ignoreSavedProgress
                     )
@@ -9064,7 +9124,36 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
     fun seekTo(pos: Long) { playbackUseCase.seekTo(pos) }
     fun getPlayerCurrentPosition() = playbackUseCase.getCurrentPosition()
     fun getPlayerDuration() = playbackUseCase.getDuration()
-    fun saveCurrentPosition() { playbackUseCase.savePosition(currentBvid, currentCid) }
+    fun saveCurrentPosition() {
+        playbackUseCase.savePosition(currentBvid, currentCid)
+        // 普通视频的离场保存也更新共享断点，避免再次听视频时恢复更早的音频记录。
+        val context = appContext ?: return
+        val player = exoPlayer ?: return
+        val info = (_uiState.value as? VideoPlaybackUiState.Success)?.info ?: return
+        if (info.bvid != currentBvid || info.cid != currentCid ||
+            relatedPlaybackPreparedToken != currentLoadRequestToken || pendingPageSwitchCid != null ||
+            player.playbackState == Player.STATE_IDLE
+        ) return
+        // 在挂起前采样身份和位置，切歌后不再读取新播放器状态写回旧内容。
+        val checkpoint = com.android.purebilibili.core.store.AudioPlaybackCheckpoint(
+            accountMid = com.android.purebilibili.core.store.TokenManager.midCache ?: 0L,
+            bvid = info.bvid, cid = info.cid,
+            positionMs = if (player.playbackState == Player.STATE_ENDED) 0L else player.currentPosition.coerceAtLeast(0L),
+        )
+        com.android.purebilibili.core.store.AudioPlaybackProgressStore.capture(checkpoint)
+        viewModelScope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+            try {
+                // 有界的本地写入在页面销毁后也完成；不在此执行网络操作。
+                withContext(kotlinx.coroutines.NonCancellable) {
+                    com.android.purebilibili.core.store.AudioPlaybackProgressStore.save(context, checkpoint)
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Logger.w("PlayerVM", "Audio checkpoint save failed", error)
+            }
+        }
+    }
     fun flushPlaybackHeartbeatSnapshot(reason: String = "manual") {
         if (currentBvid.isBlank() || currentCid <= 0L) return
         viewModelScope.launch {

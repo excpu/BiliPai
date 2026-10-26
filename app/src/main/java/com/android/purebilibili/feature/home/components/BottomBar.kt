@@ -80,6 +80,8 @@ import com.android.purebilibili.core.ui.components.appSearchElasticPress
 import com.android.purebilibili.core.ui.components.appElasticPress
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import com.android.purebilibili.core.ui.components.AppMaterial3Toolbar
@@ -362,6 +364,27 @@ internal data class MaterialDockedBottomBarItemColors(
     val unselectedTextColor: Color
 )
 
+private data class NativeBottomBarSelectionColors(
+    val container: Color,
+    val content: Color,
+)
+
+/** 原生底栏选中态绑定当前主色，避免独立的次级色角色让指示器回到灰色。 */
+@Composable
+private fun rememberNativeBottomBarSelectionColors(): NativeBottomBarSelectionColors {
+    val accent = AppContentColors.accent()
+    val surface = AppSurfaceTokens.chromeBackground()
+    return remember(accent, surface) {
+        val container = com.android.purebilibili.core.theme.opaqueCompositeOver(
+            accent.copy(alpha = 0.14f), surface,
+        )
+        NativeBottomBarSelectionColors(
+            container = container,
+            content = com.android.purebilibili.core.theme.resolveCustomSelectionContentColor(accent, container),
+        )
+    }
+}
+
 internal fun resolveMaterialDockedBottomBarItemColors(
     themePrimary: Color,
     onSurfaceVariant: Color,
@@ -450,7 +473,7 @@ internal data class AndroidNativeIndicatorSpec(
 )
 
 internal fun resolveSharedBottomBarCapsuleShape(): androidx.compose.ui.graphics.Shape =
-    RoundedCornerShape(percent = 50)
+    AppShapes.SelectionIndicator
 
 internal fun resolveBiliPaiFloatingBottomBarWidth(
     containerWidth: Dp,
@@ -1003,6 +1026,12 @@ internal fun Modifier.biliPaiMiuixFloatingDockSurface(
         glassEnabled = glassEnabled,
         forceLowBlurBudget = effectiveForceLowBlurBudget,
     )
+    // 玻璃专属嵌套边界：复用父壳的材质，不改变关闭玻璃后的原生磨砂与几何。
+    val parentGlass = com.android.purebilibili.core.ui.blur.LocalAppGlassContainer.current
+        .takeIf { renderGlassEffects && com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled }
+    val samplingBackdrop = if (parentGlass != null) parentGlass.backdrop else backdrop
+    val inheritShellOptics = parentGlass != null
+    val inheritDeformation = parentGlass?.ownsDeformation == true
     val useHazeBlur = shouldUseAndroidNativeFloatingHazeBlur(
         glassEnabled = renderGlassEffects,
         blurEnabled = blurEnabled,
@@ -1023,15 +1052,15 @@ internal fun Modifier.biliPaiMiuixFloatingDockSurface(
     } else {
         null
     }
-    val effectiveShellLensIntensity = shellLensIntensity.coerceIn(0f, 1f)
-    val hasBackdrop = backdrop != null && (renderGlassEffects || blurEnabled)
+    val effectiveShellLensIntensity = if (inheritShellOptics) 0f else shellLensIntensity.coerceIn(0f, 1f)
+    val hasBackdrop = samplingBackdrop != null && (renderGlassEffects || blurEnabled)
     val hasHazeBlur = !hasBackdrop && useHazeBlur && hazeState != null
 
     // Keep optical callbacks stable when navigation or unrelated rim animation
     // recomposes chrome. Each callback is keyed only by the inputs it draws.
     val backdropShape = remember(shape) { { shape } }
     val backdropEffects = remember(
-        renderGlassEffects, blurEnabled, blurRadius, drawShellLens,
+        renderGlassEffects, blurEnabled, blurRadius, drawShellLens, inheritShellOptics,
         effectiveShellLensIntensity, materialSpec.vibrancy, materialSpec.blurRadiusDp,
         materialSpec.shellRefractionHeightDp, materialSpec.shellRefractionAmountDp,
         materialSpec.shellChromaticAberration, liquidGlassTuning.saturation,
@@ -1051,12 +1080,14 @@ internal fun Modifier.biliPaiMiuixFloatingDockSurface(
                         pressBloomDp = AppSpacingTokens.Large.value,
                     ).dp.toPx(),
                 )
-                if (materialSpec.vibrancy) {
+                if (materialSpec.vibrancy && !inheritShellOptics) {
                     miuixVibrancy(liquidGlassTuning.saturation)
                 }
-                val resolvedBlurRadius =
-                    materialSpec.blurRadiusDp?.dp ?: AppSpacingTokens.ExtraSmall
-                miuixBlur(resolvedBlurRadius.toPx(), resolvedBlurRadius.toPx())
+                if (!inheritShellOptics) {
+                    val resolvedBlurRadius =
+                        materialSpec.blurRadiusDp?.dp ?: AppSpacingTokens.ExtraSmall
+                    miuixBlur(resolvedBlurRadius.toPx(), resolvedBlurRadius.toPx())
+                }
                 if (
                     drawShellLens &&
                     effectiveShellLensIntensity > 0f &&
@@ -1098,8 +1129,8 @@ internal fun Modifier.biliPaiMiuixFloatingDockSurface(
         }
         block
     }
-    val backdropLayer = remember(interactionState, renderGlassEffects, materialPressProgress) {
-        val block: (androidx.compose.ui.graphics.GraphicsLayerScope.() -> Unit)? = interactionState?.layerBlock ?: if (renderGlassEffects) {
+    val backdropLayer = remember(interactionState, renderGlassEffects, materialPressProgress, inheritDeformation) {
+        val block: (androidx.compose.ui.graphics.GraphicsLayerScope.() -> Unit)? = if (inheritDeformation) null else interactionState?.layerBlock ?: if (renderGlassEffects) {
             {
                 val width = size.width.coerceAtLeast(1f)
                 val s = lerp(1f, 1f + AppSpacingTokens.Large.toPx() / width, materialPressProgress)
@@ -1163,7 +1194,7 @@ internal fun Modifier.biliPaiMiuixFloatingDockSurface(
                         )
                     )
                     .miuixDrawBackdrop(
-                        backdrop = backdrop,
+                        backdrop = samplingBackdrop,
                         shape = backdropShape,
                         effects = backdropEffects,
                         highlight = backdropHighlight,
@@ -2445,10 +2476,11 @@ private fun MaterialBottomBar(
             blurIntensity = blurIntensity
         )
     }
+    val nativeSelectionColors = rememberNativeBottomBarSelectionColors()
     val dockedItemColors = resolveMaterialDockedBottomBarItemColors(
-        themePrimary = AppContentColors.accent(),
+        themePrimary = if (glassEnabled) AppContentColors.accent() else nativeSelectionColors.content,
         onSurfaceVariant = AppContentColors.secondaryText(),
-        secondaryContainer = MaterialTheme.colorScheme.secondaryContainer
+        secondaryContainer = if (glassEnabled) MaterialTheme.colorScheme.secondaryContainer else nativeSelectionColors.container,
     )
     val skinDockedItemColors = resolveBottomBarSkinContentColors(
         selectedColor = uiSkinDecoration?.bottomSelectedTint
@@ -2775,6 +2807,15 @@ private fun OfficialMd3FloatingToolbarContent(
     isTransitionRunning: Boolean = false,
     forceLowBlurBudget: Boolean = false,
 ) {
+    val selectionColors = rememberNativeBottomBarSelectionColors()
+    val buttonColors = ButtonDefaults.filledTonalButtonColors(
+        containerColor = selectionColors.container,
+        contentColor = selectionColors.content,
+    )
+    val iconButtonColors = IconButtonDefaults.filledTonalIconButtonColors(
+        containerColor = selectionColors.container,
+        contentColor = selectionColors.content,
+    )
     val useBlur = blurEnabled && (hazeState != null || backdrop != null)
     val toolbarShape = MaterialTheme.shapes.extraLarge
     val toolbarContainerColor = if (useBlur) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer
@@ -2795,73 +2836,106 @@ private fun OfficialMd3FloatingToolbarContent(
         Modifier
     }
 
-    val toolbarContent: @Composable RowScope.() -> Unit = {
-        visibleItems.forEach { item ->
-            val selected = currentItem == item
-            val label = resolveBottomNavItemLabel(item, itemLabels)
-            val onClick = {
-                performMaterialBottomBarTap(
-                    haptic = haptic,
-                    onClick = { onItemClick(item) },
-                )
-            }
-            val icon: @Composable () -> Unit = {
-                BottomBarReminderBadgeAnchor(
-                    item = item,
-                    unreadCount = dynamicUnreadCount,
-                    floatingCompact = true,
-                ) {
-                    AppIcon(
-                        imageVector = resolveMaterialBottomBarIcon(item, selected),
-                        contentDescription = if (showText) null else label,
-                    )
-                }
-            }
-
-            when {
-                showIcon && showText && selected -> FilledTonalButton(
-                    onClick = onClick,
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                ) {
-                    icon()
-                    Spacer(Modifier.width(8.dp))
-                    AppText(text = label, maxLines = 1)
-                }
-                showIcon && selected -> FilledTonalIconButton(onClick = onClick) { icon() }
-                showIcon -> IconButton(onClick = onClick) { icon() }
-                selected -> FilledTonalButton(onClick = onClick) {
-                    AppText(text = label, maxLines = 1)
-                }
-                else -> TextButton(onClick = onClick) {
-                    AppText(text = label, maxLines = 1)
-                }
-            }
-        }
-
-        if (isTablet && onToggleSidebar != null) {
-            IconButton(
-                onClick = {
-                    performMaterialBottomBarTap(haptic = haptic, onClick = onToggleSidebar)
-                },
-            ) {
-                AppIcon(
-                    imageVector = Icons.AutoMirrored.Outlined.MenuOpen,
-                    contentDescription = stringResource(R.string.sidebar_toggle),
-                )
-            }
-        }
-    }
-
-    Box(
+    BoxWithConstraints(
         modifier = modifier,
         contentAlignment = Alignment.Center,
     ) {
-        AppMaterial3Toolbar(
-            modifier = toolbarModifier,
-            containerColor = toolbarContainerColor,
-            shape = toolbarShape,
-            content = toolbarContent,
+        val density = LocalDensity.current
+        val labelMeasurer = androidx.compose.ui.text.rememberTextMeasurer()
+        val selectedLabel = resolveBottomNavItemLabel(currentItem, itemLabels)
+        val selectedLabelWidth = if (showIcon && showText && currentItem in visibleItems) {
+            with(density) {
+                labelMeasurer.measure(
+                    text = selectedLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                    softWrap = false,
+                ).size.width.toDp().value
+            }
+        } else null
+        val fit = resolveMd3BottomBarFit(
+            availableWidthDp = maxWidth.value,
+            itemCount = visibleItems.size + if (isTablet && onToggleSidebar != null) 1 else 0,
+            selectedLabelWidthDp = selectedLabelWidth,
         )
+        val toolbarContent: @Composable RowScope.() -> Unit = {
+            visibleItems.forEach { item ->
+                val selected = currentItem == item
+                val label = resolveBottomNavItemLabel(item, itemLabels)
+                val onClick = {
+                    performMaterialBottomBarTap(
+                        haptic = haptic,
+                        onClick = { onItemClick(item) },
+                    )
+                }
+                val icon: @Composable () -> Unit = {
+                    BottomBarReminderBadgeAnchor(
+                        item = item,
+                        unreadCount = dynamicUnreadCount,
+                        floatingCompact = true,
+                    ) {
+                        AppIcon(
+                            imageVector = resolveMaterialBottomBarIcon(item, selected),
+                            contentDescription = if (selected && showText && fit.showSelectedLabel) null else label,
+                        )
+                    }
+                }
+
+                when {
+                    showIcon && showText && fit.showSelectedLabel && selected -> FilledTonalButton(
+                        onClick = onClick,
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        colors = buttonColors,
+                    ) {
+                        icon()
+                        Spacer(Modifier.width(8.dp))
+                        AppText(text = label, maxLines = 1)
+                    }
+                    showIcon && selected -> FilledTonalIconButton(onClick = onClick, colors = iconButtonColors) { icon() }
+                    showIcon -> IconButton(onClick = onClick) { icon() }
+                    selected -> FilledTonalButton(onClick = onClick, colors = buttonColors) {
+                        AppText(text = label, maxLines = 1)
+                    }
+                    else -> TextButton(onClick = onClick) {
+                        AppText(text = label, maxLines = 1)
+                    }
+                }
+            }
+
+            if (isTablet && onToggleSidebar != null) {
+                IconButton(
+                    onClick = {
+                        performMaterialBottomBarTap(haptic = haptic, onClick = onToggleSidebar)
+                    },
+                ) {
+                    AppIcon(
+                        imageVector = Icons.AutoMirrored.Outlined.MenuOpen,
+                        contentDescription = stringResource(R.string.sidebar_toggle),
+                    )
+                }
+            }
+        }
+        // 内层按工具栏内容测量，避免背景铺满联动 dock 预留的较宽槽位。
+        Box(contentAlignment = Alignment.Center) {
+            if (useBlur) {
+                // 普通磨砂独立绘制背景与外阴影，透明工具栏只承载清晰的按钮。
+                // 避免 Surface 自身的阴影透入半透明背景；关闭磨砂时保留原生 elevation。
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .then(toolbarModifier),
+                )
+            }
+            AppMaterial3Toolbar(
+                containerColor = toolbarContainerColor,
+                shape = toolbarShape,
+                tonalElevation = if (useBlur) 0.dp else 3.dp,
+                shadowElevation = if (useBlur) 0.dp else 3.dp,
+                contentPadding = PaddingValues(horizontal = fit.horizontalPaddingDp.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(fit.spacingDp.dp),
+                content = toolbarContent,
+            )
+        }
     }
 }
 
@@ -3386,13 +3460,9 @@ private fun RowScope.MiuixDockedBottomBarItem(
         selectedColor = selectedColor,
         unselectedColor = unselectedColor
     )
-    // MD3 官方选中态:secondaryContainer 指示器 + onSecondaryContainer 图标
+    // 原生 Miuix 指示器使用主色浅底，图标与文字共用主色，不借用次级容器前景。
     val showIndicator = selected && indicatorColor != Color.Transparent && skinIconPath == null
-    val iconTint = if (showIndicator) {
-        MaterialTheme.colorScheme.onSecondaryContainer
-    } else {
-        baseContentColor
-    }
+    val iconTint = baseContentColor
     val contentColor by animateColorAsState(
         targetValue = if (isPressed) {
             baseContentColor.copy(alpha = if (selected) 0.62f else 0.54f)
@@ -3741,7 +3811,8 @@ private fun BiliPaiFloatingBottomBarChrome(
         !effectiveGlassEnabled && uiSkinDecoration == null
     val themedMd3Selection = LocalAppUiStyle.current == AppUiStyle.MATERIAL3 &&
         !effectiveGlassEnabled && uiSkinDecoration == null
-    val baseSelectedColor = if (themedMd3Selection) AppSurfaceTokens.onSecondaryContainer()
+    val nativeSelectionColors = rememberNativeBottomBarSelectionColors()
+    val baseSelectedColor = if (themedMd3Selection) nativeSelectionColors.content
         else AppContentColors.selectionAccent(effectiveGlassEnabled)
     val baseUnselectedColor = if (!effectiveGlassEnabled && (themedMiuixSelection || iconStyle == SharedFloatingBottomBarIconStyle.MATERIAL)) {
         AppContentColors.secondaryText()
@@ -3855,7 +3926,7 @@ private fun BiliPaiFloatingBottomBarChrome(
     // Share the theme-tinted selection fill with opaque top tabs and category rails.
     val themedIndicatorContainerColor = when {
         themedMiuixSelection -> AppSurfaceTokens.selectionContainer()
-        themedMd3Selection -> AppSurfaceTokens.secondaryContainer()
+        themedMd3Selection -> nativeSelectionColors.container
         else -> null
     }
     val floatingColors = FloatingBottomBarColors(

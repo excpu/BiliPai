@@ -42,6 +42,8 @@ import com.google.common.util.concurrent.SettableFuture
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
@@ -75,6 +77,7 @@ class BackgroundAudioService : MediaSessionService() {
     private var restoring: Job? = null
     private val stateStore by lazy { MultiProcessPreferences.get(this, "background_audio") }
     private val snapshotKey = stringPreferencesKey("snapshot")
+    private val persistenceMutex = Mutex()
 
     override fun onCreate() {
         super.onCreate()
@@ -205,6 +208,7 @@ class BackgroundAudioService : MediaSessionService() {
                         }
                         AUDIO_RETURN -> {
                             restoring?.join()
+                            persist()
                             val state = currentSnapshot()
                             committed = false
                             player.pause()
@@ -265,6 +269,7 @@ class BackgroundAudioService : MediaSessionService() {
     }
 
     private suspend fun prepare(request: BackgroundAudioSnapshot, resume: Boolean) {
+        if (committed) persist()
         TokenManager.refreshServiceSession(this)
         check(request.accountMid == TokenManager.midCache)
         generation++
@@ -364,6 +369,40 @@ class BackgroundAudioService : MediaSessionService() {
                 if (committed) prefetchNext()
             }
         }
+        override fun onPositionDiscontinuity(
+            oldPosition: Player.PositionInfo,
+            newPosition: Player.PositionInfo,
+            reason: Int,
+        ) {
+            if (!committed) return
+            if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+                scope.launch {
+                    try {
+                        persist()
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        Logger.w("BackgroundAudio", "Seek checkpoint save failed", error)
+                    }
+                }
+            } else if (reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION) {
+                val extras = oldPosition.mediaItem?.mediaMetadata?.extras ?: return
+                val bvid = extras.getString("bvid") ?: return
+                val checkpoint = com.android.purebilibili.core.store.AudioPlaybackCheckpoint(
+                    accountMid = snapshot?.accountMid ?: 0L,
+                    bvid = bvid, cid = extras.getLong("cid"), positionMs = 0L,
+                )
+                scope.launch {
+                    try {
+                        com.android.purebilibili.core.store.AudioPlaybackProgressStore.save(this@BackgroundAudioService, checkpoint)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        Logger.w("BackgroundAudio", "Completed audio checkpoint save failed", error)
+                    }
+                }
+            }
+        }
         override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
             updateWatchTime()
             playedMs = 0L
@@ -458,13 +497,35 @@ class BackgroundAudioService : MediaSessionService() {
         speed = player.playbackParameters.speed, audioUrl = ""
     )
 
-    private suspend fun persist() {
-        val state = currentSnapshot() ?: return
+    private suspend fun persist(): Unit = persistenceMutex.withLock {
+        if (nativeReleased) return@withLock
+        val state = currentSnapshot() ?: return@withLock
+        if (committed && player.playbackState != Player.STATE_IDLE) {
+            state.current?.let { item ->
+                com.android.purebilibili.core.store.AudioPlaybackProgressStore.save(
+                    this,
+                    com.android.purebilibili.core.store.AudioPlaybackCheckpoint(
+                        accountMid = state.accountMid ?: 0L, bvid = item.bvid, cid = item.cid,
+                        positionMs = if (player.playbackState == Player.STATE_ENDED) 0L else state.positionMs,
+                    ),
+                )
+            }
+        }
         stateStore.edit { it[snapshotKey] = backgroundAudioJson.encodeToString(BackgroundAudioSnapshot.serializer(), state) }
+        Unit
     }
 
     private suspend fun closeSession() {
         if (!nativeReleased) {
+            if (committed) {
+                try {
+                    withContext(NonCancellable) { persist() }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    Logger.w("BackgroundAudio", "Final audio checkpoint save failed", error)
+                }
+            }
             committed = false
             generation++
             nextLoad?.cancel()
@@ -512,6 +573,27 @@ class BackgroundAudioService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        if (!nativeReleased && committed && player.playbackState != Player.STATE_IDLE) {
+            val state = currentSnapshot()
+            val item = state?.current
+            if (state != null && item != null) {
+                val checkpoint = com.android.purebilibili.core.store.AudioPlaybackCheckpoint(
+                    accountMid = state.accountMid ?: 0L, bvid = item.bvid, cid = item.cid,
+                    positionMs = if (player.playbackState == Player.STATE_ENDED) 0L else state.positionMs,
+                )
+                scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                    withContext(NonCancellable) {
+                        try {
+                            com.android.purebilibili.core.store.AudioPlaybackProgressStore.save(this@BackgroundAudioService, checkpoint)
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            Logger.w("BackgroundAudio", "Service shutdown checkpoint save failed", error)
+                        }
+                    }
+                }
+            }
+        }
         scope.cancel()
         releaseNativeResources()
         super.onDestroy()

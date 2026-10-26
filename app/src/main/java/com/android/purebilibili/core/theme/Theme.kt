@@ -348,13 +348,20 @@ internal fun resolveMaterialColorSchemeFromMiuixBridge(
 /**
  * Keep upstream neutral/control roles; only the user's accent is adapted from Material.
  * Dark canvas roles honor the ordinary/AMOLED preference; light colors and native
- * control roles retain Miuix defaults. Both theme APIs consume this resolved palette.
+ * control roles retain Miuix defaults unless advanced custom roles are explicitly enabled.
+ * Both theme APIs consume this resolved palette.
  */
 internal fun resolveNativeMiuixColors(
     scheme: ColorScheme,
     darkTheme: Boolean,
     amoledDarkTheme: Boolean = false,
+    customRolesEnabled: Boolean = false,
 ): top.yukonga.miuix.kmp.theme.Colors {
+    // 仅显式开启高级自定义时映射背景、卡片、文字与控件；玻璃开关共用此色板。
+    // 手动背景优先于 AMOLED 预设，关闭自定义后恢复下面的原生角色。
+    if (customRolesEnabled) {
+        return resolveMiuixColorsFromMaterialBridge(createMiuixMaterialBridge(scheme), darkTheme)
+    }
     val upstream = if (darkTheme) miuixDarkColorScheme() else miuixLightColorScheme()
     // Upstream's dark surface is already pure black. Give ordinary dark mode a
     // charcoal canvas, and apply AMOLED roles before bridging both theme APIs.
@@ -971,13 +978,16 @@ fun PureBiliBiliTheme(
         seedPaletteStyle = seedPaletteStyle,
     )
 
-    val baseThemeRoleOverrides = remember(lightMaterialScheme, darkMaterialScheme) {
-        themeRoleOverridesFromSchemes(lightMaterialScheme, darkMaterialScheme)
+    val baseThemeRoleOverrides = remember(lightMaterialScheme, darkMaterialScheme, uiStyle, amoledDarkTheme) {
+        // 高级编辑器从当前样式的原生底色与文字开始，避免 Miuix 首次开启时套用 MD3 底色。
+        themeRoleOverridesFromSchemes(
+            lightMaterialScheme, darkMaterialScheme, uiStyle, amoledDarkTheme,
+        )
     }
     val effectiveThemeRoleOverrides = remember(md3ColorSource, themeRoleOverrides, uiStyle, baseThemeRoleOverrides, md3CustomColorHex, seedPaletteStyle) {
         // Extended palettes own all generated roles. Saved advanced edits remain
         // available when returning to Standard; no seed/primary rewrite in this mode.
-        val effective = resolveEffectiveThemeRoleOverrides(md3ColorSource, themeRoleOverrides, uiStyle)
+        val effective = resolveEffectiveThemeRoleOverrides(md3ColorSource, themeRoleOverrides)
             .let { if (seedPaletteStyle.enabled) it.copy(enabled = false) else it }
         if (effective.enabled) {
             enableThemeRoleOverrides(effective, baseThemeRoleOverrides, md3CustomColorHex)

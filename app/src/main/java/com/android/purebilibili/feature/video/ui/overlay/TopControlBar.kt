@@ -60,6 +60,7 @@ import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.material.icons.outlined.Home
 
 /**
  * Shared Android PiliPlus HeaderControl for inline/fullscreen and portrait/landscape.
@@ -166,16 +167,17 @@ fun TopControlBar(
         Column(
             modifier = modifier.fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
-                .then(if (shouldApplyStatusBarPaddingToTopControlBar(isFullscreen, statusBarVisible)) {
-                    Modifier.statusBarsPadding()
-                } else Modifier)
+                .playerControlTopSafeArea(isFullscreen, isPortrait, statusBarVisible)
                 .padding(vertical = policy.verticalPaddingDp.dp),
         ) {
             PiliHeaderSlots(
                 hasTitle = hasTitle,
                 left = {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(buttonSpacing)) {
-                        HeaderIcon(Icons.AutoMirrored.Outlined.ArrowBack, "返回", onBack, iconSize = 15)
+                        HeaderIcon(Icons.AutoMirrored.Outlined.ArrowBack, "返回", onBack, iconSize = if (glass) 15 else 20)
+                        if (policy.showHome && onHomeClick != null) {
+                            HeaderIcon(Icons.Outlined.Home, "返回首页", onHomeClick)
+                        }
                     }
                 },
                 right = {
@@ -447,9 +449,14 @@ private fun HeaderButton(
     content: @Composable () -> Unit,
 ) {
     val feedbackClick = appActionWithFeedback(com.android.purebilibili.core.ui.AppHapticScene.VIDEO_ACTIONS, onClick)
-    PlayerControlGlassDock(enabled = true, modifier = modifier, shape = if (com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled) androidx.compose.foundation.shape.RoundedCornerShape(50) else CircleShape) {
+    PlayerControlGlassDock(enabled = true, modifier = modifier, shape = CircleShape) {
         Box(
-            modifier = Modifier.size(width = 42.dp, height = 34.dp)
+            modifier = Modifier
+                .then(if (com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled) {
+                    Modifier.size(PlayerGlassIconButtonSize)
+                } else {
+                    Modifier.size(34.dp)
+                })
                 .semantics(mergeDescendants = true) {
                     contentDescription = description
                     selected = active

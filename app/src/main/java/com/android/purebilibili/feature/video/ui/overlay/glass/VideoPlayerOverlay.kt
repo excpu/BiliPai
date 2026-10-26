@@ -927,7 +927,11 @@ private fun VideoPlayerOverlayContent(
             screenHeightDp = configuration.screenHeightDp
         )
     }
-    var bufferingStartedAtMs by remember(player) { mutableLongStateOf(0L) }
+    // 检测依据是当前播放面的真实首帧状态，诊断展示字符串缺省不代表黑屏。
+    // 瞬时控件抑制与诊断门控分开：竖屏长期自管加载层，不能因此永久停掉诊断。
+    val playbackIssueMonitoringEnabled = playerDiagnosticLoggingEnabled && visualWorkActive &&
+        !state.isAudioOnly
+    var bufferingStartedAtMs by remember(player, bvid, cid) { mutableLongStateOf(0L) }
     var waitingFirstFrameStartedAtMs by remember(player, bvid, cid) { mutableLongStateOf(0L) }
     var playbackIssueSignal by remember(player, bvid, cid) { mutableStateOf<PlaybackIssueSignal?>(null) }
     var dismissedPlaybackIssueTypes by remember(player, bvid, cid) {
@@ -984,12 +988,15 @@ private fun VideoPlayerOverlayContent(
         }
     }
     LaunchedEffect(
-        playerDiagnosticLoggingEnabled,
+        player,
+        bvid,
+        cid,
+        playbackIssueMonitoringEnabled,
         player.playbackState,
         player.playWhenReady,
-        effectiveDebugInfo.firstFrame
+        hasRenderedFirstFrame
     ) {
-        if (!playerDiagnosticLoggingEnabled) {
+        if (!playbackIssueMonitoringEnabled) {
             bufferingStartedAtMs = 0L
             waitingFirstFrameStartedAtMs = 0L
             playbackIssueSignal = null
@@ -1004,14 +1011,14 @@ private fun VideoPlayerOverlayContent(
         waitingFirstFrameStartedAtMs = when {
             player.playbackState == Player.STATE_READY &&
                 player.playWhenReady &&
-                effectiveDebugInfo.firstFrame.isBlank() ->
+                !hasRenderedFirstFrame ->
                 if (waitingFirstFrameStartedAtMs == 0L) now else waitingFirstFrameStartedAtMs
             else -> 0L
         }
         val currentSignal = resolvePlaybackIssueSignal(
             playbackState = player.playbackState,
             playWhenReady = player.playWhenReady,
-            firstFrameRendered = effectiveDebugInfo.firstFrame.isNotBlank(),
+            firstFrameRendered = hasRenderedFirstFrame,
             bufferingDurationMs = if (bufferingStartedAtMs > 0L) now - bufferingStartedAtMs else 0L,
             waitingFirstFrameDurationMs = if (waitingFirstFrameStartedAtMs > 0L) {
                 now - waitingFirstFrameStartedAtMs
@@ -1025,14 +1032,14 @@ private fun VideoPlayerOverlayContent(
     }
     LaunchedEffect(
         player,
-        playerDiagnosticLoggingEnabled,
-        effectiveDebugInfo.firstFrame,
+        playbackIssueMonitoringEnabled,
+        hasRenderedFirstFrame,
         bufferingStartedAtMs,
         waitingFirstFrameStartedAtMs,
         dismissedPlaybackIssueTypes,
         pendingUserAction
     ) {
-        if (!playerDiagnosticLoggingEnabled) {
+        if (!playbackIssueMonitoringEnabled) {
             playbackIssueSignal = null
             return@LaunchedEffect
         }
@@ -1041,7 +1048,7 @@ private fun VideoPlayerOverlayContent(
             val playbackSignal = resolvePlaybackIssueSignal(
                 playbackState = player.playbackState,
                 playWhenReady = player.playWhenReady,
-                firstFrameRendered = effectiveDebugInfo.firstFrame.isNotBlank(),
+                firstFrameRendered = hasRenderedFirstFrame,
                 bufferingDurationMs = if (bufferingStartedAtMs > 0L) now - bufferingStartedAtMs else 0L,
                 waitingFirstFrameDurationMs = if (waitingFirstFrameStartedAtMs > 0L) {
                     now - waitingFirstFrameStartedAtMs
@@ -1061,7 +1068,7 @@ private fun VideoPlayerOverlayContent(
                 playbackIssueSignal = signal
             }
             if (!shouldMonitorPlaybackIssues(
-                    diagnosticsEnabled = playerDiagnosticLoggingEnabled,
+                    diagnosticsEnabled = playbackIssueMonitoringEnabled,
                     bufferingStartedAtMs = bufferingStartedAtMs,
                     waitingFirstFrameStartedAtMs = waitingFirstFrameStartedAtMs,
                     hasPendingUserAction = pendingUserAction != null
@@ -1553,6 +1560,7 @@ private fun VideoPlayerOverlayContent(
                         showCurrentTime = showFullscreenTime,
                         showInteractiveActions = showFullscreenActionItems,
                         onBack = onBack,
+                        onHomeClick = actions.onHomeClick,
                         // Interactions
                         isLiked = isLiked,
                         likeStatusKnown = likeStatusKnown,
@@ -1784,7 +1792,7 @@ private fun VideoPlayerOverlayContent(
 
         if (isFullscreen && showFullscreenScreenshotButton) {
             AnimatedVisibility(
-                visible = isVisible && !isScreenLocked && !danmakuComposerVisible,
+                visible = isVisible && !danmakuComposerVisible,
                 enter = fadeIn(OverlayControlFadeSpec),
                 exit = fadeOut(OverlayControlFadeSpec),
                 modifier = Modifier

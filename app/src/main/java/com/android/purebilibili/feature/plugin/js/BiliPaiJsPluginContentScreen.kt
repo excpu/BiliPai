@@ -1,5 +1,10 @@
 package com.android.purebilibili.feature.plugin.js
 
+import com.android.purebilibili.feature.home.rememberFeedGridColumnPreference
+import com.android.purebilibili.feature.home.effectiveGridColumnCount
+import com.android.purebilibili.feature.home.effectiveGridColumnCountCompact
+import com.android.purebilibili.feature.home.gridColumnPinchEnabled
+import com.android.purebilibili.core.util.LocalWindowSizeClass
 import com.android.purebilibili.core.ui.AppContentColors
 
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -138,10 +143,22 @@ fun BiliPaiJsPluginContentScreen(
     var detailItems by remember(pluginId) { mutableStateOf<List<BiliPaiJsMediaItem>>(emptyList()) }
     var isDetailLoading by remember(pluginId) { mutableStateOf(false) }
     var detailError by remember(pluginId) { mutableStateOf<String?>(null) }
-    val pinchToChangeGridColumnsEnabled by SettingsManager
-        .getPinchToChangeGridColumnsEnabled(context)
-        .collectAsStateWithLifecycle(initialValue = true)
-    var gridColumns by remember(pluginId) { mutableIntStateOf(BILI_PAI_JS_GRID_COLUMNS) }
+    val homeSettings by SettingsManager.getHomeSettings(context)
+        .collectAsStateWithLifecycle(initialValue = com.android.purebilibili.core.store.HomeSettings())
+    val windowSizeClass = LocalWindowSizeClass.current
+    val gridColumnPreference = androidx.compose.runtime.key(pluginId) {
+        rememberFeedGridColumnPreference(
+            settings = homeSettings,
+            widthSizeClass = windowSizeClass.widthSizeClass,
+            defaultColumns = com.android.purebilibili.feature.home.resolveHomeFeedStoredColumnCount(
+                windowSizeClass.widthSizeClass,
+                homeSettings.effectiveGridColumnCountCompact,
+                homeSettings.effectiveGridColumnCount,
+            ).takeIf { it > 0 } ?: BILI_PAI_JS_GRID_COLUMNS,
+            bounds = BILI_PAI_JS_PINCH_COLUMN_BOUNDS,
+            minimumColumns = BILI_PAI_JS_PINCH_COLUMN_BOUNDS.first,
+        )
+    }
     var imagePreview by remember { mutableStateOf<BiliPaiJsImagePreviewRequest?>(null) }
 
     imagePreview?.let { request ->
@@ -281,9 +298,10 @@ fun BiliPaiJsPluginContentScreen(
                 detailError = detailError,
                 detailSupported = current.manifest.supportsDetail,
                 isGridLayout = effectiveLayout == BiliPaiJsLayouts.GRID,
-                gridColumns = gridColumns,
-                pinchZoomEnabled = pinchToChangeGridColumnsEnabled,
-                onGridColumnsChange = { gridColumns = it },
+                gridColumns = gridColumnPreference.columns,
+                pinchZoomEnabled = homeSettings.gridColumnPinchEnabled,
+                onGridColumnsChange = gridColumnPreference.onChange,
+                onGridColumnsEnd = gridColumnPreference.onGestureEnd,
                 onPreviewImage = { images, index, rect ->
                     imagePreview = resolveBiliPaiJsImagePreviewRequest(images, index, rect)
                 },
@@ -339,6 +357,7 @@ private fun PluginContent(
     gridColumns: Int,
     pinchZoomEnabled: Boolean,
     onGridColumnsChange: (Int) -> Unit,
+    onGridColumnsEnd: (Int) -> Unit,
     onPreviewImage: (List<String>, Int, Rect?) -> Unit,
     onShareLayout: () -> Unit,
     onSelectModule: (BiliPaiJsModule) -> Unit,
@@ -368,7 +387,7 @@ private fun PluginContent(
             currentColumns = gridColumns,
             bounds = BILI_PAI_JS_PINCH_COLUMN_BOUNDS,
             onColumnsChange = onGridColumnsChange,
-            onGestureEnd = onGridColumnsChange,
+            onGestureEnd = onGridColumnsEnd,
         ),
         state = listState,
         contentPadding = PaddingValues(16.dp),

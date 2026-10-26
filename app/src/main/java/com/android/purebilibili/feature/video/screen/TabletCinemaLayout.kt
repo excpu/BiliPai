@@ -1692,7 +1692,10 @@ private fun CinemaRelatedPane(
                 }
             ) { _, row ->
                 CompositionLocalProvider(
-                    LocalVideoCardSharedElementSourceRoute provides "video/${success.info.bvid}"
+                    LocalVideoCardSharedElementSourceRoute provides
+                        com.android.purebilibili.feature.video.ui.components.resolveRelatedVideoCardHostRoute(
+                            LocalVideoCardSharedElementSourceRoute.current, success.info.bvid,
+                        )
                 ) {
                     RelatedVideoGridRow(
                         videos = row,

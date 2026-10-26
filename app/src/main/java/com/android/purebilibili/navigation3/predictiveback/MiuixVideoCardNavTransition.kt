@@ -15,7 +15,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
@@ -99,7 +98,33 @@ internal const val MIUIX_VIDEO_CARD_FLOATING_CORNER_DP = 28f
 internal fun resolveMiuixVideoCardCoveredScale(depth: Float, reducedMotion: Boolean): Float =
     if (reducedMotion) 1f else 1f - 0.03f * depth.coerceIn(0f, 1f)
 
-internal val MiuixVideoCardCoveredShape = RoundedCornerShape(24.dp)
+/** 屏幕上的圆角随来源页后退同步建立，恢复时归零，不在首个缩放帧跳到整角。 */
+internal fun resolveMiuixVideoCardCoveredCornerPx(
+    depth: Float,
+    reducedMotion: Boolean,
+    density: Float,
+): Float {
+    if (reducedMotion) return 0f
+    val scale = resolveMiuixVideoCardCoveredScale(depth, reducedMotion)
+    return 24f * density * depth.coerceIn(0f, 1f) / scale
+}
+
+/** 两份轮廓交替复用，保证 layer 能识别圆角更新，无需逐帧分配 Shape。 */
+internal class MiuixVideoCardCoveredShapeCache {
+    private val shapes = arrayOf(MiuixVideoCardClipShape(), MiuixVideoCardClipShape())
+    private var index = 0
+
+    fun resolve(radiusPx: Float): Shape {
+        if (radiusPx <= 0f) return androidx.compose.ui.graphics.RectangleShape
+        val current = shapes[index]
+        if (current.radiusX == radiusPx) return current
+        index = 1 - index
+        return shapes[index].also {
+            it.radiusX = radiusPx
+            it.radiusY = radiusPx
+        }
+    }
+}
 
 /** Video-to-video transitions extend the black player/window canvas into the scale gap. */
 internal fun resolveMiuixVideoCardBackingColor(sourceRoute: String?, surface: Color): Color =
@@ -164,13 +189,23 @@ internal fun resolveMiuixVideoCardGestureCornerPx(
     morphProgress: Float,
     floatingCornerPx: Float,
     fullscreenCornerPx: Float = 0f,
+    sourceLayout: VideoCardSourceLayout = VideoCardSourceLayout.COVER_ONLY,
+    currentShortSidePx: Float = Float.POSITIVE_INFINITY,
 ): Float {
-    val pull = (1f - morphProgress.coerceIn(0f, 1f)).coerceIn(0f, 1f)
-    val pose = resolveMiuixVideoCardGesturePoseWeight(morphProgress)
+    val morph = morphProgress.coerceIn(0f, 1f)
+    val pull = 1f - morph
     val source = sourceCornerPx.coerceAtLeast(0f)
+    val target = fullscreenCornerPx.coerceAtLeast(0f)
+    if (sourceLayout == VideoCardSourceLayout.SIDE_BY_SIDE) {
+        // 横向来源沿用卡片本身的圆角，不在中段膨胀到设备屏幕圆角。
+        // 同一深度正反向取值相同；两端斜率归零，避免展开或落位时突然变角。
+        val fraction = morph * morph * (3f - 2f * morph)
+        val radius = source + (target - source) * fraction
+        return radius.coerceAtMost(currentShortSidePx.coerceAtLeast(0f) / 2f)
+    }
+    val pose = resolveMiuixVideoCardGesturePoseWeight(morphProgress)
     val floating = floatingCornerPx.coerceAtLeast(source)
-    val landed = fullscreenCornerPx.coerceAtLeast(0f) +
-        (source - fullscreenCornerPx.coerceAtLeast(0f)) * pull
+    val landed = target + (source - target) * pull
     return landed + (floating - landed) * pose
 }
 
@@ -323,12 +358,16 @@ internal fun resolveMiuixVideoCardClipRadii(
     morphProgress: Float = 0f,
     floatingCornerPx: Float = sourceCornerPx,
     fullscreenCornerPx: Float = 0f,
+    sourceLayout: VideoCardSourceLayout = VideoCardSourceLayout.COVER_ONLY,
+    currentShortSidePx: Float = Float.POSITIVE_INFINITY,
 ): MiuixVideoCardClipRadii {
     val physicalRadius = resolveMiuixVideoCardGestureCornerPx(
         sourceCornerPx = sourceCornerPx,
         morphProgress = morphProgress,
         floatingCornerPx = floatingCornerPx,
         fullscreenCornerPx = fullscreenCornerPx,
+        sourceLayout = sourceLayout,
+        currentShortSidePx = currentShortSidePx,
     )
     return MiuixVideoCardClipRadii(
         radiusX = physicalRadius / outerScaleX.coerceAtLeast(0.01f),
@@ -628,9 +667,9 @@ internal class MiuixVideoCardTransitionProgress(
                 if (settleVisualReturn >= 1f) 0f else (1f - visualReturn) / (1f - settleVisualReturn)
             }
             lastFollowPose = releaseFollowPose
-                // 松手冲量：与手指甩动速度成比例的额外旋转，随 settle 权重一并衰减。
-                .withReleaseImpulse(settle.releaseVelocity)
                 .settle(weight)
+                // 冲量从零建立再归零，不在释放首帧直接叠加旋转。
+                .withReleaseImpulse(settle.releaseVelocity, weight)
         }
         return lastFollowPose
     }
@@ -746,10 +785,12 @@ internal fun resolveVideoHeroNavMotion(
     commit = NavSettleSpec.Tween(
         durationMillis = spec.returnDurationMillis,
         easing = spec.returnSpatialSpec,
+        matchReleaseVelocity = !spec.reducedMotion,
     ),
     cancel = if (gestureTranslationEnabled) NavSettleSpec.Tween(
         durationMillis = spec.cancelDurationMillis,
         easing = spec.returnSpatialSpec,
+        matchReleaseVelocity = !spec.reducedMotion,
     ) else NavSettleSpec.Spring(
         dampingRatio = VideoHeroMotionTokens.SPRING_DAMPING,
         stiffness = spec.cancelStiffness,
@@ -779,6 +820,7 @@ internal fun miuixVideoCardNavTransition(
     heroMotionSpec: VideoHeroMotionSpec = resolveVideoHeroMotionSpec(durationMillis),
     returningProvider: () -> Boolean = { false },
     deviceCornerDp: Dp = 32.dp,
+    sourceLayout: VideoCardSourceLayout = VideoCardSourceLayout.COVER_ONLY,
 ): NavTransition {
     val bounds = sourceBounds?.takeIf { it.width > 1f && it.height > 1f }
         ?: return fallback
@@ -791,6 +833,7 @@ internal fun miuixVideoCardNavTransition(
     val corner = sourceCornerDp?.coerceAtLeast(0) ?: 16
     val clipShapeA = MiuixVideoCardClipShape()
     val clipShapeB = MiuixVideoCardClipShape()
+    val coveredShapeCache = MiuixVideoCardCoveredShapeCache()
     var useShapeA = true
 
     return object : NavTransition {
@@ -904,6 +947,8 @@ internal fun miuixVideoCardNavTransition(
                             floatingCornerPx = floatingCornerPx,
                             // Fullscreen content must reach square host bounds, including on tablets.
                             fullscreenCornerPx = 0f,
+                            sourceLayout = sourceLayout,
+                            currentShortSidePx = minOf(width * outerScaleX, height * outerScaleY),
                         )
                         val radX = physicalRadius / outerScaleX.coerceAtLeast(0.01f)
                         val radY = physicalRadius / outerScaleY.coerceAtLeast(0.01f)
@@ -928,15 +973,20 @@ internal fun miuixVideoCardNavTransition(
                     } else {
                         // Same boundary ownership as Miuix's cross-activity example: transform
                         // the complete covered entry once, including its page chrome.
+                        val coveredDepth = progress.depthOr(depth)
                         val coveredScale = resolveMiuixVideoCardCoveredScale(
-                            depth = progress.depthOr(depth),
+                            depth = coveredDepth,
                             reducedMotion = heroMotionSpec.reducedMotion,
                         )
                         scaleX = coveredScale
                         scaleY = coveredScale
                         transformOrigin = TransformOrigin.Center
                         clip = coveredScale < 1f
-                        shape = MiuixVideoCardCoveredShape
+                        shape = coveredShapeCache.resolve(resolveMiuixVideoCardCoveredCornerPx(
+                            depth = coveredDepth,
+                            reducedMotion = heroMotionSpec.reducedMotion,
+                            density = scope.density.density,
+                        ))
                     }
                 }.graphicsLayer {
                     val depth = scope.relativeDepth

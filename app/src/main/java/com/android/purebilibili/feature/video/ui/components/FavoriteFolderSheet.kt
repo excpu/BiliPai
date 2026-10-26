@@ -17,6 +17,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.android.purebilibili.core.ui.AppAlertDialog
+import com.android.purebilibili.core.ui.AppModalPresentation
+import android.content.res.Configuration
 import com.android.purebilibili.core.ui.AppModalBottomSheet
 import com.android.purebilibili.data.model.response.FavFolder
 import com.android.purebilibili.feature.video.policy.resolveFavoriteFolderMediaId
@@ -41,9 +43,11 @@ fun FavoriteFolderSheet(
 ) {
     var showCreateDialog by remember { mutableStateOf(false) }
     val configuration = LocalConfiguration.current
-    val maxSheetHeight = remember(configuration.screenHeightDp) {
-        (configuration.screenHeightDp.dp * 0.72f).coerceAtLeast(360.dp)
-    }
+    val sidePanel = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE &&
+        configuration.screenWidthDp >= 600
+    val maxSheetHeight = (configuration.screenHeightDp.dp * 0.72f)
+        .coerceAtLeast(360.dp)
+        .coerceAtMost(configuration.screenHeightDp.dp)
 
     if (showCreateDialog) {
         CreateFolderDialog(
@@ -58,11 +62,13 @@ fun FavoriteFolderSheet(
     AppModalBottomSheet(
         onDismissRequest = onDismissRequest,
         containerColor = MaterialTheme.colorScheme.surface,
+        presentationOverride = if (sidePanel) AppModalPresentation.SideSheet else null,
+        dragHandle = if (sidePanel) null else ({ BottomSheetDefaults.DragHandle() }),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = maxSheetHeight)
+                .then(if (sidePanel) Modifier.fillMaxHeight() else Modifier.heightIn(max = maxSheetHeight))
         ) {
             // Title row keeps 新建 on the end without covering the subtitle.
             // The subtitle is a separate full-width line under the title row.
@@ -71,7 +77,20 @@ fun FavoriteFolderSheet(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                Box(
+                if (sidePanel) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AppText(
+                            "添加到收藏夹",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                        AppTextButton(onClick = { showCreateDialog = true }) { AppText("新建") }
+                        AppTextButton(onClick = onDismissRequest, enabled = !isSaving) { AppText("关闭") }
+                    }
+                } else Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 40.dp),
@@ -96,21 +115,23 @@ fun FavoriteFolderSheet(
                         AppText("新建")
                     }
                 }
-                Spacer(modifier = Modifier.height(4.dp))
-                AppText(
-                    text = "可勾选一个或多个收藏夹，将视频收藏到自己的收藏夹",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AppContentColors.secondaryText(),
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center
-                )
+                if (!sidePanel) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    AppText(
+                        text = "可选择多个收藏夹",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppContentColors.secondaryText(),
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
 
             if (isLoading) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(200.dp),
+                        .then(if (sidePanel) Modifier.weight(1f) else Modifier.height(120.dp)),
                         contentAlignment = Alignment.Center
                 ) {
                     AdaptiveLoadingIndicator()
@@ -119,7 +140,7 @@ fun FavoriteFolderSheet(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(200.dp),
+                        .then(if (sidePanel) Modifier.weight(1f) else Modifier.height(120.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     AppText("暂无收藏夹", color = AppContentColors.secondaryText())
@@ -127,7 +148,7 @@ fun FavoriteFolderSheet(
             } else {
                 LazyColumn(
                     contentPadding = PaddingValues(vertical = 8.dp),
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f, fill = sidePanel)
                 ) {
                     items(folders, key = { resolveFavoriteFolderMediaId(it) }) { folder ->
                         FavoriteFolderItem(

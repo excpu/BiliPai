@@ -72,6 +72,14 @@ internal fun settingsDestinationCopy(target: SettingsSearchTarget): SettingsDest
         title = "首页与推荐",
         summary = "卡片布局、首页壁纸、推荐内容和动态",
     )
+    SettingsSearchTarget.LOGIN_ACTIVITY -> SettingsDestinationCopy(
+        title = "登录设备与记录",
+        summary = "查看设备、时间、IP 与地区",
+    )
+    SettingsSearchTarget.SPACE_PRIVACY -> SettingsDestinationCopy(
+        title = "空间公开范围",
+        summary = "管理空间内容的公开范围",
+    )
     SettingsSearchTarget.PERMISSION -> SettingsDestinationCopy(
         title = "权限管理",
         summary = "查看每项系统权限的用途和当前授权状态",

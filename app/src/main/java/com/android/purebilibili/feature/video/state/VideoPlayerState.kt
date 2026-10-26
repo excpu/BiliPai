@@ -958,14 +958,19 @@ class VideoPlayerState(
         // 不重置 _isPortraitFullscreen，保持竖屏全屏状态
     }
     
+    private var playerListenersAttached = false
+
     fun attachPlayerListeners() {
+        if (playerListenersAttached) return
         player.addListener(playerListener)
         player.addAnalyticsListener(analyticsListener)
+        playerListenersAttached = true
     }
 
     fun release() {
         player.removeListener(playerListener)
         player.removeAnalyticsListener(analyticsListener)
+        playerListenersAttached = false
         if (!miniPlayerManager.isPlayerRetainedByPage(player)) {
             PlaybackUserActionTracker.clear(player)
         }

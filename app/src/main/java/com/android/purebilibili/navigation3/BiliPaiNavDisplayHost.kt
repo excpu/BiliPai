@@ -87,7 +87,8 @@ import com.android.purebilibili.navigation3.predictiveback.miuixVideoCardNavTran
 import com.android.purebilibili.navigation3.predictiveback.MiuixVideoCardContentScale
 import com.android.purebilibili.navigation3.predictiveback.resolveMiuixVideoCardContentScaleForSourceLayout
 import com.android.purebilibili.navigation3.predictiveback.MiuixVideoCardTransitionProgress
-import com.android.purebilibili.navigation3.predictiveback.MiuixVideoCardCoveredShape
+import com.android.purebilibili.navigation3.predictiveback.MiuixVideoCardCoveredShapeCache
+import com.android.purebilibili.navigation3.predictiveback.resolveMiuixVideoCardCoveredCornerPx
 import com.android.purebilibili.navigation3.predictiveback.resolveMiuixVideoCardCoveredScale
 import com.android.purebilibili.navigation3.predictiveback.resolveMiuixVideoCardBackingColor
 import com.android.purebilibili.navigation3.predictiveback.shouldUseMiuixPredictiveBackProgress
@@ -349,10 +350,12 @@ internal fun BiliPaiNavDisplayHost(
     )
     val navCornerRadius = rememberDeviceCornerRadius(defaultRadius = 0.dp)
     val effectiveDeviceCornerDp = if (navCornerRadius > 0.dp) navCornerRadius else 32.dp
+    val hostCoveredShapeCache = remember { MiuixVideoCardCoveredShapeCache() }
     val videoCardTransition = remember(
         cardMorphAvailable,
         sourceMetadata.sourceBounds,
         sourceMetadata.sourceCornerDp,
+        sourceMetadata.sourceLayout,
         videoSharedTransitionDurationMillis,
         heroMotion,
         videoCardTransitionProgress,
@@ -375,6 +378,7 @@ internal fun BiliPaiNavDisplayHost(
                 heroMotionSpec = heroMotion,
                 returningProvider = returningProvider,
                 deviceCornerDp = effectiveDeviceCornerDp,
+                sourceLayout = sourceMetadata.sourceLayout,
             )
         } else {
             observedVideoFallbackTransition
@@ -384,6 +388,7 @@ internal fun BiliPaiNavDisplayHost(
         cardMorphAvailable,
         sourceMetadata.sourceBounds,
         sourceMetadata.sourceCornerDp,
+        sourceMetadata.sourceLayout,
         videoSharedTransitionDurationMillis,
         heroMotion,
         videoCardTransitionProgress,
@@ -405,6 +410,7 @@ internal fun BiliPaiNavDisplayHost(
                 heroMotionSpec = heroMotion,
                 returningProvider = returningProvider,
                 deviceCornerDp = effectiveDeviceCornerDp,
+                sourceLayout = sourceMetadata.sourceLayout,
             )
         } else {
             observedVideoFallbackTransition
@@ -841,15 +847,21 @@ internal fun BiliPaiNavDisplayHost(
             // A detached source has no navigation entry to transform. Apply exactly the same
             // covered-page geometry to this fallback; inner snapshot effects remain unscaled.
             modifier = Modifier.graphicsLayer {
+                val depth = videoCardProgressProvider()
+                val reducedMotion = transitionMotionTier == MotionTier.Reduced
                 val scale = resolveMiuixVideoCardCoveredScale(
-                    depth = videoCardProgressProvider(),
-                    reducedMotion = transitionMotionTier == MotionTier.Reduced,
+                    depth = depth,
+                    reducedMotion = reducedMotion,
                 )
                 scaleX = scale
                 scaleY = scale
                 transformOrigin = TransformOrigin.Center
                 clip = scale < 1f
-                shape = MiuixVideoCardCoveredShape
+                shape = hostCoveredShapeCache.resolve(resolveMiuixVideoCardCoveredCornerPx(
+                    depth = depth,
+                    reducedMotion = reducedMotion,
+                    density = density,
+                ))
             },
         )
         @Suppress("UNCHECKED_CAST")

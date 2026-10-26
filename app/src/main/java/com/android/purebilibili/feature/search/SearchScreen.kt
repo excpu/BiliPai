@@ -1,6 +1,9 @@
 // 文件路径: feature/search/SearchScreen.kt
 package com.android.purebilibili.feature.search
 
+import com.android.purebilibili.feature.home.effectiveGridColumnCount
+import com.android.purebilibili.feature.home.effectiveGridColumnCountCompact
+import com.android.purebilibili.feature.home.gridColumnPinchEnabled
 import com.android.purebilibili.core.ui.components.resolveAppCountedTabLabel
 import com.android.purebilibili.core.ui.components.appCountedTabOption
 import com.android.purebilibili.core.ui.AppContentColors
@@ -65,6 +68,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import com.android.purebilibili.feature.home.rememberFeedGridColumnPreference
 import com.android.purebilibili.feature.home.homeFeedPinchZoom
 import com.android.purebilibili.feature.home.resolveHomeFeedPinchColumnBounds
 import com.android.purebilibili.feature.home.GridPinchColumnHudPill
@@ -870,8 +874,8 @@ fun SearchScreen(
     val videoGridColumns = remember(
         searchContentWidth,
         listLayout.singleColumn,
-        homeSettings.gridColumnCount,
-        homeSettings.gridColumnCountCompact,
+        homeSettings.effectiveGridColumnCount,
+        homeSettings.effectiveGridColumnCountCompact,
         homeSettings.homeFeedCardWidthPreset,
         windowSizeClass.widthSizeClass
     ) {
@@ -880,8 +884,8 @@ fun SearchScreen(
             contentWidthDp = searchContentWidth.value.toInt(),
             fixedColumnCount = com.android.purebilibili.feature.home.resolveHomeFeedStoredColumnCount(
                 widthSizeClass = windowSizeClass.widthSizeClass,
-                compactColumnCount = homeSettings.gridColumnCountCompact,
-                defaultColumnCount = homeSettings.gridColumnCount,
+                compactColumnCount = homeSettings.effectiveGridColumnCountCompact,
+                defaultColumnCount = homeSettings.effectiveGridColumnCount,
             ),
             cardWidthPreset = homeSettings.homeFeedCardWidthPreset,
             widthSizeClass = windowSizeClass.widthSizeClass
@@ -1847,17 +1851,24 @@ fun SearchScreen(
                                         contentWidthDp = maxWidth.value.toInt(),
                                         fixedColumnCount = com.android.purebilibili.feature.home.resolveHomeFeedStoredColumnCount(
                                             widthSizeClass = windowSizeClass.widthSizeClass,
-                                            compactColumnCount = homeSettings.gridColumnCountCompact,
-                                            defaultColumnCount = homeSettings.gridColumnCount,
+                                            compactColumnCount = homeSettings.effectiveGridColumnCountCompact,
+                                            defaultColumnCount = homeSettings.effectiveGridColumnCount,
                                         ),
                                         cardWidthPreset = homeSettings.homeFeedCardWidthPreset,
                                         widthSizeClass = windowSizeClass.widthSizeClass
                                     )
-                                    var interactiveColumns by remember { mutableStateOf<Int?>(null) }
+                                    val gridColumnPreference = rememberFeedGridColumnPreference(
+                                        settings = homeSettings,
+                                        widthSizeClass = windowSizeClass.widthSizeClass,
+                                        defaultColumns = actualGridColumns,
+                                        bounds = if (listLayout.singleColumn) 1..1 else resolveHomeFeedPinchColumnBounds(
+                                            windowSizeClass.widthSizeClass, maxWidth.value.toInt(),
+                                        ),
+                                    )
                                     var isPinchPillVisible by remember { mutableStateOf(false) }
                                     var pinchPillDismissJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
                                     val haptic = com.android.purebilibili.core.ui.rememberAppHapticFeedback(com.android.purebilibili.core.ui.AppHapticScene.MENUS)
-                                    val requestedSearchGridColumns = interactiveColumns ?: actualGridColumns
+                                    val requestedSearchGridColumns = gridColumnPreference.columns
                                     val effectiveSearchGridColumns = if (
                                         com.android.purebilibili.core.util.LocalAppWindowAdaptiveInfo.current.shouldAvoidHinge
                                     ) {
@@ -1871,9 +1882,6 @@ fun SearchScreen(
                                             widthSizeClass = windowSizeClass.widthSizeClass,
                                             contentWidthDp = maxWidth.value.toInt(),
                                         )
-                                    }
-                                    LaunchedEffect(homeSettings.gridColumnCount, homeSettings.gridColumnCountCompact) {
-                                        interactiveColumns = null
                                     }
                                     val searchGridCardLayout = remember(
                                         homeFeedCardStyle,
@@ -1913,23 +1921,17 @@ fun SearchScreen(
                                         )
                                         .fillMaxSize()
                                         .homeFeedPinchZoom(
-                                            enabled = !listLayout.singleColumn && homeSettings.pinchToChangeGridColumnsEnabled,
+                                            enabled = !listLayout.singleColumn && homeSettings.gridColumnPinchEnabled,
                                             currentColumns = effectiveSearchGridColumns,
                                             bounds = pinchColumnBounds,
                                             onColumnsChange = { newColumns ->
-                                                interactiveColumns = newColumns
+                                                gridColumnPreference.onChange(newColumns)
                                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                                 isPinchPillVisible = true
                                                 pinchPillDismissJob?.cancel()
                                             },
                                             onGestureEnd = { finalColumns ->
-                                                scope.launch {
-                                                    if (com.android.purebilibili.feature.home.isCompactHomeFeedScreen(windowSizeClass.widthSizeClass)) {
-                                                        SettingsManager.setGridColumnCountCompact(context, finalColumns)
-                                                    } else {
-                                                        SettingsManager.setGridColumnCount(context, finalColumns)
-                                                    }
-                                                }
+                                                gridColumnPreference.onGestureEnd(finalColumns)
                                                 pinchPillDismissJob?.cancel()
                                                 pinchPillDismissJob = scope.launch {
                                                     kotlinx.coroutines.delay(1000)

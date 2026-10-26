@@ -47,7 +47,7 @@ internal fun resolveThemePreviewPalette(
             if (darkTheme) configuration.wallpaperSchemes.dark else configuration.wallpaperSchemes.light
         } else null,
     )
-    val overrides = resolveEffectiveThemeRoleOverrides(configuration.source, configuration.roleOverrides, configuration.uiStyle)
+    val overrides = resolveEffectiveThemeRoleOverrides(configuration.source, configuration.roleOverrides)
         .let { if (seedStyle.enabled) it.copy(enabled = false) else it }
         .let { if (configuration.syncControlAccentToSeed) syncThemeRoleControlAccent(it, formatMd3CustomColorHex(seed)) else it }
     val configured = resolveConfiguredMaterialScheme(

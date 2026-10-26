@@ -136,7 +136,9 @@ internal fun BottomBarFloatingSegmentedControl(
     // Inline docks must not sample an ancestor page source that also records the dock.
     // The root wallpaper-only source is independent, contains real pixels at this position,
     // and remains mounted across navigation. Prefer an explicitly supplied sibling source.
-    val suppliedBackdrop = miuixBackdrop ?: wallpaperBackdrop
+    val parentGlass = com.android.purebilibili.core.ui.blur.LocalAppGlassContainer.current
+        .takeIf { liquidGlassEnabled }
+    val suppliedBackdrop = if (parentGlass != null) parentGlass.backdrop else miuixBackdrop ?: wallpaperBackdrop
     // A supplied page backdrop already contains the pixels behind this dock. Combining it
     // with a local source can make MIUI's native background-blur graph sample itself when
     // nested pages mount another backdrop (for example Bangumi/Film), overflowing RenderThread.

@@ -1,5 +1,15 @@
 package com.android.purebilibili.feature.space
 
+import com.android.purebilibili.feature.home.effectiveGridColumnCount
+import com.android.purebilibili.feature.home.effectiveGridColumnCountCompact
+import com.android.purebilibili.feature.home.gridColumnPinchEnabled
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.compose.material.icons.outlined.PersonRemove
+import com.android.purebilibili.feature.following.FanManagementState
+import com.android.purebilibili.feature.following.FanManagementViewModel
+import com.android.purebilibili.feature.following.RemoveFanConfirmDialog
+
 import com.android.purebilibili.core.ui.components.rememberFollowActionWithConfirmation
 import com.android.purebilibili.core.ui.components.VideoStatusBadges
 import com.android.purebilibili.core.ui.AppContentColors
@@ -32,6 +42,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import com.android.purebilibili.feature.home.rememberFeedGridColumnPreference
 import com.android.purebilibili.feature.home.homeFeedPinchZoom
 import com.android.purebilibili.feature.home.resolveHomeFeedPinchColumnBounds
 import com.android.purebilibili.feature.home.resolveHomeFeedStoredColumnCount
@@ -316,6 +327,21 @@ fun SpaceScreen(
     contentTransitionReady: Boolean = true,
 ) {
     val context = LocalContext.current
+    val fanIdentity by com.android.purebilibili.core.store.TokenManager.accountIdentity.collectAsStateWithLifecycle()
+    val fanModel: FanManagementViewModel = viewModel(
+        key = "fan_management_$mid",
+        factory = viewModelFactory { initializer { FanManagementViewModel(mid) } },
+    )
+    val rawFanState by fanModel.state.collectAsStateWithLifecycle()
+    val fanState = rawFanState.takeIf { it.identity == fanIdentity } ?: FanManagementState(identity = fanIdentity)
+    var showRemoveFanConfirm by remember(mid, fanIdentity) { mutableStateOf(false) }
+    LaunchedEffect(fanModel) { fanModel.load() }
+    LaunchedEffect(fanState.message) {
+        fanState.message?.let { message ->
+            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+            fanModel.clearMessage()
+        }
+    }
     val queryAicu = com.android.purebilibili.feature.aicu.LocalAicuNavigation.current
     val copyToClipboard = rememberClipboardCopyHandler()
     val playbackProgressManager = remember(context) {
@@ -660,6 +686,14 @@ fun SpaceScreen(
                                                 ),
                                             )
                                         )
+                                        if (fanState.isFan == true && mid != fanIdentity.mid) {
+                                            add(listOf(AppWindowAction(
+                                                label = if (fanState.removing) "移除中…" else "移除粉丝",
+                                                icon = Icons.Outlined.PersonRemove,
+                                                enabled = !fanState.removing,
+                                                onClick = { showRemoveFanConfirm = true },
+                                            )))
+                                        }
                                         add(
                                             listOf(
                                                 AppWindowAction(
@@ -995,6 +1029,14 @@ fun SpaceScreen(
                     onComplete(success)
                 }
             }
+        )
+    }
+
+    if (showRemoveFanConfirm && fanState.isFan == true) {
+        RemoveFanConfirmDialog(
+            name = currentSuccessState?.userInfo?.name.orEmpty(),
+            onDismiss = { showRemoveFanConfirm = false },
+            onConfirm = { showRemoveFanConfirm = false; fanModel.remove() },
         )
     }
 
@@ -1583,14 +1625,19 @@ private fun SpaceContent(
             widthDp = windowWidthDp,
             fixedColumnCount = resolveHomeFeedStoredColumnCount(
                 widthSizeClass = windowSizeClass.widthSizeClass,
-                compactColumnCount = homeSettings.gridColumnCountCompact,
-                defaultColumnCount = homeSettings.gridColumnCount,
+                compactColumnCount = homeSettings.effectiveGridColumnCountCompact,
+                defaultColumnCount = homeSettings.effectiveGridColumnCount,
             ),
             cardWidthPreset = homeSettings.homeFeedCardWidthPreset,
             contentMaxWidthDp = adaptiveLayoutSpec.contentMaxWidthDp,
             widthSizeClass = windowSizeClass.widthSizeClass,
         )
-        var interactiveColumns by remember { mutableStateOf<Int?>(null) }
+        val gridColumnPreference = rememberFeedGridColumnPreference(
+            settings = homeSettings,
+            widthSizeClass = windowSizeClass.widthSizeClass,
+            defaultColumns = preferredGridColumns,
+            bounds = resolveHomeFeedPinchColumnBounds(windowSizeClass.widthSizeClass, windowWidthDp),
+        )
         var isPinchPillVisible by remember { mutableStateOf(false) }
         var pinchPillDismissJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
         val haptic = com.android.purebilibili.core.ui.rememberAppHapticFeedback(com.android.purebilibili.core.ui.AppHapticScene.ADJUSTMENT)
@@ -1615,7 +1662,7 @@ private fun SpaceContent(
             }
         }
         val spaceOverscrollEffect = rememberOverscrollEffect()
-        val effectivePreferredColumns = interactiveColumns ?: preferredGridColumns
+        val effectivePreferredColumns = gridColumnPreference.columns
         val gridColumns = if (selectedMainTab == SpaceMainTab.DYNAMIC) {
             adaptiveLayoutSpec.dynamicColumns
         } else {
@@ -1626,9 +1673,6 @@ private fun SpaceContent(
                 widthSizeClass = windowSizeClass.widthSizeClass,
                 contentWidthDp = windowWidthDp,
             )
-        }
-        LaunchedEffect(homeSettings.gridColumnCount, homeSettings.gridColumnCountCompact) {
-            interactiveColumns = null
         }
         val spaceFeedCardLayout = resolveHomeFeedCardLayout(
             style = homeSettings.homeFeedCardStyle,
@@ -1659,23 +1703,17 @@ private fun SpaceContent(
                 .fillMaxSize()
                 .nestedScroll(summaryScrollConnection)
                 .homeFeedPinchZoom(
-                    enabled = selectedMainTab != SpaceMainTab.DYNAMIC && homeSettings.pinchToChangeGridColumnsEnabled,
+                    enabled = selectedMainTab != SpaceMainTab.DYNAMIC && homeSettings.gridColumnPinchEnabled,
                     currentColumns = gridColumns,
                     bounds = pinchColumnBounds,
                     onColumnsChange = { newColumns ->
-                        interactiveColumns = newColumns
+                        gridColumnPreference.onChange(newColumns)
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         isPinchPillVisible = true
                         pinchPillDismissJob?.cancel()
                     },
                     onGestureEnd = { finalColumns ->
-                        coroutineScope.launch {
-                            if (isCompactHomeFeedScreen(windowSizeClass.widthSizeClass)) {
-                                SettingsManager.setGridColumnCountCompact(context, finalColumns)
-                            } else {
-                                SettingsManager.setGridColumnCount(context, finalColumns)
-                            }
-                        }
+                        gridColumnPreference.onGestureEnd(finalColumns)
                         pinchPillDismissJob?.cancel()
                         pinchPillDismissJob = coroutineScope.launch {
                             kotlinx.coroutines.delay(1000)

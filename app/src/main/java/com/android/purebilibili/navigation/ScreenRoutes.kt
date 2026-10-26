@@ -21,6 +21,9 @@ sealed class ScreenRoutes(val route: String) {
     object Settings : ScreenRoutes("settings")
     object Login : ScreenRoutes("login")
     object Profile : ScreenRoutes("profile")
+    object AccountLedger : ScreenRoutes("account_ledger/{kind}") {
+        fun createRoute(kind: com.android.purebilibili.data.model.AccountLedgerKind): String = "account_ledger/${kind.name.lowercase()}"
+    }
 
     //  新增路由：历史记录和收藏
     object AicuQuery : ScreenRoutes("aicu?uid={uid}&category={category}") {
@@ -124,6 +127,8 @@ sealed class ScreenRoutes(val route: String) {
     object AppearanceSettings : ScreenRoutes("appearance_settings")
     object HomeSettings : ScreenRoutes("home_settings")
     object PlaybackSettings : ScreenRoutes("playback_settings")
+    object SpacePrivacySettings : ScreenRoutes("space_privacy_settings")
+    object LoginActivitySettings : ScreenRoutes("login_activity_settings")
     object PermissionSettings : ScreenRoutes("permission_settings")  //  权限管理
     object MessageNotificationSettings : ScreenRoutes("message_notification_settings")
     object PluginsSettings : ScreenRoutes("plugins_settings?importUrl={importUrl}") {  //  插件中心

@@ -48,13 +48,15 @@ sealed interface NavSettleSpec {
     /**
      * A fixed-duration tween. Completes in exactly [durationMillis] regardless of distance, but
      * cannot seed a release velocity: a gesture-commit tween starts from the commit point with a
-     * velocity discontinuity, and a velocity-carrying programmatic settle falls back to a spring
-     * (see `NavMotion.programmatic`).
+     * velocity discontinuity unless [matchReleaseVelocity] opts into a bounded velocity curve.
+     * A velocity-carrying programmatic settle falls back to a spring (see `NavMotion.programmatic`).
      */
     @Stable
     data class Tween(
         val durationMillis: Int,
         val easing: Easing,
+        /** 松手收敛时按释放速度计算有界曲线；默认保留普通页面的固定缓动。 */
+        val matchReleaseVelocity: Boolean = false,
     ) : NavSettleSpec
 }
 

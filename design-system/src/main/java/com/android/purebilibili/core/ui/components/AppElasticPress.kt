@@ -112,7 +112,8 @@ fun rememberAppElasticPressState(
     sizeScaledExpansion: Boolean = false,
 ): AppElasticPressState {
     val density = LocalDensity.current
-    val motionEnabled = LocalComponentMotionEnabled.current
+    val motionEnabled = LocalComponentMotionEnabled.current &&
+        com.android.purebilibili.core.ui.blur.LocalAppGlassContainer.current?.ownsDeformation != true
     val visibleSizePx = visualSize?.let { with(density) { it.toPx() } }
     val strength = feedbackStrength.coerceIn(0f, 1f)
     val expansionPx = with(density) { 4.dp.toPx() } * strength
@@ -162,7 +163,9 @@ fun Modifier.appElasticPress(
 ): Modifier {
     if (foldIn(false) { found, element -> found || element === ElasticPressMarker }) return this
     return Modifier.then(ElasticPressMarker).composed {
-        if (!enabled || !LocalComponentMotionEnabled.current || !LocalElasticPressEnabled.current) return@composed this
+        if (!enabled || !LocalComponentMotionEnabled.current || !LocalElasticPressEnabled.current ||
+            com.android.purebilibili.core.ui.blur.LocalAppGlassContainer.current?.ownsDeformation == true
+        ) return@composed this
         val elasticState = state ?: rememberAppElasticPressState(visualSize)
         val effectiveDragEnabled = dragEnabled && LocalAppThemeConfig.current.globalDragFeedbackEnabled
         val press = elasticState.press

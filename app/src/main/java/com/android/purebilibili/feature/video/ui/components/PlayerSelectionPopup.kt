@@ -31,7 +31,6 @@ import com.android.purebilibili.core.theme.AppUiStyle
 import com.android.purebilibili.core.theme.LocalAppUiStyle
 import top.yukonga.miuix.kmp.basic.DropdownImpl
 import top.yukonga.miuix.kmp.basic.DropdownItem
-import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider as MiuixPopupPositionProvider
 import top.yukonga.miuix.kmp.window.WindowListPopup
@@ -62,6 +61,14 @@ fun PlayerSelectionPopup(
     val anchorToGlassSource = glassSource?.isAvailable == true &&
         com.android.purebilibili.core.ui.components.appGlassMenuAvailable()
     if (placement == PlayerListPopupPlacement.ANCHOR_END && anchorBounds == null && !anchorToGlassSource) return
+    // 仅玻璃列表使用播放器菜单上限；原生分支继续保留调用方的尺寸与定位。
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val glassPolicy = resolvePlayerSettingsMenuLayoutPolicy(
+        screenWidthDp = configuration.screenWidthDp,
+        screenHeightDp = configuration.screenHeightDp,
+    )
+    val glassMaxWidth = maxWidth.coerceAtMost(glassPolicy.maxWidthDp.dp)
+    val glassMaxHeight = maxHeight?.coerceAtMost(glassPolicy.maxHeightDp.dp) ?: glassPolicy.maxHeightDp.dp
     if (com.android.purebilibili.core.ui.components.AppGlassMenu(
             expanded = true,
             onDismissRequest = onDismissRequest,
@@ -77,7 +84,13 @@ fun PlayerSelectionPopup(
             },
             anchorBounds = anchorBounds?.let { androidx.compose.ui.geometry.Rect(
                 it.left.toFloat(), it.top.toFloat(), it.right.toFloat(), it.bottom.toFloat()) },
-            minWidth = minWidth, maxWidth = maxWidth, maxHeight = maxHeight, scrollState = scrollState,
+            minWidth = minWidth.coerceAtMost(glassMaxWidth),
+            maxWidth = glassMaxWidth,
+            maxHeight = glassMaxHeight,
+            scrollState = scrollState,
+            showScrollbar = false,
+            fitWholeItems = true,
+            useAvailableHeight = true,
             source = source, sourceLayer = sourceLayer, onSourceVisibilityChange = onSourceVisibilityChange,
         ) {
             Column {
@@ -159,9 +172,17 @@ fun PlayerSelectionPopup(
             maxHeight = height,
             minWidth = minWidth.coerceAtMost(width),
         ) {
-            ListPopupColumn {
-                if (showTitle) SmallTitle(text = title)
-                content()
+            Box(Modifier.heightIn(max = height).widthIn(min = 200.dp.coerceAtMost(width), max = width)) {
+                Column(Modifier.verticalScroll(scrollState).padding(end = 12.dp)) {
+                    if (showTitle) SmallTitle(text = title)
+                    content()
+                }
+                Box(Modifier.matchParentSize()) {
+                    com.android.purebilibili.core.ui.components.AppMenuScrollbar(
+                        scrollState = scrollState,
+                        modifier = Modifier.align(androidx.compose.ui.Alignment.CenterEnd),
+                    )
+                }
             }
         }
     } else if (placement == PlayerListPopupPlacement.CENTER) {
@@ -305,6 +326,8 @@ internal fun PlayerNativeDropdownItem(
 @Composable
 internal fun Modifier.playerPopupSelectedOption(selected: Boolean): Modifier {
     if (!selected) return this
+    // 整项视口从列表顶部开始，不在打开时因选中项自动滚动而露出半行。
+    if (com.android.purebilibili.core.ui.components.LocalAppGlassMenuScope.current?.fitWholeItems == true) return this
     val requester = remember { BringIntoViewRequester() }
     LaunchedEffect(requester) { withFrameNanos { }; requester.bringIntoView() }
     return bringIntoViewRequester(requester)

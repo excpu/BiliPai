@@ -320,9 +320,7 @@
     <string name="animation_section_maid">蓝雪女仆</string>
     <string name="animation_maid_summary">关闭后隐藏女仆动画和静态图</string>
     <string name="animation_card_entrance_summary">打开首页时卡片依次淡入</string>
-    <string name="animation_card_transition_summary">封面和标题平滑过渡到详情页；关闭后使用全局页面动画</string>
-    <string name="animation_related_transition_on">点开相关推荐时，卡片展开为视频页</string>
-    <string name="animation_related_transition_off">点开相关推荐时，使用普通页面动画</string>
+    <string name="animation_card_transition_summary">列表与相关推荐共用卡片展开，封面和标题平滑过渡到详情页；关闭后使用全局页面动画</string>
     <string name="animation_live_transition_summary">过渡时保留正在播放的画面</string>
     <string name="animation_return_follow_on">返回途中，封面和信息逐渐恢复为卡片</string>
     <string name="animation_return_follow_off">返回完成后，再切换为视频卡片</string>
@@ -378,7 +376,6 @@
     <string name="animation_title_maid">蓝雪女仆动画</string>
     <string name="animation_title_card_entrance">首页卡片淡入</string>
     <string name="animation_title_card_transition">卡片展开动画</string>
-    <string name="animation_title_related_transition">推荐卡片展开动画</string>
     <string name="animation_title_live_transition">用当前画面过渡</string>
     <string name="animation_title_return_follow">返回时渐变为卡片</string>
     <string name="animation_title_return_tilt">返回时倾斜</string>
@@ -397,7 +394,6 @@
     <string name="preview_title_long_press">长按临时加速</string>
     <string name="preview_title_card_entrance">首页卡片淡入</string>
     <string name="preview_title_card_expand">卡片展开动画</string>
-    <string name="preview_title_related_expand">推荐卡片展开动画</string>
     <string name="preview_title_live_frame">用当前画面过渡</string>
     <string name="preview_title_return_content">返回时渐变为卡片</string>
     <string name="preview_title_return_tilt">返回时倾斜</string>
@@ -408,7 +404,6 @@
     <string name="preview_summary_long_press">播放时按住画面，临时使用当前设置的 %1$s；松手恢复原来的播放速度。本演示以原速 1x 为例。</string>
     <string name="preview_summary_card_entrance">打开首页时，卡片按顺序淡入；关闭后直接显示。</string>
     <string name="preview_summary_card_expand">点击视频卡片时，封面和标题从卡片位置平滑过渡到详情页；关闭后使用普通页面切换。</string>
-    <string name="preview_summary_related_expand">点击详情页下方的相关推荐时，推荐卡片展开为新的视频页。需开启卡片展开动画。</string>
     <string name="preview_summary_live_frame">展开过程中保留当前播放画面；关闭后使用封面作为过渡画面。需开启卡片展开动画。示意画面无需加载视频。</string>
     <string name="preview_summary_return_content">返回途中，视频画面逐渐还原为封面和卡片信息；关闭后在返回完成时切换。需开启卡片展开动画。</string>
     <string name="preview_summary_return_tilt">滑动返回时，画面随手指产生倾斜；关闭后不倾斜。这里保持相同的移动路线，单独比较倾斜。需开启卡片展开动画。</string>
@@ -448,10 +443,6 @@
     <string name="animation_section_card">卡片动画</string>
     <string name="preview_caption_card_entrance_on">首页卡片依次淡入</string>
     <string name="preview_caption_card_entrance_off">首页卡片直接显示</string>
-    <string name="preview_caption_related_step_1">点击相关推荐</string>
-    <string name="preview_caption_related_step_2">推荐卡片展开</string>
-    <string name="preview_caption_related_step_3">进入新的视频页</string>
-    <string name="preview_caption_related_off">点击相关推荐，普通页面切换</string>
     <string name="preview_caption_live_on">当前画面继续播放并参与过渡</string>
     <string name="preview_caption_live_off">使用静态封面过渡</string>
     <string name="preview_caption_return_content_on">返回途中逐渐恢复封面与信息</string>
@@ -788,7 +779,7 @@
     <string name="home_settings_display_mode_grid_desc">按屏幕宽度排列多列视频</string>
     <string name="home_settings_display_mode_single">单列视频</string>
     <string name="home_settings_display_mode_single_desc">每行显示一个视频</string>
-    <string name="home_settings_grid_columns_title">首页网格列数</string>
+    <string name="home_settings_grid_columns_title">宽屏默认列数</string>
     <string name="home_settings_grid_columns_adaptive">自适应（默认）；折叠屏外屏与窄屏独立记忆，可用双指缩放调整</string>
     <string name="home_settings_grid_columns_fixed">宽屏固定 %1$d 列；折叠屏外屏与窄屏独立记忆</string>
     <string name="home_settings_grid_columns_auto">自动</string>
@@ -801,12 +792,12 @@
     <string name="home_settings_card_width_balanced">均衡</string>
     <string name="home_settings_card_width_wide">宽</string>
     <string name="home_settings_card_width_ultra_wide">超宽</string>
-    <string name="home_settings_pinch_columns_title">捏合调整列数</string>
+    <string name="home_settings_pinch_columns_title">双指缩放调整列数</string>
     <string name="home_settings_pinch_columns_summary">在视频列表上双指捏合即可调节列数</string>
     <string name="home_settings_search_display_style_title">展示样式</string>
     <string name="home_settings_search_grid_columns_title">网格列数</string>
     <string name="home_settings_search_card_width_title">首页推荐卡片宽度</string>
-    <string name="home_settings_search_pinch_columns_title">捏合调整列数</string>
+    <string name="home_settings_search_pinch_columns_title">双指缩放调整列数</string>
     <string name="appearance_section_language">语言</string>
 
     <!-- Home card settings -->
@@ -926,4 +917,10 @@
     <string name="animation_indicator_wobble_title">液态玻璃指示器甩尾</string>
     <string name="animation_indicator_wobble_summary">点按切换与拖动松手时追加形变回弹，仅作用于液态玻璃指示器；关闭后保留原有位移和按压反馈</string>
     <string name="animation_settings_container_blur_summary">容器形变进入与返回时，实时模糊背后的设置页；需 Android 12 及以上</string>
+    <string name="home_settings_grid_customization_summary">关闭后恢复各页面自动布局，保留已选列数；不影响单列视频模式</string>
+    <string name="home_settings_grid_share_summary">开启后，支持缩放的列表共用并保存最后列数；关闭后各页独立调整，不互相覆盖。窄屏与宽屏分别记忆</string>
+    <string name="home_settings_grid_default_summary">自动沿用页面布局；固定列数按当前内容宽度限制上限。共用开启时，缩放会更新此值</string>
+    <string name="home_settings_grid_customization_title">自定义列表列数</string>
+    <string name="home_settings_grid_share_title">跨页面共用列数</string>
+    <string name="home_settings_grid_compact_title">窄屏默认列数</string>
 </resources>

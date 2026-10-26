@@ -1,5 +1,6 @@
 package com.android.purebilibili.feature.profile
 
+import com.android.purebilibili.data.model.AccountLedgerKind
 import com.android.purebilibili.core.ui.motion.AppMotionEasing
 import com.android.purebilibili.core.ui.AppContentColors
 
@@ -332,6 +333,74 @@ internal fun resolveProfileSkinBackgroundImagePath(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
+    viewModel: ProfileViewModel = viewModel(),
+    isCurrentPage: Boolean = true,
+    accountSessionRefreshGeneration: Int = 0,
+    onBack: () -> Unit,
+    onGoToLogin: () -> Unit,
+    onLogoutSuccess: () -> Unit,
+    onAccountSwitchSuccess: () -> Unit = {},
+    onSettingsClick: () -> Unit,
+    onAccountLedgerClick: ((AccountLedgerKind) -> Unit)? = null,
+    onSearchClick: () -> Unit = {},
+    onHistoryClick: () -> Unit,
+    showHistoryService: Boolean = true,
+    onFavoriteClick: () -> Unit,
+    onSubscriptionClick: () -> Unit = {},
+    onFavoriteFolderClick: (Long, Long, String) -> Unit = { _, _, _ -> },
+    onFollowingClick: (Long) -> Unit = {},  //  关注列表点击
+    onFansClick: (Long) -> Unit = {},
+    onDownloadClick: () -> Unit = {},  //  离线缓存点击
+    onWatchLaterClick: () -> Unit = {}, // 稍后再看点击
+    onInboxClick: () -> Unit = {},  //  [新增] 私信入口点击
+    onVideoClick: (String) -> Unit = {},  // [新增] 视频点击（三连彩蛋跳转用）
+    onBangumiClick: (Long, Long) -> Unit = { _, _ -> },
+    onBangumiMoreClick: () -> Unit = {},
+    skinBackgroundImagePath: String? = null,
+    skinSquaredBackgroundImagePath: String? = null,
+    skinVideoBackgroundPath: String? = null,
+    skinVideoPlayMode: String? = null,
+    deferImmersiveRenderBudget: Boolean = false,
+    scrollToTopChannel: kotlinx.coroutines.channels.Channel<Unit>? = null
+    // [注意] 移除了 globalHazeState - 双 hazeSource 模式与 Haze 库冲突
+) {
+    CompositionLocalProvider(LocalProfileLedgerNavigation provides onAccountLedgerClick) {
+        ProfileScreenContent(
+            viewModel = viewModel,
+            isCurrentPage = isCurrentPage,
+            accountSessionRefreshGeneration = accountSessionRefreshGeneration,
+            onBack = onBack,
+            onGoToLogin = onGoToLogin,
+            onLogoutSuccess = onLogoutSuccess,
+            onAccountSwitchSuccess = onAccountSwitchSuccess,
+            onSettingsClick = onSettingsClick,
+            onSearchClick = onSearchClick,
+            onHistoryClick = onHistoryClick,
+            showHistoryService = showHistoryService,
+            onFavoriteClick = onFavoriteClick,
+            onSubscriptionClick = onSubscriptionClick,
+            onFavoriteFolderClick = onFavoriteFolderClick,
+            onFollowingClick = onFollowingClick,
+            onFansClick = onFansClick,
+            onDownloadClick = onDownloadClick,
+            onWatchLaterClick = onWatchLaterClick,
+            onInboxClick = onInboxClick,
+            onVideoClick = onVideoClick,
+            onBangumiClick = onBangumiClick,
+            onBangumiMoreClick = onBangumiMoreClick,
+            skinBackgroundImagePath = skinBackgroundImagePath,
+            skinSquaredBackgroundImagePath = skinSquaredBackgroundImagePath,
+            skinVideoBackgroundPath = skinVideoBackgroundPath,
+            skinVideoPlayMode = skinVideoPlayMode,
+            deferImmersiveRenderBudget = deferImmersiveRenderBudget,
+            scrollToTopChannel = scrollToTopChannel,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProfileScreenContent(
     viewModel: ProfileViewModel = viewModel(),
     isCurrentPage: Boolean = true,
     accountSessionRefreshGeneration: Int = 0,
@@ -1657,6 +1726,7 @@ private fun ProfilePinnedSpaceTopBar(
     modifier: Modifier = Modifier,
     photoFractionProvider: () -> Float = { 0f },
 ) {
+    val openLedger = LocalProfileLedgerNavigation.current
     val topChromeScrim = remember(listState) {
         derivedStateOf {
             resolveProfilePinnedTopChromeScrim(
@@ -1696,7 +1766,7 @@ private fun ProfilePinnedSpaceTopBar(
                         children = listOf(
                             AppWindowAction(label = "编辑资料", onClick = onEditClick),
                             AppWindowAction(label = "切换账号", onClick = onAccountManageClick),
-                        ),
+                        ) + ledgerMenuActions(openLedger),
                     ),
                 ),
                 listOf(
@@ -1834,6 +1904,7 @@ private fun ProfileTopActions(
     tint: Color,
     onWallpaperClick: (() -> Unit)? = null,
 ) {
+    val openLedger = LocalProfileLedgerNavigation.current
     var showQrAuthorization by remember { mutableStateOf(false) }
     if (showQrAuthorization) {
         OfficialQrAuthorizationDialog(onDismiss = { showQrAuthorization = false })
@@ -1875,6 +1946,7 @@ private fun ProfileTopActions(
                         )
                     )
                     add(AppWindowAction(label = "切换账号", onClick = onAccountClick))
+                    addAll(ledgerMenuActions(openLedger))
                     add(AppWindowAction(label = "切换主题", onClick = onThemeClick))
                     onWallpaperClick?.let { action ->
                         add(AppWindowAction(label = "更换背景", onClick = action))
@@ -1886,6 +1958,12 @@ private fun ProfileTopActions(
                 AppIcon(Icons.Rounded.MoreVert, contentDescription = "更多", tint = tint)
         }
     }
+    if (!compact && openLedger != null) {
+        AppWindowActionMenu(groups = listOf(ledgerMenuActions(openLedger))) {
+            AppIcon(Icons.Rounded.MoreVert, contentDescription = "硬币与经验明细", tint = tint)
+        }
+    }
+
 }
 
 @Composable
@@ -2073,6 +2151,7 @@ private fun ProfileSpaceHeader(
     modifier: Modifier = Modifier,
     showIdentity: Boolean = true,
 ) {
+    val openLedger = LocalProfileLedgerNavigation.current
     val textColor = heroChrome.textColor
     val secondaryColor = heroChrome.secondaryTextColor
     val meta = remember(editableAccount.sign, editableAccount.ipLocation, editableAccount.sex) {
@@ -2164,11 +2243,13 @@ private fun ProfileSpaceHeader(
             ) {
                 AppText(
                     text = "硬币 ${FormatUtils.formatStat(user.coin.toLong())}",
+                    modifier = if (openLedger != null) Modifier.clickable { openLedger(AccountLedgerKind.COINS) } else Modifier,
                     style = MaterialTheme.typography.labelMedium,
                     color = secondaryColor,
                 )
                 AppText(
                     text = "经验 ${levelProgress.currentExp}/${levelProgress.nextExp}",
+                    modifier = if (openLedger != null) Modifier.clickable { openLedger(AccountLedgerKind.EXPERIENCE) } else Modifier,
                     style = MaterialTheme.typography.labelMedium,
                     color = secondaryColor,
                 )
