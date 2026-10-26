@@ -1,5 +1,7 @@
 package com.android.purebilibili.feature.home
 
+import androidx.compose.foundation.layout.offset
+
 import com.android.purebilibili.core.util.LocalWindowSizeClass
 import com.android.purebilibili.core.ui.AppContentColors
 
@@ -1013,7 +1015,11 @@ private fun PopularSubCategorySegmentedControl(
                 selectedValue = selectedSubCategory,
                 onSelectionChange = onSubCategoryChange,
                 role = com.android.purebilibili.core.ui.components.AppTabRowRole.SECONDARY,
-                modifier = Modifier.widthIn(max = 400.dp).fillMaxWidth(),
+                // 仅玻璃热门子分类上移，原生槽位及列表卡片位置保持原参数。
+                modifier = Modifier
+                    .widthIn(max = 400.dp)
+                    .fillMaxWidth()
+                    .offset(y = (-6).dp),
                 height = AppSpacingTokens.TripleExtraLarge,
                 labelFontSize = MaterialTheme.typography.labelMedium.fontSize,
                 centerContent = true,

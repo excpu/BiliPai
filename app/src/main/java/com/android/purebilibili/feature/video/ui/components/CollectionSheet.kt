@@ -403,7 +403,8 @@ fun CollectionSheet(
                     tapPressRefractionEnabled = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                        // 仅玻璃 dock 下移，原生分区栏保留原有间距。
+                        .padding(start = 12.dp, end = 12.dp, top = if (glassTabsEnabled) 12.dp else 6.dp, bottom = 6.dp),
                 )
             }
 

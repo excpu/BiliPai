@@ -22,6 +22,15 @@ internal val settingsItemDirectory: List<PlaybackSettingItem>
 internal fun settingItemTitle(settingId: String): String =
     settingsItemDirectory.first { it.settingId == settingId }.title
 
+internal fun settingItemTitle(settingId: String, context: Context): String = when (settingId) {
+    GRID_CUSTOMIZATION_SETTING_ID -> context.getString(com.android.purebilibili.R.string.home_settings_grid_customization_title)
+    GRID_SHARE_SETTING_ID -> context.getString(com.android.purebilibili.R.string.home_settings_grid_share_title)
+    GRID_COMPACT_SETTING_ID -> context.getString(com.android.purebilibili.R.string.home_settings_grid_compact_title)
+    "appearance.grid_column_count" -> context.getString(com.android.purebilibili.R.string.home_settings_grid_columns_title)
+    "appearance.pinch_to_change_grid_columns_enabled" -> context.getString(com.android.purebilibili.R.string.home_settings_pinch_columns_title)
+    else -> settingItemTitle(settingId)
+}
+
 internal val playbackSettingDirectory = listOf(
     PlaybackSettingItem("playback.native_miuix_player_popups", "使用小米风格弹窗", SettingsRootCategory.VIDEO_DECODER, SettingsSearchFocusIds.PLAYBACK_DECODER, { context -> com.android.purebilibili.core.store.player.PlayerSettingsStore .getNativeMiuixPlayerPopups(context).map { if (it) "开启" else "关闭" } }),
     PlaybackSettingItem("playback.hw_decode", "启用硬件解码", SettingsRootCategory.VIDEO_DECODER, SettingsSearchFocusIds.PLAYBACK_DECODER, null),
@@ -104,7 +113,7 @@ internal val playbackSettingDirectory = listOf(
     PlaybackSettingItem("playback.fullscreen_gesture_reverse", "全屏手势反向", SettingsRootCategory.FULLSCREEN_GESTURE, SettingsSearchFocusIds.PLAYBACK_FULLSCREEN, { context -> com.android.purebilibili.core.store.SettingsManager .getFullscreenGestureReverse(context).map { if (it) "开启" else "关闭" } }),
     PlaybackSettingItem("playback.video_ambient_settings.enabled", "动态环境光", SettingsRootCategory.FULLSCREEN_GESTURE, SettingsSearchFocusIds.PLAYBACK_FULLSCREEN, { context -> com.android.purebilibili.core.store.SettingsManager.getVideoAmbientSettings(context).map { if (it.enabled) "开启" else "关闭" } }),
     PlaybackSettingItem("playback.immersive_video_page_status_bar", "状态栏背景模糊", SettingsRootCategory.FULLSCREEN_GESTURE, SettingsSearchFocusIds.PLAYBACK_FULLSCREEN, { context -> com.android.purebilibili.core.store.SettingsManager .getHideVideoPageStatusBar(context).map { if (it) "开启" else "关闭" } }),
-    PlaybackSettingItem("playback.portrait_letterbox_ambient_haze", "用模糊画面填充黑边", SettingsRootCategory.FULLSCREEN_GESTURE, SettingsSearchFocusIds.PLAYBACK_FULLSCREEN, { context -> com.android.purebilibili.core.store.SettingsManager .getPortraitLetterboxAmbientHaze(context).map { if (it) "开启" else "关闭" } }),
+    PlaybackSettingItem("playback.portrait_letterbox_ambient_haze", "竖屏上下环境光", SettingsRootCategory.FULLSCREEN_GESTURE, SettingsSearchFocusIds.PLAYBACK_FULLSCREEN, { context -> com.android.purebilibili.core.store.SettingsManager .getPortraitLetterboxAmbientHaze(context).map { if (it) "开启" else "关闭" } }),
     PlaybackSettingItem("playback.auto_enter_fullscreen", "自动进入全屏", SettingsRootCategory.FULLSCREEN_GESTURE, SettingsSearchFocusIds.PLAYBACK_FULLSCREEN, { context -> com.android.purebilibili.core.store.SettingsManager .getAutoEnterFullscreen(context).map { if (it) "开启" else "关闭" } }),
     PlaybackSettingItem("playback.auto_exit_fullscreen_mode", "自动退出全屏", SettingsRootCategory.FULLSCREEN_GESTURE, SettingsSearchFocusIds.PLAYBACK_FULLSCREEN, { context -> com.android.purebilibili.core.store.SettingsManager .getAutoExitFullscreenMode(context).map { if (it != com.android.purebilibili.core.store.AutoExitFullscreenMode.OFF) "开启" else "关闭" } }),
     PlaybackSettingItem("playback.show_fullscreen_lock_button", "全屏显示锁定按钮", SettingsRootCategory.FULLSCREEN_GESTURE, SettingsSearchFocusIds.PLAYBACK_FULLSCREEN, { context -> com.android.purebilibili.core.store.SettingsManager .getShowFullscreenLockButton(context).map { if (it) "开启" else "关闭" } }),

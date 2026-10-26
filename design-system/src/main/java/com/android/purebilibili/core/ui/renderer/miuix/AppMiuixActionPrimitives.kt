@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
@@ -22,6 +23,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.dropShadow
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.shadow.Shadow
@@ -35,6 +37,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.android.purebilibili.core.ui.AppChromeSizeTokens
 import com.android.purebilibili.core.ui.AppSpacingTokens
+import com.android.purebilibili.core.ui.AppShapes
+import com.android.purebilibili.core.ui.AppSurfaceTokens
+import com.android.purebilibili.core.ui.isMiuixNonGlassEnabled
 import com.android.purebilibili.core.ui.components.AppMiuixActionTone
 import com.android.purebilibili.core.ui.components.appDesktopInteractionVisuals
 import com.android.purebilibili.core.ui.components.resolveMiuixChipActionTone
@@ -126,9 +131,12 @@ internal fun AppMiuixChip(
         AppMiuixActionTone.SECONDARY -> MiuixButtonDefaults.buttonColors()
     }
     val scheme = androidx.compose.material3.MaterialTheme.colorScheme
+    val nativeSelection = selected && isMiuixNonGlassEnabled()
+    val selectedContainer = if (nativeSelection) AppSurfaceTokens.selectionContainer() else colors.color
+    val selectedContent = if (nativeSelection) AppContentColors.accent() else colors.contentColor
     val readableColors = MiuixButtonColors(
-        color = colors.color,
-        contentColor = com.android.purebilibili.core.ui.resolveButtonContentColor(colors.color, colors.contentColor, scheme),
+        color = selectedContainer,
+        contentColor = com.android.purebilibili.core.ui.resolveButtonContentColor(selectedContainer, selectedContent, scheme),
         disabledColor = colors.disabledColor,
         disabledContentColor = colors.disabledContentColor,
     )
@@ -295,8 +303,13 @@ internal fun AppMiuixNavigationDrawerItem(
     badge: (@Composable () -> Unit)?,
     interactionSource: MutableInteractionSource,
 ) {
+    val nativeSelection = isMiuixNonGlassEnabled()
+    val selectedContent = if (nativeSelection) AppContentColors.accent() else MiuixTheme.colorScheme.onPrimaryContainer
     val itemModifier = if (selected) {
-        modifier.squircleBackground(
+        if (nativeSelection) modifier
+            .clip(AppShapes.SelectionIndicator)
+            .background(AppSurfaceTokens.selectionContainer(), AppShapes.SelectionIndicator)
+        else modifier.squircleBackground(
             color = MiuixTheme.colorScheme.primaryContainer,
             cornerRadius = MiuixButtonDefaults.CornerRadius,
         )
@@ -308,7 +321,7 @@ internal fun AppMiuixNavigationDrawerItem(
         startAction = icon?.let { action ->
             {
                 com.android.purebilibili.core.ui.components.ProvideAppActionContentColor(
-                    if (selected) MiuixTheme.colorScheme.onPrimaryContainer else AppContentColors.secondaryText(),
+                    if (selected) selectedContent else AppContentColors.secondaryText(),
                     action,
                 )
             }
@@ -319,7 +332,7 @@ internal fun AppMiuixNavigationDrawerItem(
         interactionSource = interactionSource,
     ) {
         com.android.purebilibili.core.ui.components.ProvideAppActionContentColor(
-            if (selected) MiuixTheme.colorScheme.onPrimaryContainer else AppContentColors.primaryText(),
+            if (selected) selectedContent else AppContentColors.primaryText(),
             label,
         )
     }

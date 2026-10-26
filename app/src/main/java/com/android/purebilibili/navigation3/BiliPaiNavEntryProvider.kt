@@ -39,6 +39,8 @@ internal fun NavEntryBuilder.biliPaiNavEntries(
     settingsEntry<BiliPaiNavKey.AnimationSettings>(settingsBackStack, settingsPersistentPanes, activeMainHostRoute, settingsContainerTransitions, swipeDismiss = swipeBackDirection, content = content)
     settingsEntry<BiliPaiNavKey.PlaybackSettings>(settingsBackStack, settingsPersistentPanes, activeMainHostRoute, settingsContainerTransitions, swipeDismiss = swipeBackDirection, content = content)
     settingsEntry<BiliPaiNavKey.PermissionSettings>(settingsBackStack, settingsPersistentPanes, activeMainHostRoute, settingsContainerTransitions, swipeDismiss = swipeBackDirection, content = content)
+    settingsEntry<BiliPaiNavKey.SpacePrivacySettings>(settingsBackStack, settingsPersistentPanes, activeMainHostRoute, settingsContainerTransitions, swipeDismiss = swipeBackDirection, content = content)
+    settingsEntry<BiliPaiNavKey.LoginActivitySettings>(settingsBackStack, settingsPersistentPanes, activeMainHostRoute, settingsContainerTransitions, swipeDismiss = swipeBackDirection, content = content)
     settingsEntry<BiliPaiNavKey.MessageNotificationSettings>(settingsBackStack, settingsPersistentPanes, activeMainHostRoute, settingsContainerTransitions, swipeDismiss = swipeBackDirection, content = content)
     settingsEntry<BiliPaiNavKey.PluginsSettings>(settingsBackStack, settingsPersistentPanes, activeMainHostRoute, settingsContainerTransitions, swipeDismiss = swipeBackDirection, content = content)
     settingsEntry<BiliPaiNavKey.JsPluginContent>(settingsBackStack, settingsPersistentPanes, activeMainHostRoute, settingsContainerTransitions,
@@ -57,6 +59,7 @@ internal fun NavEntryBuilder.biliPaiNavEntries(
     settingsEntry<BiliPaiNavKey.TipsSettings>(settingsBackStack, settingsPersistentPanes, activeMainHostRoute, settingsContainerTransitions, swipeDismiss = swipeBackDirection, content = content)
     entry<BiliPaiNavKey.Login>(swipeDismiss = swipeBackDirection, content = content)
     entry<BiliPaiNavKey.Profile>(swipeDismiss = swipeBackDirection, content = content)
+    entry<BiliPaiNavKey.AccountLedger>(swipeDismiss = swipeBackDirection, content = content)
     entry<BiliPaiNavKey.AicuQuery>(swipeDismiss = swipeBackDirection, content = content)
     entry<BiliPaiNavKey.History>(swipeDismiss = swipeBackDirection, content = content)
     entry<BiliPaiNavKey.HistorySearch>(swipeDismiss = swipeBackDirection, content = content)

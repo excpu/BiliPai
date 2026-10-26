@@ -4,6 +4,10 @@ import com.android.purebilibili.core.util.rememberHapticFeedback
 import com.android.purebilibili.core.util.HapticType
 
 import com.android.purebilibili.core.ui.components.appActionClickable
+import com.android.purebilibili.core.ui.LocalAppThemeConfig
+import com.android.purebilibili.core.ui.components.AppSegmentOption
+import com.android.purebilibili.core.ui.components.AppTabRowRole
+import com.android.purebilibili.core.ui.components.AppThemeAdaptiveTabRow
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -102,10 +106,32 @@ fun PlayerEpisodeMenu(
             PanelAction(Icons.Default.Sort, if (reversed) "顺序" else "倒序") { reverseSections[sectionIndex] = !reversed }
             PanelAction(Icons.Default.Close, "关闭", requestPanelDismiss)
         }
-        if (content.sections.size > 1) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-            content.sections.forEachIndexed { index, item ->
-                Text(item.title, color = if (index == sectionIndex) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.appActionClickable { sectionIndex = index }.padding(horizontal = 16.dp, vertical = 12.dp))
+        if (content.sections.size > 1) {
+            // 玻璃分区复用共享 dock 与完整槽位指示器，原生保留原有文字轨道。
+            if (LocalAppThemeConfig.current.liquidGlassEnabled) {
+                AppThemeAdaptiveTabRow(
+                    options = content.sections.mapIndexed { index, item ->
+                        AppSegmentOption(index, item.title)
+                    },
+                    selectedValue = sectionIndex,
+                    onSelectionChange = { sectionIndex = it },
+                    role = AppTabRowRole.SECONDARY,
+                    scrollable = true,
+                    centerContent = true,
+                    liquidGlassAdaptIndicatorToLabel = false,
+                    dragSelectionEnabled = true,
+                    tapPressRefractionEnabled = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            } else {
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+                    content.sections.forEachIndexed { index, item ->
+                        Text(item.title, color = if (index == sectionIndex) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.appActionClickable { sectionIndex = index }.padding(horizontal = 16.dp, vertical = 12.dp))
+                    }
+                }
             }
         }
         LazyColumn(state = listState, modifier = Modifier.fillMaxWidth().weight(1f), overscrollEffect = null,

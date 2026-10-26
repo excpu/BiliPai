@@ -45,8 +45,7 @@ internal fun PlayerNativeSettingsHost(
 ) {
     val windowSize = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize
     // 玻璃复用原生菜单内容；列表自行滚动，宿主只接管外壳与触发按钮开合。
-    val glassPolicy = resolveDanmakuSettingsPanelLayoutPolicy(
-        isFullscreen = isFullscreen,
+    val glassPolicy = resolvePlayerSettingsMenuLayoutPolicy(
         screenWidthDp = LocalConfiguration.current.screenWidthDp,
         screenHeightDp = LocalConfiguration.current.screenHeightDp,
     )
@@ -58,13 +57,17 @@ internal fun PlayerNativeSettingsHost(
                 com.android.purebilibili.core.ui.components.AppGlassMenuPlacement.ANCHOR_END
             } else if (isFullscreen) com.android.purebilibili.core.ui.components.AppGlassMenuPlacement.END
             else com.android.purebilibili.core.ui.components.AppGlassMenuPlacement.CENTER,
-            minWidth = glassPolicy.minWidthDp.dp,
+            minWidth = 0.dp,
             maxWidth = glassPolicy.maxWidthDp.dp,
             maxHeight = glassPolicy.maxHeightDp.dp,
             interactiveContent = true,
+            showScrollbar = false,
+            useAvailableHeight = true,
         ) {
             PlayerNativeMenuTheme {
-                Box(Modifier.fillMaxWidth().heightIn(max = glassPolicy.maxHeightDp.dp)) { content() }
+                CompositionLocalProvider(LocalPlayerGlassSettingsSurface provides true) {
+                    Box(Modifier.fillMaxWidth().heightIn(max = glassPolicy.maxHeightDp.dp)) { content() }
+                }
             }
         }) return
     // 播放器提供避让宿主时，横屏更多操作与选集共用侧面板；其他入口保留原有弹窗。
@@ -132,6 +135,8 @@ internal fun PlayerSettingsRow(title: String, subtitle: String? = null, onClick:
                 "重载视频" -> Icons.Outlined.Refresh
                 "超分辨率" -> Icons.Outlined.StayCurrentLandscape
                 "播放器音量" -> Icons.Outlined.VolumeUp
+                "画面变换" -> Icons.Outlined.Flip
+                "恢复默认" -> Icons.Outlined.Restore
                 "CDN 设置" -> Icons.Outlined.Cloud
                 "选择画质" -> Icons.Outlined.PlayCircle
                 "选择音质" -> Icons.Outlined.Album

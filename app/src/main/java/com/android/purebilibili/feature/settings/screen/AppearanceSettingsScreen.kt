@@ -1233,7 +1233,8 @@ fun AppearanceSettingsContent(
 
         //  首页配色预览：不依赖颜色来源，始终展示当前主题的实际取色
         item(key = "appearance_theme_home_preview") {
-            Box(modifier = Modifier.entrance()) {
+            // 独立圆角分组之间保留外部间距，玻璃、MD3 与 Miuix 共用，避免两张卡片相贴。
+            Box(modifier = Modifier.padding(top = 16.dp).entrance()) {
                 // 交给设置页分组承载：圆角、水平边距与容器色由 AppPreferenceGroup 统一决定。
                 AppPreferenceGroup {
                     ThemeHomePreview(
@@ -1718,70 +1719,93 @@ fun AppearanceSettingsContent(
                             onSelectionChange = viewModel::setDisplayMode,
                         )
 
-                        // 网格列数设置 (仅在双列网格模式下显示)
-                        androidx.compose.animation.AnimatedVisibility(
-                            visible = isTablet && state.displayMode == 0,
-                            enter = androidx.compose.animation.expandVertically() + androidx.compose.animation.fadeIn(),
-                            exit = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut()
-                        ) {
-                            Column {
-                                AppPreferenceDivider(modifier = Modifier.padding(start = 16.dp))
-                                SettingsItemAnchor("appearance.grid_column_count") {
-                                    SettingsSingleChoicePreference(
-                                        icon = com.android.purebilibili.feature.settings.rememberMaterialSymbol(com.android.purebilibili.R.drawable.ms_format_list_bulleted_24),
-                                        iconTint = AppContentColors.secondaryText(),
-                                        title = context.getString(R.string.home_settings_grid_columns_title),
-                                        subtitle = if (state.gridColumnCount == 0) {
-                                            context.getString(R.string.home_settings_grid_columns_adaptive)
-                                        } else {
-                                            context.getString(R.string.home_settings_grid_columns_fixed, state.gridColumnCount)
-                                        },
-                                        options = (0..6).map { count ->
-                                            AppSegmentOption(
-                                                value = count,
-                                                label = if (count == 0) context.getString(R.string.home_settings_grid_columns_auto) else context.getString(R.string.home_settings_grid_columns_count, count),
-                                            )
-                                        },
-                                        selectedValue = state.gridColumnCount,
-                                        optionLeading = { value -> SettingsOptionPreviewThumb(SettingsOptionPreview.Feed(columns = value)) },
-                                        onSelectionChange = viewModel::setGridColumnCount,
+                        AppPreferenceDivider(modifier = Modifier.padding(start = 16.dp))
+                        SettingsItemAnchor(com.android.purebilibili.feature.settings.GRID_CUSTOMIZATION_SETTING_ID) {
+                            AppSwitchPreference(
+                                title = com.android.purebilibili.feature.settings.settingItemTitle(com.android.purebilibili.feature.settings.GRID_CUSTOMIZATION_SETTING_ID, context),
+                                subtitle = context.getString(R.string.home_settings_grid_customization_summary),
+                                checked = homeConfiguration.gridColumnCustomizationEnabled,
+                                onCheckedChange = { scope.launch { SettingsManager.setGridColumnCustomizationEnabled(context, it) } },
+                            )
+                        }
+                        AppPreferenceDivider(modifier = Modifier.padding(start = 16.dp))
+                        SettingsItemAnchor("appearance.pinch_to_change_grid_columns_enabled") {
+                            AppSwitchPreference(
+                                title = com.android.purebilibili.feature.settings.settingItemTitle("appearance.pinch_to_change_grid_columns_enabled", context),
+                                subtitle = context.getString(R.string.home_settings_pinch_columns_summary),
+                                checked = pinchToChangeGridColumnsEnabled,
+                                enabled = homeConfiguration.gridColumnCustomizationEnabled,
+                                onCheckedChange = { scope.launch { SettingsManager.setPinchToChangeGridColumnsEnabled(context, it) } },
+                            )
+                        }
+                        AppPreferenceDivider(modifier = Modifier.padding(start = 16.dp))
+                        SettingsItemAnchor(com.android.purebilibili.feature.settings.GRID_SHARE_SETTING_ID) {
+                            AppSwitchPreference(
+                                title = com.android.purebilibili.feature.settings.settingItemTitle(com.android.purebilibili.feature.settings.GRID_SHARE_SETTING_ID, context),
+                                subtitle = context.getString(R.string.home_settings_grid_share_summary),
+                                checked = homeConfiguration.gridColumnsSharedAcrossPages,
+                                enabled = homeConfiguration.gridColumnCustomizationEnabled,
+                                onCheckedChange = { scope.launch { SettingsManager.setGridColumnsSharedAcrossPages(context, it) } },
+                            )
+                        }
+                        AppPreferenceDivider(modifier = Modifier.padding(start = 16.dp))
+                        SettingsItemAnchor(com.android.purebilibili.feature.settings.GRID_COMPACT_SETTING_ID) {
+                            SettingsSingleChoicePreference(
+                                title = com.android.purebilibili.feature.settings.settingItemTitle(com.android.purebilibili.feature.settings.GRID_COMPACT_SETTING_ID, context),
+                                subtitle = context.getString(R.string.home_settings_grid_default_summary),
+                                enabled = homeConfiguration.gridColumnCustomizationEnabled,
+                                options = (0..4).map { count ->
+                                    AppSegmentOption(
+                                        value = count,
+                                        label = if (count == 0) context.getString(R.string.home_settings_grid_columns_auto)
+                                        else context.getString(R.string.home_settings_grid_columns_count, count),
                                     )
-                                }
-                                AppPreferenceDivider(modifier = Modifier.padding(start = 16.dp))
-                                SettingsItemAnchor("appearance.home_feed_card_width_preset") {
-                                    SettingsSingleChoicePreference(
-                                        title = context.getString(R.string.home_settings_card_width_title),
-                                        subtitle = if (state.gridColumnCount > 0) {
-                                            context.getString(R.string.home_settings_card_width_current, state.gridColumnCount)
-                                        } else {
-                                            context.getString(R.string.home_settings_card_width_auto)
-                                        },
-                                        options = resolveHomeFeedCardWidthPresetSegmentOptions().map { option ->
-                                            option.copy(label = context.getString(when (option.value) {
-                                                HomeFeedCardWidthPreset.AUTO -> R.string.home_settings_card_width_auto_option
-                                                HomeFeedCardWidthPreset.COMPACT -> R.string.home_settings_card_width_compact
-                                                HomeFeedCardWidthPreset.BALANCED -> R.string.home_settings_card_width_balanced
-                                                HomeFeedCardWidthPreset.WIDE -> R.string.home_settings_card_width_wide
-                                                HomeFeedCardWidthPreset.ULTRA_WIDE -> R.string.home_settings_card_width_ultra_wide
-                                            }))
-                                        },
-                                        selectedValue = state.homeFeedCardWidthPreset,
-                                        onSelectionChange = viewModel::setHomeFeedCardWidthPreset,
+                                },
+                                selectedValue = homeConfiguration.gridColumnCountCompact,
+                                optionLeading = { value -> SettingsOptionPreviewThumb(SettingsOptionPreview.Feed(columns = value)) },
+                                onSelectionChange = { count -> scope.launch { SettingsManager.setGridColumnCountCompact(context, count) } },
+                            )
+                        }
+                        AppPreferenceDivider(modifier = Modifier.padding(start = 16.dp))
+                        SettingsItemAnchor("appearance.grid_column_count") {
+                            SettingsSingleChoicePreference(
+                                title = com.android.purebilibili.feature.settings.settingItemTitle("appearance.grid_column_count", context),
+                                subtitle = context.getString(R.string.home_settings_grid_default_summary),
+                                enabled = homeConfiguration.gridColumnCustomizationEnabled,
+                                options = (0..7).map { count ->
+                                    AppSegmentOption(
+                                        value = count,
+                                        label = if (count == 0) context.getString(R.string.home_settings_grid_columns_auto)
+                                        else context.getString(R.string.home_settings_grid_columns_count, count),
                                     )
-                                }
-                                AppPreferenceDivider(modifier = Modifier.padding(start = 16.dp))
-                                SettingsItemAnchor("appearance.pinch_to_change_grid_columns_enabled") {
-                                    AppSwitchPreference(
-                                        title = context.getString(R.string.home_settings_pinch_columns_title),
-                                        subtitle = context.getString(R.string.home_settings_pinch_columns_summary),
-                                        checked = pinchToChangeGridColumnsEnabled,
-                                        onCheckedChange = { enabled ->
-                                            scope.launch {
-                                                SettingsManager.setPinchToChangeGridColumnsEnabled(context, enabled)
-                                            }
-                                        },
-                                    )
-                                }
+                                },
+                                selectedValue = homeConfiguration.gridColumnCount,
+                                optionLeading = { value -> SettingsOptionPreviewThumb(SettingsOptionPreview.Feed(columns = value)) },
+                                onSelectionChange = { count -> scope.launch { SettingsManager.setGridColumnCount(context, count) } },
+                            )
+                        }
+                        if (isTablet && state.displayMode == 0) {
+                            AppPreferenceDivider(modifier = Modifier.padding(start = 16.dp))
+                            SettingsItemAnchor("appearance.home_feed_card_width_preset") {
+                                SettingsSingleChoicePreference(
+                                    title = context.getString(R.string.home_settings_card_width_title),
+                                    subtitle = if (homeConfiguration.gridColumnCustomizationEnabled && homeConfiguration.gridColumnCount > 0) {
+                                        context.getString(R.string.home_settings_card_width_current, homeConfiguration.gridColumnCount)
+                                    } else {
+                                        context.getString(R.string.home_settings_card_width_auto)
+                                    },
+                                    options = resolveHomeFeedCardWidthPresetSegmentOptions().map { option ->
+                                        option.copy(label = context.getString(when (option.value) {
+                                            HomeFeedCardWidthPreset.AUTO -> R.string.home_settings_card_width_auto_option
+                                            HomeFeedCardWidthPreset.COMPACT -> R.string.home_settings_card_width_compact
+                                            HomeFeedCardWidthPreset.BALANCED -> R.string.home_settings_card_width_balanced
+                                            HomeFeedCardWidthPreset.WIDE -> R.string.home_settings_card_width_wide
+                                            HomeFeedCardWidthPreset.ULTRA_WIDE -> R.string.home_settings_card_width_ultra_wide
+                                        }))
+                                    },
+                                    selectedValue = state.homeFeedCardWidthPreset,
+                                    onSelectionChange = viewModel::setHomeFeedCardWidthPreset,
+                                )
                             }
                         }
 

@@ -51,7 +51,10 @@ internal fun resolveAppThemeEndpointPalette(
     ) else configured
     val nativeMiuix = shouldUseNativeMiuixPalette(uiStyle)
     val nativeMiuixColors = if (nativeMiuix) {
-        resolveNativeMiuixColors(exactPrimary, darkTheme, amoledDarkTheme)
+        resolveNativeMiuixColors(
+            exactPrimary, darkTheme, amoledDarkTheme,
+            customRolesEnabled = source == Md3ColorSource.CUSTOM && roleOverrides.enabled && !preserveGeneratedPalette,
+        )
     } else null
     // 原生导航指示器、tonal 按钮及筛选胶囊消费 secondaryContainer，而非 primary。
     // 自定义色在关闭玻璃后也必须覆盖这个选中角色；只桥接颜色，不改原生布局和动效。

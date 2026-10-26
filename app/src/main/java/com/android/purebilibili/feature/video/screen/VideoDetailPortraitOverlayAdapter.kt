@@ -107,8 +107,7 @@ internal fun VideoDetailPortraitOverlayAdapter(
             )
         }
     }
-    // Enter is direct so swipe-to-fullscreen never cross-fades through the centered inline player.
-    // Exit keeps the soft scale/slide so manual leave still feels polished.
+    // 内嵌进入直接更新全屏布局并复用播放器，退出保留原有缩放与位移。
     val portraitExitTransition = remember(motionSpec) {
         val exitSpec = tween<Float>(
             durationMillis = motionSpec.exitDurationMillis,

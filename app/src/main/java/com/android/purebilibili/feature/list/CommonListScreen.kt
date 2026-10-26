@@ -1,5 +1,8 @@
 package com.android.purebilibili.feature.list
 
+import com.android.purebilibili.feature.home.effectiveGridColumnCount
+import com.android.purebilibili.feature.home.effectiveGridColumnCountCompact
+import com.android.purebilibili.feature.home.gridColumnPinchEnabled
 import com.android.purebilibili.core.ui.components.appActionWithFeedback
 
 import com.android.purebilibili.core.ui.components.wallpaperMediaCardSurface
@@ -12,6 +15,7 @@ import com.android.purebilibili.navigation.animatePagerSelection
 import com.android.purebilibili.core.ui.components.videoListItemModifier
 import com.android.purebilibili.feature.home.GridPinchColumnHudPill
 import com.android.purebilibili.feature.common.ListLoadError
+import com.android.purebilibili.feature.home.rememberFeedGridColumnPreference
 import com.android.purebilibili.feature.home.homeFeedPinchZoom
 import com.android.purebilibili.feature.home.resolveHomeFeedPinchColumnBounds
 import com.android.purebilibili.core.ui.components.AnimatedVideoListItem
@@ -271,16 +275,7 @@ fun CommonListScreen(
     // 个人列表（历史/收藏）默认单列，列数由双指缩放调节；其余页面保持双列默认。
     val personalListPage = viewModel is HistoryViewModel || viewModel is FavoriteViewModel
     val windowSizeClass = LocalWindowSizeClass.current
-    val isCompactGridWindow = com.android.purebilibili.feature.home.isCompactHomeFeedScreen(
-        windowSizeClass.widthSizeClass
-    )
     val defaultPersonalColumns = if (personalListPage) 1 else 2
-    var pinchColumnsByWindow by rememberSaveable(viewModel) {
-        androidx.compose.runtime.mutableStateOf(
-            mapOf(false to defaultPersonalColumns, true to defaultPersonalColumns)
-        )
-    }
-    val pinchListColumns = pinchColumnsByWindow[isCompactGridWindow] ?: defaultPersonalColumns
     val primaryGridState = rememberLazyGridState()
     val subscribedFolderListState = androidx.compose.foundation.lazy.rememberLazyListState()
     val favoriteFolderListState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -297,6 +292,17 @@ fun CommonListScreen(
     val homeSettings by SettingsManager.getHomeSettings(context).collectAsStateWithLifecycle(initialValue = com.android.purebilibili.core.store.HomeSettings(),
         context = kotlin.coroutines.EmptyCoroutineContext
     )
+    val gridColumnPreference = rememberFeedGridColumnPreference(
+        settings = homeSettings,
+        widthSizeClass = windowSizeClass.widthSizeClass,
+        defaultColumns = com.android.purebilibili.feature.home.resolveHomeFeedStoredColumnCount(
+            windowSizeClass.widthSizeClass, homeSettings.effectiveGridColumnCountCompact, homeSettings.effectiveGridColumnCount,
+        ).takeIf { it > 0 } ?: defaultPersonalColumns,
+        bounds = resolveHomeFeedPinchColumnBounds(
+            windowSizeClass.widthSizeClass, LocalConfiguration.current.screenWidthDp,
+        ),
+    )
+    val pinchListColumns = gridColumnPreference.columns
     val topChromePolicy = rememberAppTopChromePolicy()
     val liquidGlassEnabled = rememberAppChromeLiquidGlassEnabled(
         androidNativeEnabled = homeSettings.androidNativeLiquidGlassEnabled,
@@ -313,7 +319,7 @@ fun CommonListScreen(
     val favoriteCollectionSharedTransitionEnabled =
         homeSettings.cardTransitionEnabled && LocalSharedTransitionEnabled.current
 
-    // Video lists expose an explicit single/double-column choice, independent of home.
+    // 列数共用行为由首页与列表设置控制。
     val columns = pinchListColumns
     val configuration = LocalConfiguration.current
     val commonListViewportWidthPx = with(density) {
@@ -327,7 +333,7 @@ fun CommonListScreen(
             contentWidthDp = configuration.screenWidthDp,
         )
     }
-    val pinchToZoomColumnsEnabled = homeSettings.pinchToChangeGridColumnsEnabled
+    val pinchToZoomColumnsEnabled = homeSettings.gridColumnPinchEnabled
 
     //  [修复] 分页支持：收藏 + 历史记录 + 用户最近点赞
     val favoriteViewModel = viewModel as? FavoriteViewModel
@@ -796,14 +802,15 @@ fun CommonListScreen(
     var pinchPillVisible by remember { mutableStateOf(false) }
     var pinchPillDismissJob by remember { androidx.compose.runtime.mutableStateOf<Job?>(null) }
     val onPinchColumnsChange: (Int) -> Unit = { newColumns ->
-        pinchColumnsByWindow = pinchColumnsByWindow + (isCompactGridWindow to newColumns)
+        gridColumnPreference.onChange(newColumns)
         hapticFeedback.performHapticFeedback(
             androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove
         )
         pinchPillVisible = true
         pinchPillDismissJob?.cancel()
     }
-    val onPinchColumnsEnd: (Int) -> Unit = { _ ->
+    val onPinchColumnsEnd: (Int) -> Unit = { finalColumns ->
+        gridColumnPreference.onGestureEnd(finalColumns)
         pinchPillDismissJob?.cancel()
         pinchPillDismissJob = coroutineScope.launch {
             kotlinx.coroutines.delay(1000)

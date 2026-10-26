@@ -78,7 +78,6 @@ private fun localizedAnimationSettingTitle(settingId: String): String {
             "animation.maid_lottie_animation_enabled" -> R.string.animation_title_maid
             "animation.card_animation_enabled" -> R.string.animation_title_card_entrance
             "animation.card_transition_enabled" -> R.string.animation_title_card_transition
-            "animation.related_video_transition_enabled" -> R.string.animation_title_related_transition
             "animation.live_surface_card_transition_enabled" -> R.string.animation_title_live_transition
             "animation.app_navigation_settings.video_return_content_follow_progress_enabled" -> R.string.animation_title_return_follow
             "animation.app_navigation_settings.video_shared_return_gesture_follow_enabled" -> R.string.animation_title_return_tilt
@@ -252,8 +251,6 @@ fun AnimationSettingsContent(
         .collectAsStateWithLifecycle(initialValue = true)
     val liveSurfaceCardTransitionEnabled by remember(context) { SettingsManager.getLiveSurfaceCardTransitionEnabled(context) }
         .collectAsStateWithLifecycle(initialValue = false)
-    val relatedVideoTransitionEnabled by remember(context) { SettingsManager.getRelatedVideoTransitionEnabled(context) }
-        .collectAsStateWithLifecycle(initialValue = true)
     val fullScreenSwipeBackEnabled by remember(context) { SettingsManager.getFullScreenSwipeBackEnabled(context) }
         .collectAsStateWithLifecycle(initialValue = false)
     val effectiveEntranceSpec = rememberEffectiveEntranceMotionSpec()
@@ -443,7 +440,6 @@ fun AnimationSettingsContent(
                         enabledStates = mapOf(
                             SettingsFeaturePreview.CARD_ENTRANCE to state.cardAnimationEnabled,
                             SettingsFeaturePreview.CARD_EXPAND to state.cardTransitionEnabled,
-                            SettingsFeaturePreview.RELATED_EXPAND to relatedVideoTransitionEnabled,
                             SettingsFeaturePreview.LIVE_FRAME to liveSurfaceCardTransitionEnabled,
                             SettingsFeaturePreview.RETURN_CONTENT to appNavigationSettings.videoReturnContentFollowProgressEnabled,
                             SettingsFeaturePreview.RETURN_TILT to appNavigationSettings.videoSharedReturnGestureFollowEnabled,
@@ -476,26 +472,6 @@ fun AnimationSettingsContent(
                                 subtitle = stringResource(R.string.animation_card_transition_summary),
                                 checked = state.cardTransitionEnabled,
                                 onCheckedChange = { viewModel.toggleCardTransition(it) },
-                                iconTint = AppContentColors.secondaryText()
-                            )
-                        }
-                        AppPreferenceDivider()
-                        SettingsItemAnchor("animation.related_video_transition_enabled") {
-                            AppSwitchPreference(
-                                icon = rememberSettingsSemanticIcon(SettingsIconRole.RELATED_VIDEO_TRANSITION),
-                                title = localizedAnimationSettingTitle("animation.related_video_transition_enabled"),
-                                subtitle = if (relatedVideoTransitionEnabled) {
-                                    stringResource(R.string.animation_related_transition_on)
-                                } else {
-                                    stringResource(R.string.animation_related_transition_off)
-                                },
-                                checked = relatedVideoTransitionEnabled,
-                                onCheckedChange = { enabled ->
-                                    scope.launch {
-                                        SettingsManager.setRelatedVideoTransitionEnabled(context, enabled)
-                                    }
-                                },
-                                enabled = state.cardTransitionEnabled,
                                 iconTint = AppContentColors.secondaryText()
                             )
                         }

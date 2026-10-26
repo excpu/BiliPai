@@ -2819,7 +2819,7 @@ SettingsItemAnchor("playback.fullscreen_aspect_ratio") {
             AppSwitchPreference(
                 icon = rememberSettingsSemanticIcon(SettingsIconRole.VIDEO_AMBIENT_LIGHT),
                 title = playbackSettingTitle("playback.video_ambient_settings.enabled"),
-                subtitle = "在播放器周边显示随画面变化的柔和光晕；HDR、Anime4K 和小窗下不启用",
+                subtitle = "在横竖屏播放器留白处显示随画面变化的柔和光晕；HDR、Anime4K 和小窗下不启用",
                 checked = videoAmbientSettings.enabled,
                 onCheckedChange = { enabled -> scope.launch { SettingsManager.setVideoAmbientEnabled(context, enabled) } },
                 iconTint = AppContentColors.secondaryText(),
@@ -2847,7 +2847,7 @@ SettingsItemAnchor("playback.fullscreen_aspect_ratio") {
 SettingsItemAnchor("playback.video_ambient_settings.strength") {
             SettingsSingleChoicePreference(
                 title = settingItemTitle("playback.video_ambient_settings.strength"),
-                subtitle = "调整周边光晕亮度，不改变视频画面",
+                subtitle = "共用横屏和竖屏留白的光晕亮度，不改变视频画面",
                 options = listOf(
                     com.android.purebilibili.core.ui.components.AppSegmentOption(0, "柔和"),
                     com.android.purebilibili.core.ui.components.AppSegmentOption(1, "标准"),
@@ -2870,6 +2870,27 @@ SettingsItemAnchor("playback.video_ambient_settings.power_saving") {
                 onSelectionChange = { value -> scope.launch { SettingsManager.setVideoAmbientPowerSaving(context, value) } },
             )
 }
+                AppPreferenceDivider()
+                val portraitLetterboxAmbientHaze = playerConfiguration.portraitLetterboxAmbientHaze
+                SettingsItemAnchor("playback.portrait_letterbox_ambient_haze") {
+                    AppSwitchPreference(
+                        icon = rememberSettingsSemanticIcon(SettingsIconRole.PORTRAIT_AMBIENT_HAZE),
+                        title = playbackSettingTitle("playback.portrait_letterbox_ambient_haze"),
+                        subtitle = if (portraitLetterboxAmbientHaze) {
+                            "竖屏全屏时，上下留白显示光晕，使用上方的环境光强度"
+                        } else {
+                            "竖屏全屏时，上下留白保持纯黑"
+                        },
+                        checked = portraitLetterboxAmbientHaze,
+                        onCheckedChange = {
+                            scope.launch {
+                                com.android.purebilibili.core.store.SettingsManager
+                                    .setPortraitLetterboxAmbientHaze(context, it)
+                            }
+                        },
+                        iconTint = AppContentColors.secondaryText()
+                    )
+                }
         }
         }
         AppPreferenceDivider()
@@ -2892,27 +2913,6 @@ SettingsItemAnchor("playback.video_ambient_settings.power_saving") {
                 iconTint = AppContentColors.secondaryText()
             )
             }
-        AppPreferenceDivider()
-        val portraitLetterboxAmbientHaze = playerConfiguration.portraitLetterboxAmbientHaze
-        SettingsItemAnchor("playback.portrait_letterbox_ambient_haze") {
-            AppSwitchPreference(
-                icon = rememberSettingsSemanticIcon(SettingsIconRole.PORTRAIT_AMBIENT_HAZE),
-                title = playbackSettingTitle("playback.portrait_letterbox_ambient_haze"),
-                subtitle = if (portraitLetterboxAmbientHaze) {
-                    "竖屏看横屏视频时，上下黑边显示模糊画面"
-                } else {
-                    "竖屏播放横屏视频时，上下黑边保持纯黑"
-                },
-                checked = portraitLetterboxAmbientHaze,
-                onCheckedChange = {
-                    scope.launch {
-                        com.android.purebilibili.core.store.SettingsManager
-                            .setPortraitLetterboxAmbientHaze(context, it)
-                    }
-                },
-                iconTint = AppContentColors.secondaryText()
-            )
-        }
         AppPreferenceDivider()
             SettingsItemAnchor("playback.auto_enter_fullscreen") {
                 AppSwitchPreference(

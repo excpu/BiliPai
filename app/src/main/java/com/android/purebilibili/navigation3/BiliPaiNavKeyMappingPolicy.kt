@@ -61,6 +61,8 @@ internal fun BiliPaiNavKey.toLegacyRoute(): String {
         BiliPaiNavKey.AnimationSettings -> ScreenRoutes.AnimationSettings.route
         BiliPaiNavKey.PlaybackSettings -> ScreenRoutes.PlaybackSettings.route
         BiliPaiNavKey.PermissionSettings -> ScreenRoutes.PermissionSettings.route
+        BiliPaiNavKey.SpacePrivacySettings -> ScreenRoutes.SpacePrivacySettings.route
+        BiliPaiNavKey.LoginActivitySettings -> ScreenRoutes.LoginActivitySettings.route
         BiliPaiNavKey.MessageNotificationSettings -> ScreenRoutes.MessageNotificationSettings.route
         is BiliPaiNavKey.PluginsSettings -> ScreenRoutes.PluginsSettings.createRoute(importUrl)
         is BiliPaiNavKey.JsPluginContent -> ScreenRoutes.JsPluginContent.createRoute(pluginId)
@@ -71,6 +73,7 @@ internal fun BiliPaiNavKey.toLegacyRoute(): String {
         BiliPaiNavKey.TipsSettings -> ScreenRoutes.TipsSettings.route
         BiliPaiNavKey.Login -> ScreenRoutes.Login.route
         BiliPaiNavKey.Profile -> ScreenRoutes.Profile.route
+        is BiliPaiNavKey.AccountLedger -> ScreenRoutes.AccountLedger.createRoute(kind)
         is BiliPaiNavKey.AicuQuery -> ScreenRoutes.AicuQuery.createRoute(uid, category)
         BiliPaiNavKey.History -> ScreenRoutes.History.route
         is BiliPaiNavKey.HistorySearch -> "history_search?query=${encodeRouteValue(query)}"
@@ -204,6 +207,8 @@ internal fun legacyRouteToBiliPaiNavKey(route: String?): BiliPaiNavKey {
         normalized == ScreenRoutes.AnimationSettings.route -> BiliPaiNavKey.AnimationSettings
         normalized == ScreenRoutes.PlaybackSettings.route -> BiliPaiNavKey.PlaybackSettings
         normalized == ScreenRoutes.PermissionSettings.route -> BiliPaiNavKey.PermissionSettings
+        normalized == ScreenRoutes.SpacePrivacySettings.route -> BiliPaiNavKey.SpacePrivacySettings
+        normalized == ScreenRoutes.LoginActivitySettings.route -> BiliPaiNavKey.LoginActivitySettings
         normalized == ScreenRoutes.MessageNotificationSettings.route -> BiliPaiNavKey.MessageNotificationSettings
         routeBase == "plugins_settings" -> BiliPaiNavKey.PluginsSettings(importUrl = query["importUrl"])
         segments.firstOrNull() == "js_plugin" && segments.size >= 2 -> {
@@ -218,6 +223,10 @@ internal fun legacyRouteToBiliPaiNavKey(route: String?): BiliPaiNavKey {
         normalized == ScreenRoutes.TipsSettings.route -> BiliPaiNavKey.TipsSettings
         normalized == ScreenRoutes.Login.route -> BiliPaiNavKey.Login
         normalized == ScreenRoutes.Profile.route -> BiliPaiNavKey.Profile
+        segments.firstOrNull() == "account_ledger" && segments.size == 2 -> {
+            val kind = com.android.purebilibili.data.model.AccountLedgerKind.entries.firstOrNull { it.name.equals(segments.getOrNull(1), ignoreCase = true) }
+            if (kind != null) BiliPaiNavKey.AccountLedger(kind) else BiliPaiNavKey.Unknown(normalized)
+        }
         routeBase == "aicu" -> BiliPaiNavKey.AicuQuery(
             uid = query["uid"]?.toLongOrNull()?.takeIf { it > 0 } ?: 0L,
             category = com.android.purebilibili.data.model.response.AicuCategory.fromRoute(query["category"]).name,

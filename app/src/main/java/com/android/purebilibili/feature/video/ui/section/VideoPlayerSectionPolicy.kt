@@ -757,6 +757,18 @@ internal fun shouldEnterPortraitFullscreenFromSwipe(
     isVerticalVideo: Boolean,
 ): Boolean = !isFullscreen && isVerticalVideo
 
+/** 竖向意图明确后在拖动中提交进入，同一次手势只触发一次。 */
+internal fun shouldTriggerPortraitFullscreenDuringDrag(
+    isFullscreen: Boolean,
+    isVerticalVideo: Boolean,
+    reverseGesture: Boolean,
+    totalDragDistanceX: Float,
+    totalDragDistanceY: Float,
+    thresholdPx: Float,
+): Boolean = shouldEnterPortraitFullscreenFromSwipe(isFullscreen, isVerticalVideo) &&
+    kotlin.math.abs(totalDragDistanceY) > kotlin.math.abs(totalDragDistanceX) * 3f &&
+    shouldTriggerFullscreenBySwipe(isFullscreen, reverseGesture, totalDragDistanceY, thresholdPx)
+
 internal fun shouldAllowPlaybackStateAutoFullscreen(
     hasValidWindow: Boolean,
 ): Boolean {

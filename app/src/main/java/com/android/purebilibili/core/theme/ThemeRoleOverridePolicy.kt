@@ -19,8 +19,15 @@ internal val LocalBaseThemeRoleOverrides = staticCompositionLocalOf {
 
 internal fun themeRoleOverridesFromSchemes(
     lightScheme: ColorScheme,
-    darkScheme: ColorScheme
+    darkScheme: ColorScheme,
+    uiStyle: AppUiStyle = AppUiStyle.MATERIAL3,
+    amoledDarkTheme: Boolean = false,
 ): ThemeRoleOverrides {
+    fun ColorScheme.nativeStartingScheme(dark: Boolean): ColorScheme =
+        if (shouldUseNativeMiuixPalette(uiStyle)) {
+            alignMaterialSurfacesWithMiuix(this, resolveNativeMiuixColors(this, dark, amoledDarkTheme))
+        } else this
+
     fun ColorScheme.toRoles(): ThemeModeRoleOverrides {
         return ThemeModeRoleOverrides(
             backgroundHex = formatMd3CustomColorHex(background),
@@ -32,8 +39,8 @@ internal fun themeRoleOverridesFromSchemes(
 
     return ThemeRoleOverrides(
         enabled = false,
-        light = lightScheme.toRoles(),
-        dark = darkScheme.toRoles()
+        light = lightScheme.nativeStartingScheme(false).toRoles(),
+        dark = darkScheme.nativeStartingScheme(true).toRoles()
     )
 }
 
@@ -69,9 +76,8 @@ internal fun enableThemeRoleOverrides(
 internal fun resolveEffectiveThemeRoleOverrides(
     source: Md3ColorSource,
     overrides: ThemeRoleOverrides,
-    uiStyle: AppUiStyle = AppUiStyle.MATERIAL3,
 ): ThemeRoleOverrides {
-    return if (source == Md3ColorSource.CUSTOM && uiStyle == AppUiStyle.MATERIAL3) {
+    return if (source == Md3ColorSource.CUSTOM) {
         overrides
     } else {
         overrides.copy(enabled = false)

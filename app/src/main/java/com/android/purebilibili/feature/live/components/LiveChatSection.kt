@@ -99,44 +99,29 @@ fun LiveChatSection(
     listState: androidx.compose.foundation.lazy.LazyListState = rememberLazyListState(),
     followingLatest: Boolean = true,
     onFollowingLatestChange: (Boolean) -> Unit = {},
+    active: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val palette = rememberLiveChromePalette()
     val darkOverlay = isOverlay && palette.isDark
-    val scope = rememberCoroutineScope()
     val latestMessages by rememberUpdatedState(messages)
     var openMenuSequence by remember { mutableStateOf<Long?>(null) }
     val isAnyMenuOpen = openMenuSequence != null
     val latestFollowing by rememberUpdatedState(followingLatest)
-    val latestOnFollowingChange by rememberUpdatedState(onFollowingLatestChange)
-    var autoScrolling by remember { mutableStateOf(false) }
-    var pendingScroll by remember { mutableStateOf(false) }
     val isAwayFromBottom by remember {
         derivedStateOf { !latestFollowing && latestMessages.isNotEmpty() }
     }
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.isScrollInProgress to listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index }
-            .collect { (scrolling, lastVisible) ->
-                if (scrolling && !autoScrolling) {
-                    latestOnFollowingChange((lastVisible ?: -1) >= latestMessages.lastIndex - 1)
-                }
-            }
-    }
+    LiveChatAutoFollow(
+        listState = listState,
+        lastSequence = messages.lastOrNull()?.sequence,
+        messageCount = messages.size,
+        followingLatest = followingLatest,
+        paused = isAnyMenuOpen,
+        active = active && androidx.compose.ui.platform.LocalWindowInfo.current.isWindowFocused,
+        onFollowingLatestChange = onFollowingLatestChange,
+    )
     LaunchedEffect(messages.lastOrNull()?.sequence) {
-        if (latestFollowing && !isAnyMenuOpen && messages.isNotEmpty()) pendingScroll = true
         if (openMenuSequence != null && messages.none { it.sequence == openMenuSequence }) openMenuSequence = null
-    }
-    // One batch per interval: reception does not wait for a scrolling animation.
-    LaunchedEffect(pendingScroll, isAnyMenuOpen) {
-        if (pendingScroll) {
-            delay(300L)
-            if (latestFollowing && !isAnyMenuOpen && !listState.isScrollInProgress && latestMessages.isNotEmpty()) {
-                autoScrolling = true
-                try { listState.animateScrollToItem(latestMessages.lastIndex) }
-                finally { autoScrolling = false }
-            }
-            pendingScroll = false
-        }
     }
 
     Column(
@@ -190,14 +175,7 @@ fun LiveChatSection(
                     )
             ) {
                 AppSurface(
-                    onClick = {
-                        scope.launch {
-                            latestOnFollowingChange(true)
-                            autoScrolling = true
-                            try { listState.animateScrollToItem(latestMessages.lastIndex.coerceAtLeast(0)) }
-                            finally { autoScrolling = false }
-                        }
-                    },
+                    onClick = { onFollowingLatestChange(true) },
                     shape = AppShapes.container(ContainerLevel.Pill),
                     color = if (darkOverlay) palette.bubbleStrong else palette.surfaceMuted,
                 ) {
@@ -557,7 +535,13 @@ internal fun LiveChatInputBar(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             AppIconButton(onClick = onToggleDanmaku, modifier = Modifier.size(34.dp)) {
-                LiveDanmakuControlIcon(enabled = isDanmakuEnabled, tint = foreground, modifier = Modifier.size(22.dp))
+                LiveDanmakuControlIcon(
+                    enabled = isDanmakuEnabled,
+                    tint = if (isDanmakuEnabled) AppContentColors.selectionAccent(
+                        com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled
+                    ) else foreground,
+                    modifier = Modifier.size(22.dp),
+                )
             }
             AppText("发送弹幕", modifier = Modifier.weight(1f).padding(top = 6.dp), color = foreground.copy(alpha = 0.8f), style = MaterialTheme.typography.bodyMedium)
             LiveLikeButton(tint = foreground, onLike = onLike, modifier = Modifier.size(34.dp), canLike = canLike, onUnavailable = onLikeUnavailable)

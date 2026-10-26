@@ -212,6 +212,24 @@ class SpaceViewModel(
     
     init {
         viewModelScope.launch {
+            com.android.purebilibili.data.repository.FanManagementRepository.removed.collect { event ->
+                if (event.identity != TokenManager.accountIdentity.value) return@collect
+                _uiState.update { state ->
+                    if (state !is SpaceUiState.Success) return@update state
+                    val target = state.userInfo.mid
+                    if (target != event.mid && target != event.identity.mid) return@update state
+                    val user = if (target == event.mid && state.userInfo.relationStatus == 6) {
+                        state.userInfo.copy(relationStatus = 2)
+                    } else state.userInfo
+                    val stats = state.relationStat?.let { stats ->
+                        if (target == event.identity.mid) stats.copy(follower = (stats.follower - 1).coerceAtLeast(0))
+                        else stats.copy(following = (stats.following - 1).coerceAtLeast(0))
+                    }
+                    state.copy(userInfo = user, relationStat = stats, headerState = state.headerState.copy(userInfo = user, relationStat = stats))
+                }
+            }
+        }
+        viewModelScope.launch {
             TokenManager.accountIdentity.collect { ensureContributionAccount() }
         }
         viewModelScope.launch {

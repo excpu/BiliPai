@@ -13,6 +13,27 @@ import java.io.File
 
 class VideoDetailReturnCoverPolicyTest {
     @Test
+    fun liveReturnAndCancelledReturnNeverExposeTheMediaBackdrop() {
+        val depths = (0..100).map { it / 100f }
+        for (committed in listOf(false, true)) {
+            val frames = (depths + depths.reversed()).map { depth ->
+                resolveVideoDetailReturnMediaFrame(
+                    transitionProgress = depth,
+                    isCommittedCardReturn = committed,
+                    isReturnGestureInProgress = !committed,
+                    hasResidentCover = true,
+                    liveReturnMorph = true,
+                )
+            }
+            for (frame in frames) {
+                val compositedAlpha = frame.coverAlpha + frame.playerAlpha * (1f - frame.coverAlpha)
+                assertEquals(1f, compositedAlpha, .0001f)
+            }
+            assertEquals(frames.take(depths.size), frames.takeLast(depths.size).reversed())
+        }
+    }
+
+    @Test
     fun entryCoverFadeNeverExposesAnEmptyMediaSlot() {
         for (step in 0..20) {
             val frame = resolveVideoDetailReturnMediaFrame(
@@ -1027,7 +1048,7 @@ class VideoDetailReturnCoverPolicyTest {
             0.0001f,
         )
         assertEquals(
-            0.5f,
+            1f,
             resolveVideoDetailReturnPlayerAlpha(0.1f, true, true, liveReturnMorph = true),
             0.0001f,
         )
@@ -1249,7 +1270,7 @@ class VideoDetailReturnCoverPolicyTest {
             0.0001f,
         )
         assertEquals(
-            0.5f,
+            1f,
             resolveVideoDetailReturnPlayerAlpha(
                 transitionProgress = 0.1f,
                 isCommittedCardReturn = false,

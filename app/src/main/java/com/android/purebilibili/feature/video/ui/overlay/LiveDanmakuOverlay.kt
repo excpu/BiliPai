@@ -116,7 +116,7 @@ fun LiveDanmakuOverlay(
                         scrollFixedVelocity = danmakuSettings.scrollFixedVelocity,
                         viewportWidthPx = view.width
                     ),
-                    lineHeightPx = textSize * danmakuSettings.lineHeight.coerceIn(0.8f, 2.2f),
+                    lineHeightPx = textSize * danmakuSettings.lineHeight.coerceIn(1f, 3f),
                     lineCount = resolveDanmakuVisibleLineCount(
                         visibleHeightPx = view.height.toFloat(),
                         areaRatioHint = safeDisplayArea,

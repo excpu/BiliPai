@@ -24,6 +24,8 @@ internal enum class SettingsIconRole {
     PLAYBACK,
     BOTTOM_BAR,
     PERMISSION,
+    SPACE_PRIVACY,
+    LOGIN_ACTIVITY,
     MESSAGE_NOTIFICATION,
     BLOCKED_LIST,
     SETTINGS_SHARE,
@@ -179,6 +181,8 @@ internal enum class SettingsIconRole {
     FULLSCREEN_SWIPE_BACK,
     FOLLOW_BUTTON,
     PRIVACY_HISTORY,
+    PRIVACY_SEARCH_RECOMMENDATION,
+    PERSONAL_RECAP,
     CUSTOM_MD3_COLOR,
     THEME_LIGHT_BACKGROUND,
     THEME_LIGHT_PRIMARY_TEXT,
@@ -204,7 +208,6 @@ internal enum class SettingsIconRole {
     BACK_TO_TOP,
     HOME_HEADER_COLLAPSE,
     PGC_TIMELINE,
-    RELATED_VIDEO_TRANSITION,
     RETURN_GESTURE_POSE,
     AUTO_SKIP_OP_ED,
     BLUR_INTENSITY,
@@ -255,6 +258,8 @@ internal fun resolveSettingsMaterialSymbolResource(role: SettingsIconRole): Int 
     SettingsIconRole.ANIMATION -> R.drawable.ms_animation_24
     SettingsIconRole.PLAYBACK -> R.drawable.ms_play_circle_24
     SettingsIconRole.BOTTOM_BAR -> R.drawable.ms_widgets_24
+    SettingsIconRole.LOGIN_ACTIVITY -> R.drawable.ic_settings_login_activity_24
+    SettingsIconRole.SPACE_PRIVACY -> R.drawable.ms_visibility_24
     SettingsIconRole.PERMISSION -> R.drawable.ms_security_24
     SettingsIconRole.MESSAGE_NOTIFICATION -> R.drawable.ms_notifications_24
     SettingsIconRole.BLOCKED_LIST -> R.drawable.ms_block_24
@@ -410,6 +415,8 @@ internal fun resolveSettingsMaterialSymbolResource(role: SettingsIconRole): Int 
     SettingsIconRole.UI_ENTRANCE_ANIMATION -> R.drawable.ms_motion_photos_on_24
     SettingsIconRole.FULLSCREEN_SWIPE_BACK -> R.drawable.ms_swipe_right_24
     SettingsIconRole.FOLLOW_BUTTON -> R.drawable.ms_person_add_24
+    SettingsIconRole.PRIVACY_SEARCH_RECOMMENDATION -> R.drawable.ms_search_24
+    SettingsIconRole.PERSONAL_RECAP -> R.drawable.ms_query_stats_24
     SettingsIconRole.PRIVACY_HISTORY -> R.drawable.ms_history_toggle_off_24
     SettingsIconRole.CUSTOM_MD3_COLOR -> R.drawable.ms_format_paint_24
     SettingsIconRole.THEME_LIGHT_BACKGROUND -> R.drawable.ms_light_mode_24
@@ -432,11 +439,10 @@ internal fun resolveSettingsMaterialSymbolResource(role: SettingsIconRole): Int 
     SettingsIconRole.NAV_ICON_CROSS_SCALE -> R.drawable.ms_compare_arrows_24
     SettingsIconRole.SUB_REPLY_LOADED_COUNT -> R.drawable.ms_numbers_24
     SettingsIconRole.COMMENT_VISIBILITY_CHECK -> R.drawable.ms_fact_check_24
-    SettingsIconRole.PORTRAIT_AMBIENT_HAZE -> R.drawable.ms_filter_hdr_24
+    SettingsIconRole.PORTRAIT_AMBIENT_HAZE -> R.drawable.ic_settings_portrait_ambient_24
     SettingsIconRole.BACK_TO_TOP -> R.drawable.ms_keyboard_double_arrow_up_24
     SettingsIconRole.HOME_HEADER_COLLAPSE -> R.drawable.ms_compress_24
     SettingsIconRole.PGC_TIMELINE -> R.drawable.ms_calendar_month_24
-    SettingsIconRole.RELATED_VIDEO_TRANSITION -> R.drawable.ms_video_library_24
     SettingsIconRole.RETURN_GESTURE_POSE -> R.drawable.ms_rotate90_degrees_ccw_24
     SettingsIconRole.AUTO_SKIP_OP_ED -> R.drawable.ms_skip_next_24
     SettingsIconRole.BLUR_INTENSITY -> R.drawable.ms_flare_24
@@ -490,6 +496,8 @@ internal fun resolveSettingsSearchTargetIconRole(
     SettingsSearchTarget.PLAYBACK -> SettingsIconRole.PLAYBACK
     SettingsSearchTarget.BOTTOM_BAR -> SettingsIconRole.BOTTOM_BAR
     SettingsSearchTarget.PERMISSION -> SettingsIconRole.PERMISSION
+    SettingsSearchTarget.SPACE_PRIVACY -> SettingsIconRole.SPACE_PRIVACY
+    SettingsSearchTarget.LOGIN_ACTIVITY -> SettingsIconRole.LOGIN_ACTIVITY
     SettingsSearchTarget.MESSAGE_NOTIFICATION -> SettingsIconRole.MESSAGE_NOTIFICATION
     SettingsSearchTarget.BLOCKED_LIST -> SettingsIconRole.BLOCKED_LIST
     SettingsSearchTarget.SETTINGS_SHARE -> SettingsIconRole.SETTINGS_SHARE

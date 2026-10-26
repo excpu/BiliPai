@@ -66,6 +66,9 @@ class AppGlassMenuRequest(
     val onSourceVisibilityChange: (Boolean) -> Unit = {},
     val interactiveContent: Boolean = false,
     val darkTheme: Boolean? = null,
+    val showScrollbar: Boolean = true,
+    val fitWholeItems: Boolean = false,
+    val useAvailableHeight: Boolean = false,
 )
 
 class AppGlassMenuScope(
@@ -74,6 +77,7 @@ class AppGlassMenuScope(
     val unregister: (Any) -> Unit,
     val dispatch: (action: () -> Unit, dismiss: Boolean) -> Unit,
     val backdrop: Backdrop? = null,
+    val fitWholeItems: Boolean = false,
 )
 
 val LocalAppGlassMenuActive = compositionLocalOf { false }
@@ -111,6 +115,9 @@ fun AppGlassMenu(
     carriedPress: AppSingleChoicePopupPress? = null,
     onSourceVisibilityChange: (Boolean) -> Unit = {},
     interactiveContent: Boolean = false,
+    showScrollbar: Boolean = true,
+    fitWholeItems: Boolean = false,
+    useAvailableHeight: Boolean = false,
     content: @Composable () -> Unit,
 ): Boolean {
     val presenter = LocalAppGlassMenuPresenter.current
@@ -175,12 +182,23 @@ fun AppGlassMenu(
                     }
                 },
                 interactiveContent = interactiveContent,
+                showScrollbar = showScrollbar,
+                fitWholeItems = fitWholeItems,
+                useAvailableHeight = useAvailableHeight,
                 content = { scope ->
                     CompositionLocalProvider(contentLocals) {
                         CompositionLocalProvider(
                             LocalAppGlassMenuScope provides scope.takeUnless { interactiveContent },
                             LocalAppGlassMenuBackdrop provides scope.backdrop,
-                        ) { latestContent() }
+                            // 菜单绘制在独立覆盖层，不能继承触发控件的玻璃形变归属。
+                            com.android.purebilibili.core.ui.blur.LocalAppGlassContainer provides null,
+                        ) {
+                            com.android.purebilibili.core.ui.blur.AppGlassContainerContent(
+                                enabled = interactiveContent,
+                                backdrop = scope.backdrop,
+                                ownsDeformation = true,
+                            ) { latestContent() }
+                        }
                     }
                 },
             ))

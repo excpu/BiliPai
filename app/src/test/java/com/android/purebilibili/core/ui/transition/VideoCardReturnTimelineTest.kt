@@ -8,6 +8,27 @@ import kotlin.test.assertTrue
 
 class VideoCardReturnTimelineTest {
     @Test
+    fun landingMediaAndTitleShareGentleEndpointsAndReverseTogether() {
+        val start = VideoCardTransitionVisualTimeline.MEDIA_RETURN_START
+        val end = VideoCardTransitionVisualTimeline.MEDIA_RETURN_END
+        val window = end - start
+        fun media(settle: Float) = resolveVideoCardLiveReturnVisualHandoffAlpha(1f - settle)
+        assertTrue(media(start + window * .01f) < .001f)
+        assertTrue(1f - media(end - window * .01f) < .001f)
+        for (step in 0..100) {
+            val depth = 1f - (start + window * step / 100f)
+            val alpha = resolveVideoCardLiveReturnVisualHandoffAlpha(depth)
+            assertEquals(alpha, resolveVideoCardSourceChromeReturnAlpha(depth), .0001f)
+            assertEquals(alpha, resolveVideoCardContentHandoffProgress(
+                depth, VideoCardTransitionBackgroundPhase.HELD, true,
+            ), .0001f)
+            assertEquals(1f, alpha + resolveVideoCardDetailChromeAlpha(
+                depth, VideoCardTransitionBackgroundPhase.RETURNING, false,
+            ), .0001f)
+        }
+    }
+
+    @Test
     fun nativeViewportBodyStaysVisibleMidReturnAndRestoresOnCancel() {
         fun frame(depth: Float, phase: VideoCardTransitionBackgroundPhase) =
             resolveVideoCardSecondaryContentVisualFrame(

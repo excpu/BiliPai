@@ -318,9 +318,7 @@
     <string name="animation_section_maid">Blue Snow Maid</string>
     <string name="animation_maid_summary">Hides maid animations and static images when turned off</string>
     <string name="animation_card_entrance_summary">Fade cards in one at a time when opening Home</string>
-    <string name="animation_card_transition_summary">Smoothly transition the cover and title into the detail page; use the global page animation when off</string>
-    <string name="animation_related_transition_on">Open a related video by expanding its card into the video page</string>
-    <string name="animation_related_transition_off">Use the standard page animation when opening a related video</string>
+    <string name="animation_card_transition_summary">List and related video cards share cover and title expansion into the detail page; use the global page animation when off</string>
     <string name="animation_live_transition_summary">Keep the currently playing frame visible during the transition</string>
     <string name="animation_return_follow_on">Restore the cover and details to the card as you return</string>
     <string name="animation_return_follow_off">Switch back to the video card after the return transition</string>
@@ -376,7 +374,6 @@
     <string name="animation_title_maid">Blue Snow Maid animation</string>
     <string name="animation_title_card_entrance">Home card fade-in</string>
     <string name="animation_title_card_transition">Card expansion animation</string>
-    <string name="animation_title_related_transition">Related card expansion</string>
     <string name="animation_title_live_transition">Transition from current frame</string>
     <string name="animation_title_return_follow">Restore card while returning</string>
     <string name="animation_title_return_tilt">Tilt while returning</string>
@@ -395,7 +392,6 @@
     <string name="preview_title_long_press">Temporary speed boost</string>
     <string name="preview_title_card_entrance">Home card fade-in</string>
     <string name="preview_title_card_expand">Card expansion animation</string>
-    <string name="preview_title_related_expand">Related card expansion</string>
     <string name="preview_title_live_frame">Transition from current frame</string>
     <string name="preview_title_return_content">Restore card while returning</string>
     <string name="preview_title_return_tilt">Tilt while returning</string>
@@ -406,7 +402,6 @@
     <string name="preview_summary_long_press">Press and hold the video to temporarily use the current speed setting (%1$s), then release to restore the previous speed. This demo starts at 1x.</string>
     <string name="preview_summary_card_entrance">Cards fade in one at a time when Home opens. When disabled, they appear immediately.</string>
     <string name="preview_summary_card_expand">Tap a video card to smoothly transition its cover and title into the detail page. When disabled, the standard page transition is used.</string>
-    <string name="preview_summary_related_expand">Open a related video below the detail page to expand its card into a new video page. Card expansion must be enabled.</string>
     <string name="preview_summary_live_frame">Keep the current video frame visible during expansion. When disabled, use the cover image for the transition. Card expansion must be enabled. The demo does not load a video.</string>
     <string name="preview_summary_return_content">As you return, the video gradually becomes its cover and card details. When disabled, it switches after the return completes. Card expansion must be enabled.</string>
     <string name="preview_summary_return_tilt">Tilt the image with your finger during swipe back. When disabled, it stays level. The movement path stays the same so you can compare tilt alone. Card expansion must be enabled.</string>
@@ -446,10 +441,6 @@
     <string name="animation_section_card">Card animations</string>
     <string name="preview_caption_card_entrance_on">Home cards fade in one at a time</string>
     <string name="preview_caption_card_entrance_off">Home cards appear immediately</string>
-    <string name="preview_caption_related_step_1">Tap a related video</string>
-    <string name="preview_caption_related_step_2">The related card expands</string>
-    <string name="preview_caption_related_step_3">A new video page opens</string>
-    <string name="preview_caption_related_off">Tap a related video; use the standard page transition</string>
     <string name="preview_caption_live_on">The current frame keeps playing through the transition</string>
     <string name="preview_caption_live_off">Use a static cover for the transition</string>
     <string name="preview_caption_return_content_on">The cover and details return gradually as you go back</string>
@@ -786,7 +777,7 @@
     <string name="home_settings_display_mode_grid_desc">Arrange videos in columns based on screen width.</string>
     <string name="home_settings_display_mode_single">Single-column list</string>
     <string name="home_settings_display_mode_single_desc">Show one video per row.</string>
-    <string name="home_settings_grid_columns_title">Home grid columns</string>
+    <string name="home_settings_grid_columns_title">Default columns for wide windows</string>
     <string name="home_settings_grid_columns_adaptive">Adaptive by default. Foldable cover screens and narrow windows save their own setting. Pinch to adjust.</string>
     <string name="home_settings_grid_columns_fixed">Use %1$d columns on wide screens. Foldable cover screens and narrow windows save their own setting.</string>
     <string name="home_settings_grid_columns_auto">Automatic</string>
@@ -802,7 +793,7 @@
     <string name="home_settings_pinch_columns_title">Pinch to adjust columns</string>
     <string name="home_settings_pinch_columns_summary">Pinch with two fingers on a video list to change the number of columns.</string>
     <string name="home_settings_search_display_style_title">Display layout</string>
-    <string name="home_settings_search_grid_columns_title">Home grid columns</string>
+    <string name="home_settings_search_grid_columns_title">Default columns for wide windows</string>
     <string name="home_settings_search_card_width_title">Recommendation card width</string>
     <string name="home_settings_search_pinch_columns_title">Pinch to adjust columns</string>
     <string name="appearance_section_language">Language</string>
@@ -925,4 +916,10 @@
     <string name="animation_indicator_wobble_title">Liquid glass indicator recoil</string>
     <string name="animation_indicator_wobble_summary">Add squash and rebound when selecting a tab or releasing a drag. Applies only to liquid glass indicators; turning it off keeps normal movement and press feedback.</string>
     <string name="animation_settings_container_blur_summary">Blur the settings page behind container transitions in real time; requires Android 12 or later</string>
+    <string name="home_settings_grid_customization_summary">Turn off to restore automatic layouts while keeping your choices. Single-column video mode is unchanged.</string>
+    <string name="home_settings_grid_share_summary">Share and save the last column count across supported lists, or adjust each page independently. Narrow and wide windows keep separate values.</string>
+    <string name="home_settings_grid_default_summary">Automatic uses the page layout. Fixed counts are limited by the content width. Shared pinch changes update this value.</string>
+    <string name="home_settings_grid_customization_title">Customize list columns</string>
+    <string name="home_settings_grid_share_title">Share columns across pages</string>
+    <string name="home_settings_grid_compact_title">Default columns for narrow windows</string>
 </resources>

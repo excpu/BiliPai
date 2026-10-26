@@ -740,7 +740,8 @@ fun BottomControlBar(
     val inlineTimeGlassDock = !isFullscreen && com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled
     val compactInlineGlassControls = inlineTimeGlassDock && uiLayoutWidthDp < 600
     // 移除重复播放按钮后优先恢复倍速；更窄窗口仍保留菜单回退。
-    val showInlineSpeedAction = !compactInlineGlassControls || uiLayoutWidthDp >= 360
+    val showInlineSpeedAction = !compactInlineGlassControls ||
+        (uiLayoutWidthDp >= 360 && !showPortraitSwitchButtonInline)
     val compactLandscapeGlassControls = isFullscreen && liquidGlassEnabled && uiLayoutWidthDp < 600
     // 横屏玻璃使用独立胶囊间距；原生路径保留原有文字间距。
     val actionSpacing = if (isFullscreen && liquidGlassEnabled) 6.dp
@@ -1415,20 +1416,30 @@ fun BottomControlBar(
                             }
 
                             // 📱 [修复] 竖屏全屏按钮 - 仅在非全屏且有需要时显示，避免挤压平板控制栏
-                            if (showPortraitSwitchButtonInline && !liquidGlassEnabled) {
-                                AppText(
-                                    text = "竖屏",
-                                    color = Color.White,
-                                    fontSize = layoutPolicy.actionTextFontSp.sp,
-                                    lineHeight = (layoutPolicy.actionTextFontSp + 2).sp,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    modifier = Modifier
-                                        .then(if (isFullscreen) Modifier.heightIn(min = PlayerChromeLayout.CircularButtonSizeDp.dp) else Modifier)
-                                        .appActionClickable(onClick = onPortraitFullscreen)
-                                        .then(if (isFullscreen) Modifier.wrapContentSize(Alignment.Center) else Modifier)
-                                )
+                            if (showPortraitSwitchButtonInline) {
+                                PlayerGlassActionShell(enabled = liquidGlassEnabled) {
+                                    AppText(
+                                        text = "竖屏",
+                                        color = Color.White,
+                                        fontSize = layoutPolicy.actionTextFontSp.sp,
+                                        lineHeight = (layoutPolicy.actionTextFontSp + 2).sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        modifier = Modifier
+                                            .then(if (isFullscreen) Modifier.heightIn(min = PlayerChromeLayout.CircularButtonSizeDp.dp) else Modifier)
+                                            .appActionClickable(onClick = onPortraitFullscreen)
+                                            .testTag("player_portrait_fullscreen")
+                                            .then(
+                                                if (liquidGlassEnabled) Modifier
+                                                    .heightIn(min = 40.dp)
+                                                    .padding(horizontal = 10.dp)
+                                                    .wrapContentSize(Alignment.Center)
+                                                else Modifier
+                                            )
+                                            .then(if (isFullscreen) Modifier.wrapContentSize(Alignment.Center) else Modifier)
+                                    )
+                                }
                             }
                         }
                     }
@@ -1848,7 +1859,7 @@ fun BottomControlBar(
                                                         onAudioQualityClick()
                                                     }
                                                 ) else null,
-                                                if ((showPortraitSwitchButton || (liquidGlassEnabled && showPortraitSwitchButtonInline)) && !showDirectTools) {
+                                                if (showPortraitSwitchButton && !showDirectTools) {
                                                     AppWindowAction(label = "竖屏", onClick = {
                                                             showMoreActionsPanel = false
                                                             onPortraitFullscreen()
@@ -1899,18 +1910,28 @@ fun BottomControlBar(
                             }
 
                             // 📱 [修复] 竖屏全屏按钮 - 仅在非全屏且有需要时显示，避免挤压平板控制栏
-                            if (showPortraitSwitchButtonInline && !liquidGlassEnabled) {
-                                AppText(
-                                    text = "竖屏",
-                                    color = Color.White,
-                                    fontSize = layoutPolicy.actionTextFontSp.sp,
-                                    lineHeight = (layoutPolicy.actionTextFontSp + 2).sp,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    modifier = Modifier
-                                        .appActionClickable(onClick = onPortraitFullscreen)
-                                )
+                            if (showPortraitSwitchButtonInline) {
+                                PlayerGlassActionShell(enabled = liquidGlassEnabled) {
+                                    AppText(
+                                        text = "竖屏",
+                                        color = Color.White,
+                                        fontSize = layoutPolicy.actionTextFontSp.sp,
+                                        lineHeight = (layoutPolicy.actionTextFontSp + 2).sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        modifier = Modifier
+                                            .appActionClickable(onClick = onPortraitFullscreen)
+                                            .testTag("player_portrait_fullscreen")
+                                            .then(
+                                                if (liquidGlassEnabled) Modifier
+                                                    .heightIn(min = 40.dp)
+                                                    .padding(horizontal = 10.dp)
+                                                    .wrapContentSize(Alignment.Center)
+                                                else Modifier
+                                            )
+                                    )
+                                }
                             }
                         }
                     }

@@ -254,49 +254,51 @@ internal fun AudioModeMusicPlayer(
         )
     }
 
-    val queue = if (playlist.isEmpty()) {
-        if (info.pages.size > 1) {
-            info.pages.mapIndexed { index, page ->
-                MusicQueueItemUi(
-                    stableId = "video:${info.bvid}:${page.cid}",
-                    title = if (page.part.isNotBlank()) page.part else "${displayTitle} P${page.page}",
-                    artist = info.owner.name,
-                    coverUrl = FormatUtils.fixImageUrl(info.pic)
-                )
-            }
-        } else if (successState.related.isNotEmpty()) {
-            val currentItem = MusicQueueItemUi(
-                stableId = "video:${info.bvid}:${info.cid}",
-                title = displayTitle,
-                artist = info.owner.name,
-                coverUrl = FormatUtils.fixImageUrl(info.pic)
-            )
-            listOf(currentItem) + successState.related.take(10).map { rel ->
-                MusicQueueItemUi(
-                    stableId = "video:${rel.bvid}:${rel.cid}",
-                    title = rel.title,
-                    artist = rel.owner.name,
-                    coverUrl = FormatUtils.fixImageUrl(rel.pic)
-                )
-            }
-        } else {
-            listOf(
-                MusicQueueItemUi(
+    val queue = remember(playlist, info, displayTitle, successState.related) {
+        if (playlist.isEmpty()) {
+            if (info.pages.size > 1) {
+                info.pages.mapIndexed { index, page ->
+                    MusicQueueItemUi(
+                        stableId = "video:${info.bvid}:${page.cid}",
+                        title = if (page.part.isNotBlank()) page.part else "${displayTitle} P${page.page}",
+                        artist = info.owner.name,
+                        coverUrl = FormatUtils.fixImageUrl(info.pic)
+                    )
+                }
+            } else if (successState.related.isNotEmpty()) {
+                val currentItem = MusicQueueItemUi(
                     stableId = "video:${info.bvid}:${info.cid}",
                     title = displayTitle,
                     artist = info.owner.name,
                     coverUrl = FormatUtils.fixImageUrl(info.pic)
                 )
-            )
-        }
-    } else {
-        playlist.mapIndexed { index, item ->
-            MusicQueueItemUi(
-                stableId = "video:${item.bvid}:$index",
-                title = item.title,
-                artist = item.owner,
-                coverUrl = FormatUtils.fixImageUrl(item.cover)
-            )
+                listOf(currentItem) + successState.related.take(10).map { rel ->
+                    MusicQueueItemUi(
+                        stableId = "video:${rel.bvid}:${rel.cid}",
+                        title = rel.title,
+                        artist = rel.owner.name,
+                        coverUrl = FormatUtils.fixImageUrl(rel.pic)
+                    )
+                }
+            } else {
+                listOf(
+                    MusicQueueItemUi(
+                        stableId = "video:${info.bvid}:${info.cid}",
+                        title = displayTitle,
+                        artist = info.owner.name,
+                        coverUrl = FormatUtils.fixImageUrl(info.pic)
+                    )
+                )
+            }
+        } else {
+            playlist.mapIndexed { index, item ->
+                MusicQueueItemUi(
+                    stableId = "video:${item.bvid}:$index",
+                    title = item.title,
+                    artist = item.owner,
+                    coverUrl = FormatUtils.fixImageUrl(item.cover)
+                )
+            }
         }
     }
     val currentIndex = if (playlist.isNotEmpty()) {

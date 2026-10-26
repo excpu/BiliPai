@@ -1121,8 +1121,8 @@ internal fun VideoContentSection(
             // 在相邻边界重新起算而形成断层。
             // 液态玻璃开启时，播放器折叠/隐藏后 chrome 仍对滚动中的评论内容做
             // 模糊采样；关闭时保持原有行为——折叠态使用内容页底色背景层。
-            // A scroll-state toggle must not add/remove 46dp and remap the entire blur/fade
-            // gradient in one frame. Read continuous page geometry only during measurement.
+            // 背景与评论栏共用实际可见高度：整行收起时同步缩短，保留排序控件时仍覆盖该行。
+            // 在测量阶段读取连续高度，避免折叠结束后留下整行底色遮住评论。
             val chromeBlurActive = !isPlayerCollapsed || liquidGlassEnabled
             Box(
                 modifier = Modifier
@@ -1131,7 +1131,7 @@ internal fun VideoContentSection(
                         val commentFraction = resolveVideoContentCommentChromeHeightFraction(
                             pagerState.currentPage + pagerState.currentPageOffsetFraction,
                         )
-                        tabBarVisibleHeightPx() + commentHeaderHeightProvider() * commentFraction
+                        tabBarVisibleHeightPx() + commentHeaderVisibleHeightPx() * commentFraction
                     }
                     .background(
                         if (isPlayerCollapsed && !liquidGlassEnabled) {
@@ -1566,7 +1566,10 @@ private fun VideoIntroTab(
                     title = row.firstOrNull()?.title,
                 )
             } else CompositionLocalProvider(
-                LocalVideoCardSharedElementSourceRoute provides "video/${info.bvid}"
+                LocalVideoCardSharedElementSourceRoute provides
+                    com.android.purebilibili.feature.video.ui.components.resolveRelatedVideoCardHostRoute(
+                        LocalVideoCardSharedElementSourceRoute.current, info.bvid,
+                    )
             ) {
                 RelatedVideoGridRow(
                     videos = row,

@@ -31,12 +31,15 @@ import kotlinx.coroutines.flow.filter
 import com.android.purebilibili.core.ui.components.resolveMeasuredTabVisibilityDelta
 import androidx.compose.runtime.remember
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.unit.LayoutDirection
 import com.android.purebilibili.core.ui.LocalImmersiveTopChromeActive
 import com.android.purebilibili.core.ui.AppSurfaceTokens
+import com.android.purebilibili.core.ui.AppShapes
+import com.android.purebilibili.core.ui.isMiuixNonGlassEnabled
 import com.android.purebilibili.core.ui.components.shouldUseOpaqueMiuixTabBackdrop
 import top.yukonga.miuix.kmp.squircle.addSquircleRect
 import androidx.compose.ui.Modifier
@@ -553,6 +556,10 @@ private fun <T> AppMiuixSizedTabs(
     onSelectionChange: (T) -> Unit,
 ) {
     val tabColors = resolveAppMiuixSegmentedColors(colors)
+    // 仅原生 Miuix 标签与首页上下导航共用胶囊；玻璃及 MD3 回退保留原轮廓。
+    val useCapsule = isMiuixNonGlassEnabled()
+    val itemClip = if (useCapsule) Modifier.clip(AppShapes.SelectionIndicator)
+        else Modifier.squircleClip(cornerRadius)
     val density = LocalDensity.current
     val scrollState = rememberScrollState()
     val motionEnabled = com.android.purebilibili.core.ui.LocalComponentMotionEnabled.current
@@ -616,7 +623,7 @@ private fun <T> AppMiuixSizedTabs(
             modifier = Modifier
                 .width(viewportWidth)
                 .height(height)
-                .squircleClip(cornerRadius)
+                .then(itemClip)
                 .background(if (drawTrack) tabColors.backgroundColor else Color.Transparent)
                 .horizontalScroll(scrollState, enabled = needsScroll)
                 .selectableGroup()
@@ -627,7 +634,13 @@ private fun <T> AppMiuixSizedTabs(
                 horizontalArrangement = Arrangement.spacedBy(gap),
             ) {
                 widths.forEach { width ->
-                    Box(Modifier.width(width).height(height).adaptiveSquircleBackground(inactiveBackground, cornerRadius))
+                    Box(
+                        Modifier
+                            .width(width)
+                            .height(height)
+                            .then(if (useCapsule) Modifier.background(inactiveBackground, AppShapes.SelectionIndicator)
+                                else Modifier.adaptiveSquircleBackground(inactiveBackground, cornerRadius)),
+                    )
                 }
             }
             Box(
@@ -635,7 +648,8 @@ private fun <T> AppMiuixSizedTabs(
                     .offset(x = bounds.leftDp.dp)
                     .width(bounds.widthDp.dp)
                     .height(height)
-                    .adaptiveSquircleBackground(tabColors.selectedBackgroundColor, cornerRadius),
+                    .then(if (useCapsule) Modifier.background(tabColors.selectedBackgroundColor, AppShapes.SelectionIndicator)
+                        else Modifier.adaptiveSquircleBackground(tabColors.selectedBackgroundColor, cornerRadius)),
             )
             Row(
                 modifier = Modifier.height(height).padding(horizontal = padding),
@@ -647,7 +661,7 @@ private fun <T> AppMiuixSizedTabs(
                         modifier = Modifier
                             .width(widths[index])
                             .height(height)
-                            .squircleClip(cornerRadius)
+                            .then(itemClip)
                             .selectable(selected, enabled = enabled, role = Role.Tab) { onSelectionChange(option.value) }
                             .semantics { collectionItemInfo = CollectionItemInfo(0, 1, index, 1) }
                             .padding(horizontal = 12.dp),

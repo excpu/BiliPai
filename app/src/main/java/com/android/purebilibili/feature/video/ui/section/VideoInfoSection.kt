@@ -791,21 +791,6 @@ fun VideoTitleWithDesc(
         trailingStatsContent?.invoke()
         }
 
-        if (videoBadges.isNotEmpty()) {
-            Spacer(Modifier.height(6.dp))
-            androidx.compose.foundation.layout.FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                videoBadges.forEach { badge ->
-                    VideoDetailBadgeChip(
-                        text = badge,
-                        emphasized = badge.startsWith("充电专属")
-                    )
-                }
-            }
-        }
-
         // 视频荣誉徽标(全站排行榜/每周必看/入站必刷/热门):可点击跳转对应榜单页
         val honorChips = info.honorReply?.honor.orEmpty().mapNotNull { honor ->
             resolveVideoHonorChipText(
@@ -823,17 +808,24 @@ fun VideoTitleWithDesc(
                 Triple(honor, text, jumpUrl)
             }
         }
-        if (honorChips.isNotEmpty()) {
-            // 紧跟统计行/徽标区:上方无徽标时收紧到 3dp,避免与播放量行隔离太远。
+        // 内容属性与榜单荣誉共用流式标签区，空间不足时自动换行。
+        if (videoBadges.isNotEmpty() || honorChips.isNotEmpty()) {
             Spacer(Modifier.height(if (videoBadges.isNotEmpty()) 6.dp else 3.dp))
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            androidx.compose.foundation.layout.FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                honorChips.forEach { (honor, text, jumpUrl) ->
+                videoBadges.forEach { badge ->
+                    VideoDetailBadgeChip(
+                        text = badge,
+                        emphasized = badge.startsWith("充电专属"),
+                    )
+                }
+                honorChips.forEach { (_, text, jumpUrl) ->
                     VideoHonorChip(
                         text = text,
-                        onClick = { onDescriptionUrlClick?.invoke(jumpUrl) }
+                        onClick = { onDescriptionUrlClick?.invoke(jumpUrl) },
                     )
                 }
             }
@@ -1004,9 +996,11 @@ private fun VideoDetailBadgeChip(
     text: String,
     emphasized: Boolean
 ) {
-    com.android.purebilibili.core.ui.components.AppStatusBadge(
-        label = text,
-        emphasized = emphasized,
+    val colors = MaterialTheme.colorScheme
+    VideoInfoChip(
+        text = text,
+        containerColor = if (emphasized) colors.primaryContainer else colors.surfaceContainerHighest,
+        contentColor = if (emphasized) colors.onPrimaryContainer else colors.onSurfaceVariant,
     )
 }
 
@@ -1043,18 +1037,43 @@ private fun VideoHonorChip(
     text: String,
     onClick: (() -> Unit)? = null
 ) {
-    AppSurface(
-        onClick = onClick ?: {},
-        enabled = onClick != null,
-        shape = RoundedCornerShape(50),
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+    VideoInfoChip(
+        text = text,
+        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        onClick = onClick,
+    )
+}
+
+/** 标签共享字形、内边距与圆角；透明触控槽独立于可见标签，避免可点击标签下沉。 */
+@Composable
+private fun VideoInfoChip(
+    text: String,
+    containerColor: Color,
+    contentColor: Color,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+) {
+    val shape = when (LocalAppUiStyle.current) {
+        AppUiStyle.MATERIAL3 -> MaterialTheme.shapes.small
+        AppUiStyle.MIUIX -> AppShapes.container(ContainerLevel.Tag)
+    }
+    Box(
+        modifier = modifier
+            .heightIn(min = 48.dp)
+            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier),
+        contentAlignment = Alignment.Center,
     ) {
-        AppText(
-            text = text,
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-        )
+        AppSurface(shape = shape, color = containerColor, contentColor = contentColor) {
+            AppText(
+                text = text,
+                color = contentColor,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+        }
     }
 }
 
@@ -1303,6 +1322,9 @@ fun UpInfoSection(
                 }
             }
 
+            val followAccent = AppContentColors.selectionAccent(
+                com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled
+            )
             val followDarkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
             val followVisualPolicy = remember(isFollowing, followDarkTheme) {
                 resolveVideoFollowVisualPolicy(
@@ -1320,7 +1342,7 @@ fun UpInfoSection(
                     onFollowClick = onFollowClick,
                 ),
                 enabled = followStatusKnown,
-                color = when (followVisualPolicy.detailButtonTone) {
+                color = if (isFollowing) followAccent.copy(alpha = 0.14f) else when (followVisualPolicy.detailButtonTone) {
                     FollowButtonTone.PRIMARY -> AppContentColors.accent()
                     FollowButtonTone.PRIMARY_CONTAINER -> MaterialTheme.colorScheme.primaryContainer
                 },
@@ -1342,7 +1364,7 @@ fun UpInfoSection(
                             maxLines = 1,
                             softWrap = false,
                             style = MaterialTheme.typography.labelMedium,
-                            color = when (followVisualPolicy.detailTextTone) {
+                            color = if (isFollowing) followAccent else when (followVisualPolicy.detailTextTone) {
                                 FollowTextTone.ON_PRIMARY -> AppContentColors.onAccent()
                                 FollowTextTone.ON_PRIMARY_CONTAINER -> MaterialTheme.colorScheme.onPrimaryContainer
                             },
@@ -1518,6 +1540,9 @@ private fun CreatorTeamMemberChip(
     onFollowToggle: () -> Unit,
     onClick: () -> Unit
 ) {
+    val followAccent = AppContentColors.selectionAccent(
+        com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled
+    )
     val followDarkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val followVisualPolicy = remember(isFollowing, followDarkTheme) {
         resolveVideoFollowVisualPolicy(
@@ -1615,7 +1640,7 @@ private fun CreatorTeamMemberChip(
                 contentAlignment = Alignment.Center
             ) {
                 AppSurface(
-                    color = when (followVisualPolicy.detailButtonTone) {
+                    color = if (isFollowing) followAccent.copy(alpha = 0.14f) else when (followVisualPolicy.detailButtonTone) {
                         FollowButtonTone.PRIMARY -> AppContentColors.accent()
                         FollowButtonTone.PRIMARY_CONTAINER -> MaterialTheme.colorScheme.primaryContainer
                     },
@@ -1631,7 +1656,7 @@ private fun CreatorTeamMemberChip(
                             maxLines = 1,
                             softWrap = false,
                             style = MaterialTheme.typography.labelMedium,
-                            color = when (followVisualPolicy.detailTextTone) {
+                            color = if (isFollowing) followAccent else when (followVisualPolicy.detailTextTone) {
                                 FollowTextTone.ON_PRIMARY -> AppContentColors.onAccent()
                                 FollowTextTone.ON_PRIMARY_CONTAINER -> MaterialTheme.colorScheme.onPrimaryContainer
                             },

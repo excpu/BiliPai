@@ -1,6 +1,7 @@
 package com.android.purebilibili.feature.home
 
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -13,6 +14,9 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -91,9 +95,9 @@ class HomeScrollLayoutUiRegressionTest {
         rule.runOnIdle { initialHostCompositions = hostCompositions }
         assertTrue(initialHostCompositions > 0)
 
-        // Existing 4 px quantization maps -3 px to -4 px.
+        // 连续偏移保留 -3px，不再按 4dp 阶梯取整。
         rule.runOnIdle { headerOffset.floatValue = -3f }
-        rule.onNodeWithText("顶部留白：116").assertIsDisplayed()
+        rule.onNodeWithText("顶部留白：117").assertIsDisplayed()
         rule.runOnIdle { assertEquals(initialHostCompositions, hostCompositions) }
 
         rule.runOnIdle { headerOffset.floatValue = -200f }
@@ -140,7 +144,7 @@ class HomeScrollLayoutUiRegressionTest {
                 ),
                 pagerState = pager,
                 topTabEntries = listOf(HomeTopTabEntry.Category(HomeCategory.RECOMMEND)),
-                activeGridState = grid,
+                activeGridStateProvider = { grid },
                 subscriptionListState = grid,
                 revealLocked = revealLocked.value,
                 headerOffsetProvider = { headerOffset.floatValue },
@@ -184,4 +188,65 @@ class HomeScrollLayoutUiRegressionTest {
             assertEquals(1, bottomBarVisibility.size)
         }
     }
+    @Test
+    fun switchingPagesPreservesHeaderAndUsesOnlyVisiblePageRefreshState() {
+        val headerOffset = mutableFloatStateOf(-40f)
+        val globalOffset = mutableFloatStateOf(0f)
+        val refreshByPage = listOf(mutableStateOf(true), mutableStateOf(false))
+        lateinit var pager: PagerState
+        lateinit var scope: CoroutineScope
+        lateinit var connection: NestedScrollConnection
+        var switchChecked = false
+        rule.setContent {
+            pager = rememberPagerState(pageCount = { 2 })
+            scope = rememberCoroutineScope()
+            val grid = rememberLazyStaggeredGridState()
+            connection = rememberHomeHeaderScrollConnection(
+                configuration = HomeHeaderScrollConfiguration(
+                    collapseEnabled = true,
+                    collapseDistancePx = 100f,
+                    collapseTabs = false,
+                    bottomBarAutoHideEnabled = false,
+                    useSideNavigation = false,
+                    liquidGlassEnabled = false,
+                    hideType = HomeBarHideType.SYNC,
+                ),
+                pagerState = pager,
+                topTabEntries = listOf(
+                    HomeTopTabEntry.Category(HomeCategory.RECOMMEND),
+                    HomeTopTabEntry.Category(HomeCategory.POPULAR),
+                ),
+                activeGridStateProvider = { grid },
+                subscriptionListState = grid,
+                revealLocked = false,
+                refreshInteractionActiveProvider = { refreshByPage[pager.currentPage].value },
+                headerOffsetProvider = { headerOffset.floatValue },
+                globalScrollOffset = globalOffset,
+                onHeaderOffsetChanged = { value, _ -> headerOffset.floatValue = value },
+                onTabsCollapsedChanged = {},
+                onBottomBarVisibleChanged = {},
+            )
+        }
+        rule.runOnIdle {
+            scope.launch {
+                pager.scroll {
+                    connection.onPreScroll(Offset(0f, -20f), NestedScrollSource.UserInput)
+                    connection.onPostScroll(Offset.Zero, Offset(0f, 20f), NestedScrollSource.SideEffect)
+                    assertEquals(-40f, headerOffset.floatValue, 0f)
+                }
+                pager.scrollToPage(1)
+                assertEquals(-40f, headerOffset.floatValue, 0f)
+                // 推荐页仍在刷新，热门页的一次拖动不能被旧页刷新强制展开。
+                connection.onPreScroll(Offset(0f, -10f), NestedScrollSource.UserInput)
+                assertEquals(-50f, headerOffset.floatValue, 0f)
+                refreshByPage[1].value = true
+                connection.onPreScroll(Offset(0f, -10f), NestedScrollSource.UserInput)
+                assertEquals(0f, headerOffset.floatValue, 0f)
+                switchChecked = true
+            }
+        }
+        rule.waitForIdle()
+        rule.runOnIdle { assertTrue(switchChecked) }
+    }
+
 }

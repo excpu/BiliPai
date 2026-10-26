@@ -1,6 +1,9 @@
 // 文件路径: feature/watchlater/WatchLaterScreen.kt
 package com.android.purebilibili.feature.watchlater
 
+import com.android.purebilibili.feature.home.effectiveGridColumnCount
+import com.android.purebilibili.feature.home.effectiveGridColumnCountCompact
+import com.android.purebilibili.feature.home.gridColumnPinchEnabled
 import com.android.purebilibili.core.ui.components.VideoStatusBadges
 import com.android.purebilibili.core.ui.AppContentColors
 
@@ -10,6 +13,7 @@ import com.android.purebilibili.core.ui.components.AppFloatingToolbar
 import android.os.Build
 import com.android.purebilibili.core.ui.components.videoListItemModifier
 import com.android.purebilibili.feature.home.GridPinchColumnHudPill
+import com.android.purebilibili.feature.home.rememberFeedGridColumnPreference
 import com.android.purebilibili.feature.home.homeFeedPinchZoom
 import com.android.purebilibili.feature.home.resolveHomeFeedPinchColumnBounds
 import com.android.purebilibili.core.util.LocalWindowSizeClass
@@ -744,15 +748,8 @@ fun WatchLaterScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val accountIdentity by TokenManager.accountIdentity.collectAsStateWithLifecycle()
     val initialAccountIdentity = remember { accountIdentity }
-    // PiliPlus 式默认单列，双指缩放调节列数
+    // 默认单列，可通过默认列数或双指缩放调整。
     val windowSizeClass = LocalWindowSizeClass.current
-    val isCompactGridWindow = com.android.purebilibili.feature.home.isCompactHomeFeedScreen(
-        windowSizeClass.widthSizeClass
-    )
-    var pinchColumnsByWindow by rememberSaveable {
-        mutableStateOf(mapOf(false to 1, true to 1))
-    }
-    val pinchListColumns = pinchColumnsByWindow[isCompactGridWindow] ?: 1
     val configuration = LocalConfiguration.current
     val pinchColumnBounds = remember(windowSizeClass.widthSizeClass, configuration.screenWidthDp) {
         resolveHomeFeedPinchColumnBounds(
@@ -764,6 +761,17 @@ fun WatchLaterScreen(
     val homeSettings by SettingsManager.getHomeSettings(context).collectAsStateWithLifecycle(initialValue = com.android.purebilibili.core.store.HomeSettings(),
         context = kotlin.coroutines.EmptyCoroutineContext
     )
+    val gridColumnPreference = rememberFeedGridColumnPreference(
+        settings = homeSettings,
+        widthSizeClass = windowSizeClass.widthSizeClass,
+        defaultColumns = com.android.purebilibili.feature.home.resolveHomeFeedStoredColumnCount(
+            windowSizeClass.widthSizeClass, homeSettings.effectiveGridColumnCountCompact, homeSettings.effectiveGridColumnCount,
+        ).takeIf { it > 0 } ?: 1,
+        bounds = resolveHomeFeedPinchColumnBounds(
+            windowSizeClass.widthSizeClass, LocalConfiguration.current.screenWidthDp,
+        ),
+    )
+    val pinchListColumns = gridColumnPreference.columns
     val appThemeConfig = com.android.purebilibili.core.ui.LocalAppThemeConfig.current
     val hazeState = if (
         appThemeConfig.headerBlurEnabled &&
@@ -840,14 +848,15 @@ fun WatchLaterScreen(
     var pinchPillVisible by remember { mutableStateOf(false) }
     var pinchPillDismissJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     val onPinchColumnsChange: (Int) -> Unit = { newColumns ->
-        pinchColumnsByWindow = pinchColumnsByWindow + (isCompactGridWindow to newColumns)
+        gridColumnPreference.onChange(newColumns)
         hapticFeedback.performHapticFeedback(
             androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove
         )
         pinchPillVisible = true
         pinchPillDismissJob?.cancel()
     }
-    val onPinchColumnsEnd: (Int) -> Unit = { _ ->
+    val onPinchColumnsEnd: (Int) -> Unit = { finalColumns ->
+        gridColumnPreference.onGestureEnd(finalColumns)
         pinchPillDismissJob?.cancel()
         pinchPillDismissJob = pinchScope.launch {
             kotlinx.coroutines.delay(1000)
@@ -1374,7 +1383,7 @@ fun WatchLaterScreen(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .homeFeedPinchZoom(
-                                    enabled = homeSettings.pinchToChangeGridColumnsEnabled && !isBatchMode,
+                                    enabled = homeSettings.gridColumnPinchEnabled && !isBatchMode,
                                     currentColumns = columns,
                                     bounds = pinchColumnBounds,
                                     onColumnsChange = onPinchColumnsChange,

@@ -256,7 +256,6 @@ import com.android.purebilibili.navigation3.shouldBindVideoDetailBackPreviewPlay
 import com.android.purebilibili.navigation3.shouldActivateVideoDetailPlaybackSession
 import com.android.purebilibili.navigation3.shouldRecoverVideoPlayerAfterBackCancellation
 import com.android.purebilibili.navigation3.resolveBiliPaiVideoSource
-import com.android.purebilibili.navigation3.resolveVideoCardTransitionEnabledForSource
 import com.android.purebilibili.navigation3.shouldUseMiuixVideoCardMorph
 import com.android.purebilibili.navigation3.predictiveback.BiliPaiPredictiveBackAnimationStyle
 import com.android.purebilibili.navigation3.predictiveback.BiliPaiPredictiveBackExitDirection
@@ -504,9 +503,6 @@ fun AppNavigation(
     val videoTransitionRealtimeBlurEnabled by SettingsManager
         .getVideoTransitionRealtimeBlurEnabled(context)
         .collectAsStateWithLifecycle(initialValue = false)
-    val relatedVideoTransitionEnabled by SettingsManager
-        .getRelatedVideoTransitionEnabled(context)
-        .collectAsStateWithLifecycle(initialValue = true)
     val isBottomBarBlurEnabled = appearance.bottomBarBlurEnabled
     val bottomBarLabelMode = appearance.bottomBarLabelMode
     val isBottomBarFloating = appearance.bottomBarFloating
@@ -997,16 +993,18 @@ fun AppNavigation(
             return captureVideoCardTransitionSession(bvid, source, coverUrl, useRecordedCardSource)
         }
         fun prearmVideoCardOpening(session: VideoCardTransitionSession) {
-            val transitionEnabledForSource = resolveVideoCardTransitionEnabledForSource(
-                cardTransitionEnabled = sharedVideoCardTransitionEnabled,
-                relatedVideoTransitionEnabled = relatedVideoTransitionEnabled,
-                sourceRoute = session.sourceRoute,
-            )
             val hasUsableSourceBounds = session.cardBounds
                 ?.let { it.width > 1f && it.height > 1f } == true
+            if (sharedVideoCardTransitionEnabled && !systemReduceMotion && !hasUsableSourceBounds) {
+                com.android.purebilibili.core.ui.transition.VideoCardTransitionDiagnostics.onSourceGeometryRejected(
+                    sourceKey = session.sourceKey,
+                    recordedSourceKey = CardPositionManager.lastClickedVideoSourceKey,
+                    hasRecordedBounds = CardPositionManager.lastClickedCardBounds != null,
+                )
+            }
             if (
                 shouldUseMiuixVideoCardMorph(
-                    cardTransitionEnabled = transitionEnabledForSource,
+                    cardTransitionEnabled = sharedVideoCardTransitionEnabled,
                     reduceMotion = systemReduceMotion,
                     sourceRoute = session.sourceRoute,
                     hasUsableSourceBounds = hasUsableSourceBounds,
@@ -3567,6 +3565,7 @@ fun AppNavigation(
                                 onLogoutSuccess = { homeViewModel.refresh() },
                                 onAccountSwitchSuccess = { homeViewModel.refresh() },
                                 onSettingsClick = { navigateFromProfile(ScreenRoutes.Settings.route) },
+                                onAccountLedgerClick = { kind -> pushNavigation3Key(BiliPaiNavKey.AccountLedger(kind)) },
                                 onSearchClick = { navigateFromProfile(ScreenRoutes.Search.route) },
                                 onHistoryClick = { navigateFromProfile(ScreenRoutes.History.route) },
                                 showHistoryService = shouldShowProfileHistoryService(
@@ -3871,6 +3870,8 @@ fun AppNavigation(
                                     onAnimationClick = { pushNavigation3Key(BiliPaiNavKey.AnimationSettings) },
                                     onPlaybackClick = { pushNavigation3Key(BiliPaiNavKey.PlaybackSettings) },
                                     onPermissionClick = { pushNavigation3Key(BiliPaiNavKey.PermissionSettings) },
+                                    onSpacePrivacyClick = { pushNavigation3Key(BiliPaiNavKey.SpacePrivacySettings) },
+                                    onLoginActivityClick = { pushNavigation3Key(BiliPaiNavKey.LoginActivitySettings) },
                                     onMessageNotificationClick = { pushNavigation3Key(BiliPaiNavKey.MessageNotificationSettings) },
                                     onPluginsClick = { pushNavigation3Key(BiliPaiNavKey.PluginsSettings()) },
                                     onSettingsShareClick = { pushNavigation3Key(BiliPaiNavKey.SettingsShare) },
@@ -3910,6 +3911,8 @@ fun AppNavigation(
                                     onAnimationClick = { pushNavigation3Key(BiliPaiNavKey.AnimationSettings) },
                                     onPlaybackClick = { pushNavigation3Key(BiliPaiNavKey.PlaybackSettings) },
                                     onPermissionClick = { pushNavigation3Key(BiliPaiNavKey.PermissionSettings) },
+                                    onSpacePrivacyClick = { pushNavigation3Key(BiliPaiNavKey.SpacePrivacySettings) },
+                                    onLoginActivityClick = { pushNavigation3Key(BiliPaiNavKey.LoginActivitySettings) },
                                     onMessageNotificationClick = { pushNavigation3Key(BiliPaiNavKey.MessageNotificationSettings) },
                                     onPluginsClick = { pushNavigation3Key(BiliPaiNavKey.PluginsSettings()) },
                                     onSettingsShareClick = { pushNavigation3Key(BiliPaiNavKey.SettingsShare) },
@@ -3988,6 +3991,18 @@ fun AppNavigation(
                         BiliPaiNavEntryContentRole.PERMISSION_SETTINGS ->
                             SettingsTabletEntry {
                                 com.android.purebilibili.feature.settings.PermissionSettingsScreen(
+                                    onBack = { performSystemBackAction() }
+                                )
+                            }
+                        BiliPaiNavEntryContentRole.SPACE_PRIVACY_SETTINGS ->
+                            SettingsTabletEntry {
+                                com.android.purebilibili.feature.settings.SpacePrivacySettingsScreen(
+                                    onBack = { performSystemBackAction() }
+                                )
+                            }
+                        BiliPaiNavEntryContentRole.LOGIN_ACTIVITY_SETTINGS ->
+                            SettingsTabletEntry {
+                                com.android.purebilibili.feature.settings.LoginActivitySettingsScreen(
                                     onBack = { performSystemBackAction() }
                                 )
                             }
@@ -4123,6 +4138,13 @@ fun AppNavigation(
                                     scrollToTopChannel = watchLaterScrollChannel
                                 )
                             }
+                        BiliPaiNavEntryContentRole.ACCOUNT_LEDGER -> {
+                            val ledgerKey = key as BiliPaiNavKey.AccountLedger
+                            com.android.purebilibili.feature.profile.AccountLedgerScreen(
+                                initialKind = ledgerKey.kind,
+                                onBack = { performSystemBackAction() },
+                            )
+                        }
                         BiliPaiNavEntryContentRole.FOLLOWING -> {
                                 val followingKey = key as BiliPaiNavKey.Following
                                 if (followingKey.fans) {
@@ -4925,12 +4947,7 @@ fun AppNavigation(
                 BiliPaiNavDisplayHost(
                     backStack = navigation3BackStack,
                     activeMainHostRoute = activeBottomTabRoute,
-                    cardTransitionEnabled =
-                        com.android.purebilibili.navigation3.resolveVideoCardTransitionEnabledForSource(
-                            cardTransitionEnabled = sharedVideoCardTransitionEnabled,
-                            relatedVideoTransitionEnabled = relatedVideoTransitionEnabled,
-                            sourceRoute = navigation3SourceMetadata.sourceRoute,
-                        ),
+                    cardTransitionEnabled = sharedVideoCardTransitionEnabled,
                     videoTransitionRealtimeBlurEnabled = videoTransitionRealtimeBlurEnabled,
                     isLightBackground = isLightBackground,
                     reduceMotion = systemReduceMotion,

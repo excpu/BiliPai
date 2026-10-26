@@ -82,6 +82,72 @@ private class AppSessionCookieJar : okhttp3.CookieJar {
  * - 稍后再看 (L300-320): getWatchLaterList, addToWatchLater, deleteFromWatchLater
  */
 interface BilibiliApi {
+    @GET("x/member/web/coin/log")
+    suspend fun getAccountCoinLedger(
+        @Header(FORCE_COOKIE_HEADER) cookie: String,
+        @Query("jsonp") jsonp: String = "jsonp",
+        @Query("web_location") webLocation: String = "333.33",
+    ): AccountLedgerResponse
+
+    @GET("x/member/web/exp/log")
+    suspend fun getAccountExperienceLedger(
+        @Header(FORCE_COOKIE_HEADER) cookie: String,
+        @Query("jsonp") jsonp: String = "jsonp",
+        @Query("web_location") webLocation: String = "333.33",
+    ): AccountLedgerResponse
+
+    @GET("x/relation/tags")
+    suspend fun getSortableFollowGroups(
+        @Header(FORCE_COOKIE_HEADER) cookie: String,
+    ): FollowGroupOrderResponse
+
+    @FormUrlEncoded
+    @POST("x/relation/tags/update_sort")
+    suspend fun updateFollowGroupOrder(
+        @FieldMap fields: Map<String, String>,
+        @Header(FORCE_COOKIE_HEADER) cookie: String,
+        @Query("x-bili-device-req-json") device: String = "{\"platform\":\"web\",\"device\":\"pc\",\"spmid\":\"333.1387\"}",
+    ): FollowGroupOrderSaveResponse
+
+    @GET("x/space/acc/relation")
+    suspend fun getFanRelationship(
+        @Query("mid") mid: Long,
+        @Header(FORCE_COOKIE_HEADER) cookie: String,
+    ): FanRelationshipResponse
+
+    @FormUrlEncoded
+    @POST("x/relation/modify")
+    suspend fun removeAccountFan(
+        @FieldMap fields: Map<String, String>,
+        @Header(FORCE_COOKIE_HEADER) cookie: String,
+    ): FanRemovalResponse
+
+    @GET("https://passport.bilibili.com/x/safecenter/user_login_devices")
+    suspend fun getAccountLoginDevices(
+        @QueryMap params: Map<String, String>,
+        @Header(FORCE_COOKIE_HEADER) cookie: String,
+    ): AccountLoginDevicesResponse
+
+    @GET("x/member/web/login/log")
+    suspend fun getAccountLoginRecords(
+        @Header(FORCE_COOKIE_HEADER) cookie: String,
+        @Query("jsonp") jsonp: String = "jsonp",
+        @Query("web_location") webLocation: String = "333.33",
+    ): AccountLoginRecordsResponse
+
+    @GET("x/space/setting/app")
+    suspend fun getSpacePrivacy(
+        @Query("mid") mid: Long,
+        @Header(FORCE_COOKIE_HEADER) cookie: String,
+    ): SpacePrivacyResponse
+
+    @FormUrlEncoded
+    @POST("x/space/privacy/batch/modify")
+    suspend fun updateSpacePrivacy(
+        @FieldMap fields: Map<String, String>,
+        @Header(FORCE_COOKIE_HEADER) cookie: String,
+    ): SpacePrivacySaveResponse
+
     @FormUrlEncoded
     @POST("x/esports/grade/player")
     suspend fun submitLiveMatchGrade(
@@ -1394,6 +1460,7 @@ interface BilibiliApi {
         @Query("ps") ps: Int = 20,
         @Query("order") order: String = "desc",
         @Query("order_type") orderType: String = "attention",
+        @Header(FORCE_COOKIE_HEADER) cookie: String? = null,
     ): FollowingsResponse
 
     //  [官方适配] 获取视频在线观看人数

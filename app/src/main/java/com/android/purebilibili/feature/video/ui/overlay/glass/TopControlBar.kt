@@ -178,6 +178,7 @@ fun TopControlBar(
     showCurrentTime: Boolean = true,
     showInteractiveActions: Boolean = true,
     onBack: () -> Unit,
+    onHomeClick: (() -> Unit)? = null,
     // Interactions
     isLiked: Boolean = false,
     likeStatusKnown: Boolean,
@@ -203,6 +204,8 @@ fun TopControlBar(
     val displayCutoutInsets = WindowInsets.displayCutout
     val haptic = rememberHapticFeedback(com.android.purebilibili.core.ui.AppHapticScene.VIDEO_ACTIONS)
     val configuration = LocalConfiguration.current
+    val homeVisible = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE &&
+        onHomeClick != null
     val ambient = LocalAmbientPresentation.current
     var rowOrigin by remember { mutableStateOf<Offset?>(null) }
     var rowWidthPx by remember { androidx.compose.runtime.mutableIntStateOf(0) }
@@ -293,17 +296,10 @@ fun TopControlBar(
         modifier = modifier
             .fillMaxWidth()
             .then(if (isFullscreen) Modifier.windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal)) else Modifier)
-            .then(
-                if (
-                    shouldApplyStatusBarPaddingToTopControlBar(
-                        isFullscreen = isFullscreen,
-                        statusBarVisible = statusBarVisible,
-                    )
-                ) {
-                    Modifier.statusBarsPadding()
-                } else {
-                    Modifier
-                }
+            .playerControlTopSafeArea(
+                isFullscreen = isFullscreen,
+                isPortrait = configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT,
+                statusBarVisible = statusBarVisible,
             )
             .padding(
                 horizontal = layoutPolicy.horizontalPaddingDp.dp,
@@ -371,13 +367,34 @@ fun TopControlBar(
                     }
                 }
 
+                if (homeVisible) {
+                    Spacer(Modifier.width(layoutPolicy.actionSpacingDp.dp))
+                    PlayerControlGlassDock(
+                        enabled = isFullscreen || glassControls,
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                    ) {
+                        AppIconButton(
+                            onClick = requireNotNull(onHomeClick),
+                            modifier = Modifier.size(layoutPolicy.buttonSizeDp.dp),
+                        ) {
+                            AppIcon(
+                                imageVector = Icons.Outlined.Home,
+                                contentDescription = "返回首页",
+                                tint = Color.White,
+                                modifier = Modifier.size(layoutPolicy.iconSizeDp.dp),
+                            )
+                        }
+                    }
+                }
+
                 Spacer(modifier = if (separateGlassMore) Modifier.layout { _, constraints ->
                     val bounds = videoContentBounds.value
                     val origin = rowOrigin
                     val defaultGap = layoutPolicy.backToTitleSpacingDp.dp.roundToPx()
                     val titleStart = if (bounds != null && origin != null) {
                         kotlin.math.ceil(bounds.left + 12.dp.toPx() - origin.x -
-                            leftSectionStartOffset.toPx() - layoutPolicy.buttonSizeDp.dp.toPx()).toInt()
+                            leftSectionStartOffset.toPx() - layoutPolicy.buttonSizeDp.dp.toPx() -
+                            (if (homeVisible) (layoutPolicy.buttonSizeDp + layoutPolicy.actionSpacingDp).dp.toPx() else 0f)).toInt()
                     } else defaultGap
                     val gap = maxOf(defaultGap, titleStart).coerceIn(0, constraints.maxWidth)
                     layout(gap, 0) {}

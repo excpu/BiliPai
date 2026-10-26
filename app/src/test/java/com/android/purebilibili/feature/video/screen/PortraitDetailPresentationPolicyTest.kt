@@ -659,7 +659,7 @@ class PortraitDetailPresentationPolicyTest {
     fun standalonePortraitPagerMotionSpec_keepsExitTransitionShortAndTight() {
         val spec = resolveStandalonePortraitPagerMotionSpec()
 
-        assertEquals(0, spec.enterDurationMillis)
+        assertEquals(240, spec.enterDurationMillis)
         assertEquals(220, spec.exitDurationMillis)
         assertEquals(0.96f, spec.exitScaleTarget)
         assertEquals(0.08f, spec.exitTranslateUpFraction)

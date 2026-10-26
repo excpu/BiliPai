@@ -107,6 +107,14 @@ internal sealed interface BiliPaiNavKey : NavKey {
         override val routeBase: String = "permission_settings"
     }
     @Serializable
+    data object SpacePrivacySettings : BiliPaiNavKey {
+        override val routeBase: String = "space_privacy_settings"
+    }
+    @Serializable
+    data object LoginActivitySettings : BiliPaiNavKey {
+        override val routeBase: String = "login_activity_settings"
+    }
+    @Serializable
     data object MessageNotificationSettings : BiliPaiNavKey {
         override val routeBase: String = "message_notification_settings"
     }
@@ -160,6 +168,11 @@ internal sealed interface BiliPaiNavKey : NavKey {
     @Serializable
     data object Profile : BiliPaiNavKey {
         override val routeBase: String = "profile"
+    }
+
+    @Serializable
+    data class AccountLedger(val kind: com.android.purebilibili.data.model.AccountLedgerKind) : BiliPaiNavKey {
+        override val routeBase: String = "account_ledger"
     }
 
     @Serializable

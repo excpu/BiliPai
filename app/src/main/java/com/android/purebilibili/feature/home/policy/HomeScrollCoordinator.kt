@@ -27,7 +27,12 @@ internal data class HomeHeaderSettleTransition(
 internal fun resolveHomeRecommendationHeaderCollapseMode(
     homeHeaderCollapseMode: HomeHeaderCollapseMode
 ): HomeHeaderCollapseMode {
-    return homeHeaderCollapseMode
+    // 首页分类栏常驻；兼容旧收起范围，不改写存储，始终显示仍尊重用户选择。
+    return if (homeHeaderCollapseMode.hasAnyCollapse) {
+        HomeHeaderCollapseMode.SEARCH_ONLY
+    } else {
+        HomeHeaderCollapseMode.OFF
+    }
 }
 
 internal fun quantizeHomeHeaderOffset(
@@ -164,18 +169,25 @@ internal fun reduceHomePreScroll(
     isHeaderRevealLocked: Boolean = false,
     headerConsumedY: Float = 0f,
     listAtTop: Boolean = canRevealHeader,
+    headerDeltaY: Float = deltaY,
 ): HomeScrollUpdate {
-    // 搜索框跟手下滑收起；离开首屏后保持收起，回顶锁定期内强制展开。
+    // 首页允许浏览中反向恢复；通用的仅回顶模式继续保留，回顶锁定期强制展开。
     val nextHeaderOffset = when {
         !isHeaderCollapseEnabled -> 0f
         isHeaderRevealLocked -> 0f
-        collapseMode == CommonListHeaderCollapseMode.SHOW_AT_TOP_ONLY && deltaY > 0f && !listAtTop ->
+        collapseMode == CommonListHeaderCollapseMode.SHOW_AT_TOP_ONLY && headerDeltaY > 0f && !listAtTop ->
             minHeaderOffsetPx
         collapseMode == CommonListHeaderCollapseMode.SHOW_AT_TOP_ONLY && !canRevealHeader ->
             minHeaderOffsetPx
-        else -> (currentHeaderOffsetPx + deltaY).coerceIn(minHeaderOffsetPx, 0f)
+        headerConsumedY > 0f -> (currentHeaderOffsetPx + headerConsumedY).coerceIn(minHeaderOffsetPx, 0f)
+        headerDeltaY == 0f -> currentHeaderOffsetPx.coerceIn(minHeaderOffsetPx, 0f)
+        hideType == HomeBarHideType.INSTANT && headerDeltaY <= -instantDirectionThresholdPx -> minHeaderOffsetPx
+        hideType == HomeBarHideType.INSTANT && headerDeltaY >= instantDirectionThresholdPx -> 0f
+        hideType == HomeBarHideType.INSTANT -> currentHeaderOffsetPx.coerceIn(minHeaderOffsetPx, 0f)
+        else -> (currentHeaderOffsetPx + headerDeltaY).coerceIn(minHeaderOffsetPx, 0f)
     }
-    val shouldAnimateHeader = false
+    val shouldAnimateHeader = hideType == HomeBarHideType.INSTANT &&
+        !isHeaderRevealLocked && headerConsumedY == 0f && abs(nextHeaderOffset - currentHeaderOffsetPx) > 0.5f
 
     val nextBottomBarIntent = when {
         !isBottomBarAutoHideEnabled || useSideNavigation -> null

@@ -1061,6 +1061,7 @@ private fun LightweightHomeTopTabs(
     categoryKeys: List<String>,
     selectedIndex: Int,
     onCategorySelected: (Int) -> Unit,
+    onCategoryReselected: (() -> Unit)?,
     onPartitionClick: () -> Unit,
     pagerState: androidx.compose.foundation.pager.PagerState?,
     labelMode: Int,
@@ -1107,6 +1108,13 @@ private fun LightweightHomeTopTabs(
     )
     val haptic = com.android.purebilibili.core.util.rememberHapticFeedback(com.android.purebilibili.core.ui.AppHapticScene.NAVIGATION)
     val scrollChannel = com.android.purebilibili.feature.home.LocalHomeScrollChannel.current
+    val currentOnCategoryReselected by rememberUpdatedState(onCategoryReselected)
+    val reselectCurrentCategory: () -> Unit = {
+        val onReselected = currentOnCategoryReselected
+        if (onReselected != null) onReselected() else {
+            scrollChannel?.trySend(com.android.purebilibili.feature.home.HomeScrollRequest.SCROLL_TO_TOP)
+        }
+    }
     val normalizedLabelMode = normalizeTopTabLabelMode(labelMode)
     val topTabIconFamily = resolveTopTabIconFamily(
         chromeIconFamily = chromePolicy.effectiveIconFamily,
@@ -1417,11 +1425,7 @@ private fun LightweightHomeTopTabs(
                     categoryKeys = categoryKeys,
                     selectedIndex = selectedIndex,
                     onSelected = onCategorySelected,
-                    onReselected = {
-                        scrollChannel?.trySend(
-                            com.android.purebilibili.feature.home.HomeScrollRequest.SCROLL_TO_TOP_OR_REFRESH
-                        )
-                    },
+                    onReselected = reselectCurrentCategory,
                     showIcon = showIcon,
                     showText = showText,
                     iconFamily = topTabIconFamily,
@@ -2201,9 +2205,7 @@ private fun LightweightHomeTopTabs(
                                             md3UnderlineTargetIndex = index
                                             onCategorySelected(index)
                                         }
-                                        TopTabClickAction.SCROLL_TO_TOP -> scrollChannel?.trySend(
-                                            com.android.purebilibili.feature.home.HomeScrollRequest.SCROLL_TO_TOP_OR_REFRESH
-                                        )
+                                        TopTabClickAction.SCROLL_TO_TOP -> reselectCurrentCategory()
                                     }
                                 })
                             }
@@ -2277,9 +2279,7 @@ private fun LightweightHomeTopTabs(
                         performHomeTopBarTap(
                             haptic = haptic,
                             onClick = {
-                                scrollChannel?.trySend(
-                                    com.android.purebilibili.feature.home.HomeScrollRequest.SCROLL_TO_TOP_OR_REFRESH
-                                )
+                                reselectCurrentCategory()
                             }
                         )
                     },
@@ -3090,6 +3090,7 @@ fun CategoryTabRow(
     categoryKeys: List<String> = resolveHomeTopCategories().map { it.name },
     selectedIndex: Int = 0,
     onCategorySelected: (Int) -> Unit = {},
+    onCategoryReselected: (() -> Unit)? = null,
     onPartitionClick: () -> Unit = {},
     pagerState: androidx.compose.foundation.pager.PagerState? = null, // [New] PagerState for sync
     labelMode: Int = 2,
@@ -3131,6 +3132,7 @@ fun CategoryTabRow(
         categoryKeys = categoryKeys,
         selectedIndex = selectedIndex,
         onCategorySelected = onCategorySelected,
+        onCategoryReselected = onCategoryReselected,
         onPartitionClick = onPartitionClick,
         pagerState = pagerState,
         labelMode = labelMode,

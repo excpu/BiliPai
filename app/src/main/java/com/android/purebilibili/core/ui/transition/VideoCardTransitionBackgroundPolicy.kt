@@ -46,7 +46,7 @@ import kotlin.math.roundToInt
 // - 返回：景深读取主驱动的已缓动进度，空间 landing pulse 不进入 effects
 private const val VIDEO_CARD_TRANSITION_MAX_BLUR_RADIUS_DP = 12f
 private const val VIDEO_CARD_TRANSITION_BLUR_QUANTUM_PX = VideoHeroMotionTokens.OPEN_BLUR_QUANTUM_PX
-/** 返回消糊段更粗量化，降低 BlurEffect 每帧更新次数。 */
+/** 返回与进场共用步长，中途反向不切换半径网格。 */
 internal const val VIDEO_CARD_TRANSITION_RETURN_BLUR_QUANTUM_PX = VideoHeroMotionTokens.RETURN_BLUR_QUANTUM_PX
 // 页面内部只负责模糊与暗化。整个来源页的景深缩放由 Miuix 导航 entry 统一承担，
 // 独立首页 chrome、壁纸与冻结层不得再次缩放；脱离 entry 的快照由 Host 同几何兜底。
@@ -1556,7 +1556,10 @@ internal fun resolveVideoCardTransitionFrozenLayerAlpha(
     if (!supportsLiveHandoff) return 1f
     // 冻结层往往录到了进场时被隐藏标题的卡片。在返回中段就把它交给
     // live source page，否则下方已就绪的标题/UP/统计仍会被无正文快照盖住。
-    return 1f - resolveVideoCardWholeSourceReturnAlpha(depthProgress)
+    val handoff = resolveVideoCardWholeSourceReturnAlpha(depthProgress)
+    // 只柔化背景所有权交接，不能二次缓动飞卡/手势的几何进度。
+    // 窗口两端斜率归零，背景不在开始交接或卸层时突然改变清晰度。
+    return 1f - handoff * handoff * (3f - 2f * handoff)
 }
 
 /**
@@ -1628,8 +1631,8 @@ internal fun resolveVideoCardTransitionMaxBlurRadiusPx(
 
 /**
  * Blur 半径量化步长。
- * RETURNING 用更粗步长（默认 4px）减少 BlurEffect 更新次数，保一镜到底同时降 GPU 抖动；
- * OPENING/HELD 仍用细步长，避免开场虚化阶梯感。
+ * 开合与手势恢复共用网格，保证同一深度的清晰度与方向无关。
+ * 接近清晰时的细分由量化函数统一处理，Host、来源快照和实时层不得各自取整。
  */
 internal fun resolveVideoCardTransitionBlurQuantumPx(
     motionTier: MotionTier,
@@ -1652,7 +1655,11 @@ private fun quantizeVideoCardTransitionBlurRadius(
     if (radiusPx <= 0f || maxRadiusPx <= 0f) return 0f
     // Preserve the full-strength endpoint at fractional display densities.
     if (radiusPx >= maxRadiusPx) return maxRadiusPx
-    val step = quantumPx.coerceAtLeast(0.5f)
+    val step = if (radiusPx <= VideoHeroMotionTokens.CLEAR_BLUR_RANGE_PX) {
+        VideoHeroMotionTokens.CLEAR_BLUR_QUANTUM_PX
+    } else {
+        quantumPx.coerceAtLeast(VideoHeroMotionTokens.CLEAR_BLUR_QUANTUM_PX)
+    }
     return ((radiusPx / step).roundToInt() * step).coerceIn(0f, maxRadiusPx)
 }
 

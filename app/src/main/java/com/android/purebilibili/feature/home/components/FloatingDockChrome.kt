@@ -174,7 +174,12 @@ internal fun Modifier.biliPaiFloatingDockShell(
 ): Modifier {
     val isDark = darkTheme ?: com.android.purebilibili.core.ui.isAppInDarkTheme()
     val density = LocalDensity.current
-    val samplingBackdrop = backdrop?.let { com.android.purebilibili.core.ui.blur.rememberContinuousBackdrop(it) }
+    // 玻璃专属：嵌套外壳采样最近的材质层，原生磨砂路径继续使用调用方的背景。
+    val parentGlass = com.android.purebilibili.core.ui.blur.LocalAppGlassContainer.current
+        .takeIf { enabled && com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled }
+    val samplingBackdrop = (if (parentGlass != null) parentGlass.backdrop else backdrop)?.let {
+        com.android.purebilibili.core.ui.blur.rememberContinuousBackdrop(it)
+    }
     val shapeBlock = remember(shape) { { shape } }
     val baseModifier = this
         .graphicsLayer { translationX = panelOffsetPx }
@@ -195,14 +200,16 @@ internal fun Modifier.biliPaiFloatingDockShell(
         } else if (isDark) Color.Black else Color.White
         val resolvedLensIntensity = lensIntensity.coerceIn(0f, 1f) *
             liquidGlassTuning.contentDistortionScale.coerceIn(0f, 1.8f)
-        val shouldDrawLens = drawLens && resolvedLensIntensity > 0.001f
+        val shouldDrawLens = parentGlass == null && drawLens && resolvedLensIntensity > 0.001f
         val refractionHeightDp = liquidGlassTuning.refractionHeight * resolvedLensIntensity
         val refractionAmountDp = liquidGlassTuning.refractionAmount * resolvedLensIntensity
         val effectPaddingDp = resolveFloatingDockEffectPaddingDp(
             refractionAmountDp = refractionAmountDp,
             pressBloomDp = MIUIX_UPSTREAM_DOCK_PRESS_BLOOM_DP,
         )
-        val blurRadiusPx = with(density) { liquidGlassTuning.backdropBlurRadius.dp.toPx() }
+        val blurRadiusPx = with(density) {
+            if (parentGlass == null) liquidGlassTuning.backdropBlurRadius.dp.toPx() else 0f
+        }
         val refractionHeightPx = with(density) { refractionHeightDp.dp.toPx() }
         val refractionAmountPx = with(density) { refractionAmountDp.dp.toPx() }
         val effectPaddingPx = with(density) { effectPaddingDp.dp.toPx() }
@@ -214,7 +221,7 @@ internal fun Modifier.biliPaiFloatingDockShell(
         val scrimAlpha = liquidGlassTuning.contentReadabilityScrimAlpha
         val effects = rememberFloatingDockBackdropEffects(
             blurRadiusPx = blurRadiusPx,
-            saturation = liquidGlassTuning.saturation,
+            saturation = if (parentGlass == null) liquidGlassTuning.saturation else 1f,
             shouldDrawLens = shouldDrawLens,
             refractionHeightPx = refractionHeightPx,
             refractionAmountPx = refractionAmountPx,
@@ -227,10 +234,11 @@ internal fun Modifier.biliPaiFloatingDockShell(
             }
             block
         }
-        val layerBlock = remember(pressProgress) {
+        val inheritDeformation = parentGlass?.ownsDeformation == true
+        val layerBlock = remember(pressProgress, inheritDeformation) {
             val block: GraphicsLayerScope.() -> Unit = {
                 val width = size.width.coerceAtLeast(1f)
-                val s = lerp(1f, 1f + 16.dp.toPx() / width, pressProgress)
+                val s = if (inheritDeformation) 1f else lerp(1f, 1f + 16.dp.toPx() / width, pressProgress)
                 scaleX = s
                 scaleY = s
             }

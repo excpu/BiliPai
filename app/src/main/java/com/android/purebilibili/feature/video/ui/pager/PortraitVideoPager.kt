@@ -5,6 +5,8 @@
 
 package com.android.purebilibili.feature.video.ui.pager
 
+import com.android.purebilibili.feature.video.ui.gesture.detectPlayerTapGestures
+
 import com.android.purebilibili.data.repository.playableVideoQualityIds
 import com.android.purebilibili.data.repository.advertisedVideoQualityIds
 import com.android.purebilibili.feature.video.ui.overlay.NextWatchOverlay
@@ -20,7 +22,6 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import com.android.purebilibili.feature.video.screen.VideoDetailDanmakuContextMenu
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -90,11 +91,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.animation.AnimatedVisibility
@@ -188,15 +187,10 @@ import com.android.purebilibili.feature.video.ui.components.resolvePortraitOverl
 import com.android.purebilibili.feature.video.ui.components.VideoAspectRatio
 import com.android.purebilibili.feature.video.ui.components.resolveSafeVideoAspectRatio
 import com.android.purebilibili.feature.video.ui.overlay.FullscreenDoubleTapAction
-import com.android.purebilibili.feature.video.ui.overlay.ImmersiveAmbientLetterboxBackdrop
 import com.android.purebilibili.feature.video.ui.overlay.PortraitSubtitleHost
-import com.android.purebilibili.feature.video.ui.overlay.VIDEO_STATUS_BAR_AMBIENT_CAPTURE_INTERVAL_MS
-import com.android.purebilibili.feature.video.ui.overlay.VIDEO_STATUS_BAR_AMBIENT_SAMPLE_HEIGHT_PX
-import com.android.purebilibili.feature.video.ui.overlay.VIDEO_STATUS_BAR_AMBIENT_SAMPLE_WIDTH_PX
 import com.android.purebilibili.feature.video.ui.overlay.nextFullscreenSeekFeedbackEvent
 import com.android.purebilibili.feature.video.ui.overlay.resolveFullscreenDoubleTapAction
 import com.android.purebilibili.feature.video.ui.overlay.resolvePortraitLetterboxBarHeightPx
-import com.android.purebilibili.feature.video.util.captureVideoAmbientFrame
 import com.android.purebilibili.feature.video.subtitle.SubtitleAutoPreference
 import com.android.purebilibili.feature.video.subtitle.isSubtitleFeatureEnabledForUser
 import com.android.purebilibili.feature.video.player.resolveHandleAudioFocusByPolicy
@@ -288,6 +282,7 @@ fun PortraitVideoPager(
     onLoadMoreRecommendations: () -> Unit = {},
     onlyVerticalRecommendations: Boolean = true,
     isActive: Boolean = true,
+    entryTransitionInProgress: Boolean = false,
     onBack: () -> Unit,
     onHomeClick: () -> Unit = onBack,
     onVideoChange: (String) -> Unit,
@@ -438,10 +433,25 @@ fun PortraitVideoPager(
         sessionKey = "portrait_danmaku_$initialBvid"
     )
     val danmakuScope = DanmakuSettingsScope.LANDSCAPE
+    val selectedDanmakuMenu by viewModel.danmakuMenuState.collectAsStateWithLifecycle()
+    LaunchedEffect(danmakuManager, selectedDanmakuMenu.visible) {
+        if (!selectedDanmakuMenu.visible) danmakuManager.clearTapSelection()
+    }
+    LaunchedEffect(danmakuManager, selectedDanmakuMenu, danmakuManager.isTapSelectionActive) {
+        if (selectedDanmakuMenu.visible &&
+            selectedDanmakuMenu.tapAnchor?.owner === danmakuManager.tapSelectionOwner
+        ) {
+            if (selectedDanmakuMenu.expandedActions) danmakuManager.clearTapSelection()
+            else if (!danmakuManager.isTapSelectionActive) viewModel.hideDanmakuMenu()
+        }
+    }
+    DisposableEffect(danmakuManager) {
+        onDispose { danmakuManager.clearTapSelection() }
+    }
     DisposableEffect(danmakuManager, viewModel, isActive) {
         if (isActive) {
-            danmakuManager.setOnDanmakuClickListener { text, dmid, userHash, isSelf ->
-                viewModel.showDanmakuMenu(dmid, text, userHash, isSelf)
+            danmakuManager.setOnDanmakuClickListener { text, dmid, userHash, isSelf, anchor ->
+                viewModel.showDanmakuMenu(dmid, text, userHash, isSelf, anchor)
             }
         }
         onDispose { danmakuManager.setOnDanmakuClickListener(null) }
@@ -1842,7 +1852,7 @@ fun PortraitVideoPager(
     Box(modifier = Modifier.fillMaxSize()) {
     VerticalPager(
         state = pagerState,
-        userScrollEnabled = shouldEnablePortraitPagerUserScroll(
+        userScrollEnabled = !entryTransitionInProgress && shouldEnablePortraitPagerUserScroll(
             scale = currentPageScale,
             commentOverlayActive = portraitCommentOverlayActive,
             upPreviewActive = portraitUpPreviewActive
@@ -1923,6 +1933,7 @@ fun PortraitVideoPager(
                 useTextureSurfaceForNavigation = useTextureSurfaceForNavigation,
                 isPlayerSurfaceReady = isPlayerSurfaceReady,
                 isInPipMode = isInPipMode,
+                entryTransitionInProgress = entryTransitionInProgress,
                 currentPlayingBvid = currentPlayingBvid, // [修复] 传递当前播放的 BVID 用于校验
                 currentPlayingCid = currentPlayingCid,
                 currentPlayingAid = currentPlayingAid,
@@ -2176,6 +2187,7 @@ private fun VideoPageItem(
     isPlayerSurfaceReady: Boolean,
     /** 系统小窗：只保留播放面与弹幕（受「小窗和画中画中不显示弹幕」约束）。 */
     isInPipMode: Boolean = false,
+    entryTransitionInProgress: Boolean = false,
     currentPlayingBvid: String?, // [新增]
     currentPlayingCid: Long,
     currentPlayingAid: Long,
@@ -2320,6 +2332,9 @@ private fun VideoPageItem(
         mutableStateOf(com.android.purebilibili.feature.video.ui.overlay.SubtitleControlCallbacks())
     }
     var portraitScreenLocked by rememberSaveable(bvid) { mutableStateOf(false) }
+    val portraitLockHaptic = com.android.purebilibili.core.util.rememberHapticFeedback(
+        com.android.purebilibili.core.ui.AppHapticScene.PLAYER_GESTURES
+    )
     var portraitFlippedHorizontal by rememberSaveable(bvid) { mutableStateOf(false) }
     var portraitFlippedVertical by rememberSaveable(bvid) { mutableStateOf(false) }
     val capturePortraitScreenshot =
@@ -2904,40 +2919,27 @@ private fun VideoPageItem(
         viewportHeightPx = letterboxViewportSize.height,
         fillContainer = portraitPagerFillContainer,
     )
-    val letterboxBarHeightDp = with(density) { letterboxBarHeightPx.toDp() }
-    val letterboxAmbientFrame = remember(bvid) { mutableStateOf<ImageBitmap?>(null) }
     val shouldCaptureLetterboxAmbient = shouldCapturePortraitLetterboxAmbientFrame(
         isCurrentPage = isCurrentPage,
         letterboxAmbientHazeEnabled = letterboxAmbientHazeEnabled,
         letterboxBarHeightPx = letterboxBarHeightPx,
         isPlayerReadyForThisVideo = isPlayerReadyForThisVideo,
     )
-    LaunchedEffect(
-        lifecycleOwner,
-        playerViewRef,
-        shouldCaptureLetterboxAmbient,
-        isPlaying,
-        bvid,
-    ) {
-        if (!shouldCaptureLetterboxAmbient) {
-            letterboxAmbientFrame.value = null
-            return@LaunchedEffect
-        }
-        val playerView = playerViewRef ?: return@LaunchedEffect
-        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            while (isActive) {
-                if (playerView.isAttachedToWindow && playerView.width > 0 && playerView.height > 0) {
-                    letterboxAmbientFrame.value = captureVideoAmbientFrame(
-                        playerView = playerView,
-                        targetWidth = VIDEO_STATUS_BAR_AMBIENT_SAMPLE_WIDTH_PX,
-                        targetHeight = VIDEO_STATUS_BAR_AMBIENT_SAMPLE_HEIGHT_PX,
-                    )?.asImageBitmap()
-                }
-                if (!isPlaying) break
-                delay(VIDEO_STATUS_BAR_AMBIENT_CAPTURE_INTERVAL_MS)
-            }
-        }
-    }
+    val portraitAmbient = com.android.purebilibili.feature.video.ambient.rememberPortraitAmbientPresentation(
+        player = exoPlayer,
+        playerView = playerViewRef,
+        identity = bvid to snapshotCid,
+        quality = selectedQualityId,
+        width = letterboxViewportSize.width,
+        height = letterboxViewportSize.height,
+        enabled = shouldCaptureLetterboxAmbient && isPortraitPlaybackAllowed && !isInPipMode && !isAudioOnly,
+        firstFrameReady = hasRenderedFirstFrame && isPlayerSurfaceReady,
+        hdr = requiresHdrSurfaceOutput(
+            currentQualityId = selectedQualityId,
+            colorTransfer = exoPlayer.videoFormat?.colorInfo?.colorTransfer ?: 0,
+        ),
+        anime4k = enhancement.pipelineActive,
+    )
 
     val danmakuTapCoordinates = remember { mutableStateOf<LayoutCoordinates?>(null) }
     Box(
@@ -3034,22 +3036,18 @@ private fun VideoPageItem(
                 seekForwardSeconds,
                 seekBackwardSeconds
             ) {
-                var capturedDanmakuTap: (() -> Unit)? = null
-                detectTapGestures(
-                    onPress = { offset ->
-                        capturedDanmakuTap = null
-                        val candidate = if (playerGesturesEnabled && isCurrentPage && danmakuEnabled &&
+                detectPlayerTapGestures(
+                    doubleTapSlopPx = android.view.ViewConfiguration.get(context).scaledDoubleTapSlop.toFloat(),
+                    captureSingleTap = { offset ->
+                        if (playerGesturesEnabled && isCurrentPage && danmakuEnabled &&
                             shouldHandlePortraitTapGesture(scale = scale)
                         ) danmakuManager.captureTap(danmakuTapCoordinates.value, offset) else null
-                        try {
-                            if (tryAwaitRelease() && !isLongPressing) capturedDanmakuTap = candidate
-                        } finally {
-                            // 弹幕单击捕获与长按倍速共用 onPress，松手或取消都恢复原播放参数。
-                            if (isLongPressing) {
-                                applyPortraitTemporaryPlaybackParameters(longPressOriginPlaybackParameters)
-                                isLongPressing = false
-                                showLongPressSpeedFeedback = false
-                            }
+                    },
+                    onPressEnd = {
+                        if (isLongPressing) {
+                            applyPortraitTemporaryPlaybackParameters(longPressOriginPlaybackParameters)
+                            isLongPressing = false
+                            showLongPressSpeedFeedback = false
                         }
                     },
                     onTap = {
@@ -3058,12 +3056,7 @@ private fun VideoPageItem(
                             !isCurrentPage ||
                             !shouldHandlePortraitTapGesture(scale = scale)
                         ) {
-                            return@detectTapGestures
-                        }
-                        capturedDanmakuTap?.let { click ->
-                            capturedDanmakuTap = null
-                            click()
-                            return@detectTapGestures
+                            return@detectPlayerTapGestures
                         }
                         onPortraitOverlayVisibleChange(
                             resolvePortraitOverlayVisibilityAfterTap(portraitOverlayVisible)
@@ -3075,7 +3068,7 @@ private fun VideoPageItem(
                             !shouldHandlePortraitTapGesture(scale = scale) ||
                             !isCurrentPage
                         ) {
-                            return@detectTapGestures
+                            return@detectPlayerTapGestures
                         }
                         val screenWidth = size.width.toFloat()
                         val relativeX = if (screenWidth > 0f) {
@@ -3138,9 +3131,9 @@ private fun VideoPageItem(
                             !playerGesturesEnabled ||
                             !shouldHandlePortraitLongPressGesture(scale = scale)
                         ) {
-                            return@detectTapGestures
+                            return@detectPlayerTapGestures
                         }
-                        if (!isCurrentPage) return@detectTapGestures
+                        if (!isCurrentPage) return@detectPlayerTapGestures
                         longPressOriginPlaybackParameters = exoPlayer.playbackParameters
                         val longPressPlaybackParameters = resolveLongPressPlaybackParameters(
                             requestedSpeed = longPressSpeed,
@@ -3272,25 +3265,12 @@ private fun VideoPageItem(
             }
 
 
-        // 横屏 letterbox 上下黑边：照搬播放页沉浸状态栏的动态 haze（默认可关）
-        if (letterboxBarHeightPx > 0) {
-            ImmersiveAmbientLetterboxBackdrop(
-                ambientFrame = letterboxAmbientFrame,
-                height = letterboxBarHeightDp,
-                useAmbientHaze = letterboxAmbientHazeEnabled,
-                contentAlignment = Alignment.TopCenter,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .zIndex(0f),
-            )
-            ImmersiveAmbientLetterboxBackdrop(
-                ambientFrame = letterboxAmbientFrame,
-                height = letterboxBarHeightDp,
-                useAmbientHaze = letterboxAmbientHazeEnabled,
-                contentAlignment = Alignment.BottomCenter,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .zIndex(0f),
+        // 留白与横屏共用动态环境光，仅在视频边缘外扩散，不再放大整帧模糊填充。
+        if (portraitAmbient != null) {
+            com.android.purebilibili.feature.video.ambient.PlayerAmbientGlow(
+                presentation = portraitAmbient,
+                fullscreen = true,
+                modifier = mediaLayerModifier.zIndex(0f),
             )
         }
 
@@ -3827,7 +3807,7 @@ private fun VideoPageItem(
     ) {
     // 系统小窗不合成竖屏流装饰层：标题 / 互动 / 进度条 / 旋转等控件在小窗里无法操作，
     // 缩放后只会变成错误渲染，播放面本身仍在下方正常输出。
-    if (!isInPipMode) {
+    if (!isInPipMode && !entryTransitionInProgress) {
         if (isCurrentPage && portraitOverlayVisible && !controlsOverlayOpen &&
             com.android.purebilibili.feature.nearby.NEARBY_HANDOFF_ENABLED
         ) {
@@ -3841,9 +3821,17 @@ private fun VideoPageItem(
             isPlaying = exoPlayer.isPlaying,
             playbackState = exoPlayer.playbackState,
         )
+        val diagnosticLoggingEnabled by SettingsManager.getPlayerDiagnosticLoggingEnabled(context)
+            .collectAsStateWithLifecycle(initialValue = true)
         val portraitOverlayState = com.android.purebilibili.feature.video.ui.overlay.VideoPlayerOverlayState(
                 player = exoPlayer,
                 title = title,
+                playerDiagnosticLoggingEnabled = diagnosticLoggingEnabled && isCurrentPage &&
+                    isPlayerReadyForThisVideo && isPortraitPlaybackAllowed && controlsLifecycleResumed &&
+                    !isInPipMode && !entryTransitionInProgress,
+                debugInfo = com.android.purebilibili.feature.video.ui.overlay.PlaybackDebugInfo(
+                    firstFrame = if (hasRenderedFirstFrame) "rendered" else "",
+                ),
                 isVisible = isCurrentPage && resolvePortraitOverlayControlsVisible(
                     portraitOverlayVisible = portraitOverlayVisible,
                     showDetailSheet = showDetailSheet,
@@ -4008,7 +3996,10 @@ private fun VideoPageItem(
                         ).show()
                     }
                 },
-                onLockToggle = { portraitScreenLocked = !portraitScreenLocked },
+                onLockToggle = {
+                    portraitLockHaptic(com.android.purebilibili.core.util.HapticType.LIGHT)
+                    portraitScreenLocked = !portraitScreenLocked
+                },
                 onFlipHorizontal = { portraitFlippedHorizontal = !portraitFlippedHorizontal },
                 onFlipVertical = { portraitFlippedVertical = !portraitFlippedVertical },
                 onAudioOnlyToggle = onAudioOnlyToggle,

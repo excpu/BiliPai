@@ -133,11 +133,12 @@ internal fun PlayerControlIconAction(
     iconSize: Dp = 22.dp,
     onLongClick: (() -> Unit)? = null,
 ) {
-    // Glass decorates this existing button only; it never changes its measured or touch bounds.
+    val glass = com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled
+    // 玻璃单图标使用正圆；关闭玻璃时保留调用方原生槽位。
     PlayerControlGlassDock(
         enabled = true,
-        modifier = modifier.width(width).height(height),
-        shape = if (com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled) RoundedCornerShape(50) else RoundedCornerShape(8.dp),
+        modifier = modifier.then(if (glass) Modifier.size(PlayerGlassIconButtonSize) else Modifier.width(width).height(height)),
+        shape = if (glass) androidx.compose.foundation.shape.CircleShape else RoundedCornerShape(8.dp),
     ) {
         AppExactTouchTargets {
             Box(

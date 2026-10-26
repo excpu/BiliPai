@@ -381,7 +381,7 @@ class BiliPaiNavDisplayHostStructureTest {
 
         assertTrue(source.contains("backdropColor = if (videoCardMorphOwnsCorners) Color.Unspecified else backdropColor"))
         assertTrue(source.contains("resolveMiuixVideoCardCoveredScale("))
-        assertTrue(source.contains("shape = MiuixVideoCardCoveredShape"))
+        assertTrue(source.contains("shape = hostCoveredShapeCache.resolve(resolveMiuixVideoCardCoveredCornerPx("))
         // Root host Box is multi-line: modifier.fillMaxSize() + background token.
         assertTrue(source.contains("modifier = modifier"))
         assertTrue(source.contains(".fillMaxSize()"))

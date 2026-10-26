@@ -31,6 +31,7 @@ import com.android.purebilibili.core.ui.AppShapes
 import com.android.purebilibili.core.ui.AppSpacingTokens
 import com.android.purebilibili.core.ui.AppSurfaceTokens
 import com.android.purebilibili.core.ui.ContainerLevel
+import com.android.purebilibili.core.ui.isMiuixNonGlassEnabled
 import com.android.purebilibili.core.ui.components.AppIcon
 import com.android.purebilibili.core.ui.components.AppText
 import com.android.purebilibili.feature.home.components.BottomNavItem
@@ -53,9 +54,9 @@ private const val THEME_PREVIEW_SEARCH_HINT = "搜索感兴趣的视频"
 /**
  * 首页配色预览。
  *
- * 只体现当前主题的角色分配：不请求数据、不响应触摸、不包含液态玻璃修饰符，也不按
- * uiStyle 分支。承载方式交给调用方的 `AppPreferenceGroup`，所以圆角、水平边距与容器色
- * 由设计系统统一决定，MD3 与 Miuix 各自原生，开启或关闭液态玻璃都不受影响。
+ * 只体现当前主题的角色分配：不请求数据、不响应触摸、不包含液态玻璃修饰符或动态效果。
+ * Miuix 非玻璃底栏复用实际导航的选中轮廓；外部圆角、水平边距与容器色由
+ * `AppPreferenceGroup` 承载，MD3 与玻璃预览保留原有示意样式。
  *
  * 角色分配：搜索条取搜索容器色、头像位与卡片封面取主色容器、文字取文字层级色、
  * 底栏取卡片容器色与选中态强调色，因此三种颜色来源下都能直接看出效果。
@@ -164,6 +165,7 @@ private fun ThemePreviewCard(coverVariant: Int, modifier: Modifier = Modifier) {
 /** 底栏：卡片容器色底面，选中项用强调色胶囊 + 主色图标文字，各主题下都清晰可见。 */
 @Composable
 private fun ThemePreviewBottomBar(modifier: Modifier = Modifier) {
+    val nativeMiuix = isMiuixNonGlassEnabled()
     val selectedContainer = AppSurfaceTokens.selectionContainer()
     val selectedContent = AppSurfaceTokens.primary()
     val idleContent = AppContentColors.secondaryText()
@@ -177,7 +179,13 @@ private fun ThemePreviewBottomBar(modifier: Modifier = Modifier) {
         THEME_PREVIEW_BOTTOM_ITEMS.forEachIndexed { index, item ->
             val selected = index == 0
             Column(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .then(if (nativeMiuix) Modifier
+                        .clip(AppShapes.SelectionIndicator)
+                        .background(if (selected) selectedContainer else Color.Transparent)
+                        .padding(vertical = 6.dp)
+                    else Modifier),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(AppSpacingTokens.Micro),
             ) {
@@ -185,7 +193,7 @@ private fun ThemePreviewBottomBar(modifier: Modifier = Modifier) {
                     modifier = Modifier
                         .size(30.dp)
                         .clip(CircleShape)
-                        .background(if (selected) selectedContainer else Color.Transparent),
+                        .background(if (selected && !nativeMiuix) selectedContainer else Color.Transparent),
                     contentAlignment = Alignment.Center,
                 ) {
                     AppIcon(

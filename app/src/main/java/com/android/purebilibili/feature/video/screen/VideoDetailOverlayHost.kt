@@ -576,6 +576,14 @@ internal fun VideoDetailDanmakuContextMenu(
         context = kotlin.coroutines.EmptyCoroutineContext
     )
     if (!danmakuMenuState.visible) return
+    val menuLifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(menuLifecycle, viewModel) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) viewModel.hideDanmakuMenu()
+        }
+        menuLifecycle.addObserver(observer)
+        onDispose { menuLifecycle.removeObserver(observer) }
+    }
     val playback = playbackUiState as? com.android.purebilibili.feature.video.viewmodel.VideoPlaybackUiState.Success
     val menuIdentity = remember(danmakuMenuState.dmid, danmakuMenuState.text, danmakuMenuState.userHash) {
         playback?.info?.let { it.bvid to it.cid }
@@ -608,6 +616,8 @@ internal fun VideoDetailDanmakuContextMenu(
 
     DanmakuContextMenu(
         text = danmakuMenuState.text,
+        tapAnchor = danmakuMenuState.tapAnchor,
+        onExpandActions = viewModel::expandDanmakuMenu,
         onDismiss = { viewModel.hideDanmakuMenu() },
         onLike = { viewModel.likeDanmaku(danmakuMenuState.dmid) },
         onRecall = { viewModel.recallDanmaku(danmakuMenuState.dmid) },

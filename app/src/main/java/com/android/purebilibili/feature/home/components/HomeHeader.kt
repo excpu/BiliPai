@@ -439,43 +439,10 @@ internal fun resolveHomeTopSearchRevealDeadZone(
     return resolveHomeTopPresetStyle(chromePolicy, labelMode = 2).searchRevealDeadZone
 }
 
-internal fun resolveHomeTopVisibleSearchHeightPx(
-    rawSearchHeightPx: Float,
-    fullSearchHeightPx: Float,
-    revealDeadZonePx: Float
-): Float {
-    if (fullSearchHeightPx <= 0f) return 0f
-    val clampedRawHeight = rawSearchHeightPx.coerceIn(0f, fullSearchHeightPx)
-    val clampedDeadZone = revealDeadZonePx.coerceIn(0f, fullSearchHeightPx - 0.5f)
-    if (clampedDeadZone <= 0f) return clampedRawHeight
-    if (clampedRawHeight <= clampedDeadZone) return 0f
-    val normalizedFraction = (clampedRawHeight - clampedDeadZone) / (fullSearchHeightPx - clampedDeadZone)
-    return (normalizedFraction * fullSearchHeightPx).coerceIn(0f, fullSearchHeightPx)
-}
-
-internal fun usesImmediateHomeTopSearchReveal(
-    revealDeadZonePx: Float
-): Boolean = revealDeadZonePx <= 0.01f
-
-internal fun resolveHomeTopSearchContentRevealFraction(
-    searchRevealFraction: Float,
-    usesImmediateReveal: Boolean
-): Float {
-    val clampedFraction = searchRevealFraction.coerceIn(0f, 1f)
-    if (!usesImmediateReveal) return clampedFraction
-    return (clampedFraction * (0.72f + 0.28f * clampedFraction)).coerceIn(0f, 1f)
-}
-
 internal fun resolveHomeTopSearchContentTranslationYPx(
     searchRevealFraction: Float,
     searchBarHeightPx: Float,
-    usesImmediateReveal: Boolean
-): Float {
-    if (!usesImmediateReveal || searchBarHeightPx <= 0f) return 0f
-    val clampedFraction = searchRevealFraction.coerceIn(0f, 1f)
-    val maxShiftPx = minOf(searchBarHeightPx * 0.18f, 10f)
-    return -maxShiftPx * (1f - clampedFraction)
-}
+): Float = -searchBarHeightPx.coerceAtLeast(0f) * (1f - searchRevealFraction.coerceIn(0f, 1f))
 
 internal fun resolveHomeHeaderScrollLayout(
     headerOffsetPx: Float,
@@ -483,8 +450,6 @@ internal fun resolveHomeHeaderScrollLayout(
     searchCollapseDistancePx: Float,
     tabRowHeightPx: Float,
     isHeaderCollapseEnabled: Boolean,
-    searchRevealDeadZonePx: Float = 0f,
-    usesImmediateSearchReveal: Boolean = false
 ): HomeHeaderScrollLayout {
     if (!isHeaderCollapseEnabled) {
         return HomeHeaderScrollLayout(
@@ -495,24 +460,15 @@ internal fun resolveHomeHeaderScrollLayout(
         )
     }
     val effectiveCollapseDistancePx = searchCollapseDistancePx.coerceAtLeast(searchBarHeightPx)
-    val clampedOffsetPx = headerOffsetPx.coerceIn(-effectiveCollapseDistancePx, 0f)
-    val currentSearchHeightPx = resolveHomeTopVisibleSearchHeightPx(
-        rawSearchHeightPx = searchBarHeightPx + clampedOffsetPx,
-        fullSearchHeightPx = searchBarHeightPx,
-        revealDeadZonePx = searchRevealDeadZonePx
-    )
-    val rawSearchRevealFraction = if (searchBarHeightPx > 0f) {
-        (currentSearchHeightPx / searchBarHeightPx).coerceIn(0f, 1f)
+    val revealFraction = if (effectiveCollapseDistancePx > 0f) {
+        (1f + headerOffsetPx / effectiveCollapseDistancePx).coerceIn(0f, 1f)
     } else {
         0f
     }
-    val searchAlpha = resolveHomeTopSearchContentRevealFraction(
-        searchRevealFraction = rawSearchRevealFraction,
-        usesImmediateReveal = usesImmediateSearchReveal
-    )
+    // 整段行高与间距共享进度，不设置恢复死区，也不把行内容压缩或淡出。
     return HomeHeaderScrollLayout(
-        searchBarHeightPx = currentSearchHeightPx,
-        searchAlpha = searchAlpha,
+        searchBarHeightPx = searchBarHeightPx.coerceAtLeast(0f) * revealFraction,
+        searchAlpha = if (revealFraction > 0f && searchBarHeightPx > 0f) 1f else 0f,
         tabRowHeightPx = tabRowHeightPx,
         tabAlpha = 1f
     )
@@ -800,6 +756,16 @@ internal fun resolveHomeTopContinuousSlabHeight(
         searchToTabsSpacing = AppSpacingTokens.None,
         renderMode = renderMode
     ).blurHeight
+}
+
+/** 原生文字分类共用连续底色；普通磨砂保留少量透光，液态玻璃使用自身材质。 */
+internal fun resolveHomeNativeTopProtectionAlpha(
+    liquidGlassActive: Boolean,
+    blurActive: Boolean,
+): Float = when {
+    liquidGlassActive -> 0f
+    blurActive -> 0.96f
+    else -> 1f
 }
 
 internal fun resolveHomeTopContinuousSlabSurfaceColor(
@@ -1527,6 +1493,7 @@ fun HomeHeader(
     topCategoryKeys: List<String> = resolveHomeTopCategories().map { it.name },
     categoryIndex: Int,
     onCategorySelected: (Int) -> Unit,
+    onCategoryReselected: (() -> Unit)? = null,
     onPartitionClick: () -> Unit = {},  //  新增：分区按钮回调
     hazeState: HazeState? = null,  // 保留参数兼容性，但不用于模糊
     onStatusBarDoubleTap: () -> Unit = {},
@@ -1875,14 +1842,11 @@ fun HomeHeader(
         renderMode = topChromeRenderMode,
     )
 
-    val headerOffsetQuantizationPx = with(density) { AppSpacingTokens.ExtraSmall.toPx() }
+    // 顶栏与嵌入页使用连续偏移，避免慢拖时按固定 dp 阶梯跳动。
     val currentHeaderOffsetProvider by rememberUpdatedState(headerOffsetProvider)
-    val headerOffset by remember(headerOffsetQuantizationPx) {
+    val headerOffset by remember {
         derivedStateOf {
-            com.android.purebilibili.feature.home.policy.quantizeHomeHeaderOffset(
-                offsetPx = currentHeaderOffsetProvider(),
-                stepPx = headerOffsetQuantizationPx
-            )
+            currentHeaderOffsetProvider()
         }
     }
 
@@ -1908,21 +1872,20 @@ fun HomeHeader(
             labelMode = topTabLabelMode
         )
     }
-    val searchCollapseDistanceDp = resolveHomeTopSearchCollapseDistance(
+    val searchCollapseDistanceDp = com.android.purebilibili.feature.home.resolveHomeTopSearchScrollDistance(
         searchBarHeight = searchBarHeightDp,
-        chromePolicy = topChromePolicy,
+        searchToTabsSpacing = topSearchMetrics.tabsSpacing,
+        extraSpacing = resolveHomeTopSearchCollapseExtraSpacing(topChromePolicy),
+        hideTopTabs = hideTopTabs,
     )
-    val searchRevealDeadZoneDp = resolveHomeTopSearchRevealDeadZone(topChromePolicy)
     val searchBarHeightPx = with(density) { searchBarHeightDp.toPx() }
     val searchCollapseDistancePx = with(density) { searchCollapseDistanceDp.toPx() }
-    val searchRevealDeadZonePx = with(density) { searchRevealDeadZoneDp.toPx() }
     val tabRowHeightPx = with(density) { tabRowHeightDp.toPx() }
 
     val scrollLayout = remember(
         headerOffset,
         searchBarHeightPx,
         searchCollapseDistancePx,
-        searchRevealDeadZonePx,
         tabRowHeightPx,
         isHeaderCollapseEnabled
     ) {
@@ -1932,12 +1895,9 @@ fun HomeHeader(
             searchCollapseDistancePx = searchCollapseDistancePx,
             tabRowHeightPx = tabRowHeightPx,
             isHeaderCollapseEnabled = isHeaderCollapseEnabled,
-            searchRevealDeadZonePx = searchRevealDeadZonePx,
-            usesImmediateSearchReveal = usesImmediateHomeTopSearchReveal(searchRevealDeadZonePx)
         )
     }
     val currentSearchHeight = with(density) { scrollLayout.searchBarHeightPx.toDp() }
-    val searchAlpha = scrollLayout.searchAlpha
     val expandedTabHeight = with(density) { scrollLayout.tabRowHeightPx.toDp() }
     val currentTabHeight by animateDpAsState(
         targetValue = if (hideTopTabs) {
@@ -1962,24 +1922,11 @@ fun HomeHeader(
     } else {
         0f
     }
-    val usesImmediateSearchReveal = remember(searchRevealDeadZonePx) {
-        usesImmediateHomeTopSearchReveal(searchRevealDeadZonePx)
-    }
-    val searchContentRevealFraction = remember(searchRevealFraction, usesImmediateSearchReveal) {
-        resolveHomeTopSearchContentRevealFraction(
-            searchRevealFraction = searchRevealFraction,
-            usesImmediateReveal = usesImmediateSearchReveal
-        )
-    }
-    // Search content is already constrained by the measured height above. Keep the
-    // frame-rate alpha/translation reads in the layer block so the child row is not
-    // invalidated for a draw-only change while the header follows a fast swipe.
-    val searchContentAlphaProvider = rememberUpdatedState(searchAlpha)
+    // 裁剪留在固定外层；只移动完整高度的行，避免搜索控件被父约束压扁。
     val searchContentTranslationProvider = rememberUpdatedState {
         resolveHomeTopSearchContentTranslationYPx(
             searchRevealFraction = searchRevealFraction,
             searchBarHeightPx = searchBarHeightPx,
-            usesImmediateReveal = usesImmediateSearchReveal
         )
     }
     val integratedCollapsedTopBar = shouldUseIntegratedCollapsedHomeTopBar(
@@ -2001,8 +1948,8 @@ fun HomeHeader(
         collapsedIntoStatusBar = integratedCollapsedTopBar
     )
     val searchToTabsSpacing = topSearchMetrics.tabsSpacing
-    val currentSearchToTabsSpacing = searchToTabsSpacing * searchContentRevealFraction
-    val currentUnifiedDividerBottomSpacing = AppSpacingTokens.ExtraSmall * searchContentRevealFraction
+    val currentSearchToTabsSpacing = searchToTabsSpacing * searchRevealFraction
+    val currentUnifiedDividerBottomSpacing = AppSpacingTokens.ExtraSmall * searchRevealFraction
 
     val tabHorizontalPadding by animateDpAsState(
         targetValue = resolveHomeTopTabHorizontalPadding(
@@ -2283,6 +2230,7 @@ fun HomeHeader(
                     onCategorySelected = { index ->
                         if (topTabsVisible) onCategorySelected(index)
                     },
+                    onCategoryReselected = onCategoryReselected,
                     onPartitionClick = {
                         if (topTabsVisible) onPartitionClick()
                     },
@@ -2409,19 +2357,6 @@ fun HomeHeader(
             containerWidthDp = maxWidth,
             chromePolicy = topChromePolicy
         )
-        if (shouldUseOpaqueTopChromeBackground(
-                progressiveBlurActive = isProgressiveBlurActive || isProgressiveFadeActive,
-                headerBlurActive = isHeaderBlurEnabled,
-                liquidGlassActive = isGlassEnabled || topChromeLiquidGlassEnabled,
-            )
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(pinnedChromeContentHeight)
-                    .background(MaterialTheme.colorScheme.background.copy(alpha = 1f))
-            )
-        }
         val shouldRenderContinuousSlab = effectiveContinuousSlabRenderMode != HomeTopChromeRenderMode.PLAIN ||
             isProgressiveBlurActive ||
             isProgressiveFadeActive
@@ -2460,6 +2395,20 @@ fun HomeHeader(
                     )
                 }
             }
+        }
+        val nativeTopProtectionAlpha = resolveHomeNativeTopProtectionAlpha(
+            liquidGlassActive = isGlassEnabled || topChromeLiquidGlassEnabled,
+            blurActive = isHeaderBlurEnabled || isProgressiveBlurActive,
+        )
+        // 仅关闭顶部液态玻璃时覆盖导航区域；放在模糊层之上，避免普通磨砂仍透出列表文字。
+        // 高度止于当前分类栏底部，不延伸到渐进模糊尾部，也不改变搜索行和标签的布局。
+        if (nativeTopProtectionAlpha > 0f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(pinnedChromeContentHeight)
+                    .background(MaterialTheme.colorScheme.background.copy(alpha = nativeTopProtectionAlpha))
+            )
         }
         // The skin head artwork belongs to the complete pinned header, not only the
         // search/tabs panel. Drawing it here lets the same crop continue behind the
@@ -2621,29 +2570,34 @@ fun HomeHeader(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(currentSearchHeight)
-                            .graphicsLayer {
-                                alpha = searchContentAlphaProvider.value
-                                translationY = searchContentTranslationProvider.value()
-                            }
                             .then(
                                 // Only crop while collapsing the search row. At full height,
                                 // avatar/action deformation must be allowed outside its layout bounds.
-                                if (searchRevealFraction < 0.999f) {
+                                if (searchRevealFraction < 1f) {
                                     Modifier.clip(androidx.compose.ui.graphics.RectangleShape)
+                                } else Modifier
+                            )
+                            .then(
+                                if (currentSearchHeight == AppSpacingTokens.None) {
+                                    Modifier.clearAndSetSemantics {}
                                 } else Modifier
                             )
                     ) {
                         Row(
-	                            modifier = Modifier
-	                                .fillMaxWidth()
-	                                .height(searchBarHeightDp)
-	                                .padding(
-	                                    horizontal = if (embedTopTabsInUnifiedPanel) {
-	                                        AppSpacingTokens.None
-	                                    } else {
-	                                        resolveHomeTopSearchRowHorizontalPadding(topChromePolicy)
-	                                    }
-	                                ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .wrapContentHeight(align = Alignment.Top, unbounded = true)
+                                .height(searchBarHeightDp)
+                                .graphicsLayer {
+                                    translationY = searchContentTranslationProvider.value()
+                                }
+                                .padding(
+                                    horizontal = if (embedTopTabsInUnifiedPanel) {
+                                        AppSpacingTokens.None
+                                    } else {
+                                        resolveHomeTopSearchRowHorizontalPadding(topChromePolicy)
+                                    }
+                                ),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(

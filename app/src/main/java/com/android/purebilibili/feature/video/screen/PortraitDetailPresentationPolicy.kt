@@ -57,7 +57,7 @@ internal fun shouldActivatePortraitFullscreenState(
 
 internal fun resolveStandalonePortraitPagerMotionSpec(): StandalonePortraitPagerMotionSpec {
     return StandalonePortraitPagerMotionSpec(
-        enterDurationMillis = 0,
+        enterDurationMillis = 240,
         exitDurationMillis = 220,
         exitScaleTarget = 0.96f,
         exitTranslateUpFraction = 0.08f,
@@ -100,7 +100,7 @@ internal fun shouldEnableInlinePortraitScrollTransform(
  *
  * The detail player and fullscreen pager share one player. Cross-fading the old inline
  * viewport with the new pager makes swipe-to-fullscreen visibly pause in a centered frame.
- * Keep entry direct for every source; exit still owns its independent soft transition.
+ * 不交叉淡化播放面；内嵌进入时由视口边界展开承接，直接入场继续由路由负责。
  */
 internal fun shouldAnimateStandalonePortraitPager(
     useSharedPlayer: Boolean,

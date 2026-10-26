@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -83,6 +85,7 @@ data class AdaptiveBottomSheetVisualSpec(
 enum class AppModalPresentation {
     BottomSheet,
     CenteredDialog,
+    SideSheet,
 }
 
 data class AppModalLayoutSpec(
@@ -309,6 +312,63 @@ fun AppModalBottomSheet(
     val windowColor = if (glassWindowMaterial) {
         resolvedColor.copy(alpha = resolvedColor.alpha * if (isAppInDarkTheme()) 0.84f else 0.88f)
     } else resolvedColor
+
+    // 播放器显式选择横屏侧栏；其他调用方的原生弹层尺寸与呈现策略保持不变。
+    if (presentationOverride == AppModalPresentation.SideSheet) {
+        LaunchedEffect(visible) { if (!visible) finishDismiss() }
+        if (!visible) return
+        Dialog(
+            onDismissRequest = onDismissRequest,
+            properties = DialogProperties(
+                dismissOnBackPress = false,
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false,
+            ),
+        ) {
+            AppPopupWindowHost(enableWindowMaterial = LocalAppThemeConfig.current.liquidGlassEnabled) {
+                ModalSheetNavigationHost(dismissOnBackPress, onDismissRequest) { backModifier ->
+                    val panel: @Composable () -> Unit = {
+                        BoxWithConstraints {
+                            AppPopupSurface(
+                                type = AppPopupSurfaceType.SHEET,
+                                modifier = modifier
+                                    .widthIn(max = minOf(360.dp, (configuration.screenWidthDp * 0.46f).dp, maxWidth))
+                                    .fillMaxWidth()
+                                    .fillMaxHeight()
+                                    .then(backModifier)
+                                    .pointerInput(Unit) { detectTapGestures { } },
+                                shape = shape ?: RoundedCornerShape(24.dp),
+                                containerColor = resolvedColor,
+                                contentColor = contentColor,
+                                tonalElevation = tonalElevation,
+                            ) {
+                                Column(Modifier.fillMaxSize().then(sheetSurfaceModifier), content = content)
+                            }
+                        }
+                    }
+                    if (hingeSafeRegions != null) {
+                        HingeSafeOverlayHost(
+                            regionProvider = hingeSafeRegions,
+                            modifier = Modifier.fillMaxSize().safeDrawingPadding().imePadding().padding(8.dp),
+                            alignment = Alignment.CenterEnd,
+                            onDismissRequest = onDismissRequest,
+                        ) { panel() }
+                    } else {
+                        Box(
+                            Modifier.fillMaxSize().safeDrawingPadding().imePadding().padding(8.dp),
+                            contentAlignment = Alignment.CenterEnd,
+                        ) {
+                            Box(Modifier.matchParentSize().pointerInput(onDismissRequest) {
+                                detectTapGestures { onDismissRequest() }
+                            })
+                            panel()
+                        }
+                    }
+                }
+            }
+        }
+        return
+    }
 
     // 合集显式选择整面板位移；居中及铰链安全弹窗、其他原生面板不改变过渡。
     if (useTimedSlideMotion && !centered && hingeSafeRegions == null) {

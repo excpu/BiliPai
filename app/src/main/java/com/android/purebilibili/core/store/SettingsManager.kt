@@ -693,8 +693,10 @@ data class HomeSettings(
         CommonListHeaderCollapseMode.SHOW_AT_TOP_ONLY,
     val isHeaderCollapseEnabled: Boolean = true,
     val showPgcTimeline: Boolean = true,
-    val gridColumnCount: Int = 0, // [New] 网格列数 (0=自动, 1-6=固定)——宽屏（折叠屏内屏/平板）
+    val gridColumnCount: Int = 0, // [New] 网格列数 (0=自动, 1-7=固定)——宽屏（折叠屏内屏/平板）
     val gridColumnCountCompact: Int = 0, // [New] 窄屏（折叠屏外屏/手机竖屏）独立列数记忆 (0=自动)
+    val gridColumnCustomizationEnabled: Boolean = true,
+    val gridColumnsSharedAcrossPages: Boolean = true,
     val pinchToChangeGridColumnsEnabled: Boolean = true, // [新增] 双指缩放切换网格列数
     val homeFeedCardWidthPreset: HomeFeedCardWidthPreset = HomeFeedCardWidthPreset.AUTO,
     val homeFeedCardStyle: HomeFeedCardStyle = HomeFeedCardStyle.BILIPAI,
@@ -893,7 +895,7 @@ enum class HomeBarHideType(
     val label: String,
     val description: String
 ) {
-    SYNC(0, "同步", "顶栏高度跟随列表滑动，上滑展开、下滑收起"),
+    SYNC(0, "同步", "顶栏高度跟随手指滑动，向上滑动收起、反向下拉展开"),
     INSTANT(1, "即时", "识别滑动方向后，顶栏整段收起或展开");
 
     companion object {
@@ -1157,7 +1159,7 @@ data class PlayerInteractionSettings(
     val fullscreenSwipeSeekEnabled: Boolean = true,
     val fullscreenGestureReverse: Boolean = false,
     val hideVideoPageStatusBar: Boolean = false,
-    /** 竖屏详情横屏视频上下黑边动态模糊，默认开启。 */
+    /** 动态环境光开启后，是否在竖屏全屏上下留白显示光晕；保留原存储键与默认值。 */
     val portraitLetterboxAmbientHaze: Boolean = true,
     val tabletCommentPanelWidthPreset: TabletCommentPanelWidthPreset =
         TabletCommentPanelWidthPreset.STANDARD,
@@ -1624,6 +1626,10 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
     //  [新增] 窄屏（折叠屏外屏/手机竖屏）独立列数记忆，与宽屏（内屏/平板）的
     //  KEY_GRID_COLUMN_COUNT 互不影响；0=Auto（外屏自动解析为 2 列）。
     private val KEY_GRID_COLUMN_COUNT_COMPACT = intPreferencesKey("grid_column_count_compact")
+    private val KEY_GRID_COLUMN_CUSTOMIZATION_ENABLED =
+        booleanPreferencesKey("grid_column_customization_enabled")
+    private val KEY_GRID_COLUMNS_SHARED_ACROSS_PAGES =
+        booleanPreferencesKey("grid_columns_shared_across_pages")
     private val KEY_PINCH_TO_CHANGE_GRID_COLUMNS_ENABLED =
         booleanPreferencesKey("pinch_to_change_grid_columns_enabled")
     private val KEY_HOME_FEED_CARD_WIDTH_PRESET =
@@ -1639,8 +1645,6 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
         booleanPreferencesKey("maid_lottie_animation_enabled")
     //  [新增] 卡片过渡动画开关
     private val KEY_CARD_TRANSITION_ENABLED = booleanPreferencesKey("card_transition_enabled")
-    private val KEY_RELATED_VIDEO_TRANSITION_ENABLED =
-        booleanPreferencesKey("related_video_transition_enabled")
     // 实时画面转场：SDR 用 TextureView 一镜到底；HDR 仍 SurfaceView（不降画质），morph 走封面
     private val KEY_LIVE_SURFACE_CARD_TRANSITION_ENABLED =
         booleanPreferencesKey("live_surface_card_transition_enabled")
@@ -1890,6 +1894,8 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
             showPgcTimeline = preferences[KEY_SHOW_PGC_TIMELINE] ?: true,
             gridColumnCount = preferences[KEY_GRID_COLUMN_COUNT] ?: 0,
             gridColumnCountCompact = preferences[KEY_GRID_COLUMN_COUNT_COMPACT] ?: 0,
+            gridColumnCustomizationEnabled = preferences[KEY_GRID_COLUMN_CUSTOMIZATION_ENABLED] ?: true,
+            gridColumnsSharedAcrossPages = preferences[KEY_GRID_COLUMNS_SHARED_ACROSS_PAGES] ?: true,
             pinchToChangeGridColumnsEnabled =
                 preferences[KEY_PINCH_TO_CHANGE_GRID_COLUMNS_ENABLED] ?: true,
             homeFeedCardWidthPreset = HomeFeedCardWidthPreset.fromValue(
@@ -3362,14 +3368,26 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
 
     suspend fun setGridColumnCount(context: Context, count: Int) {
         context.settingsDataStore.edit { preferences ->
-            preferences[KEY_GRID_COLUMN_COUNT] = count
+            preferences[KEY_GRID_COLUMN_COUNT] = count.coerceIn(0, 7)
         }
     }
 
     //  窄屏（折叠屏外屏/手机竖屏）独立列数记忆；内屏/平板写 setGridColumnCount。
     suspend fun setGridColumnCountCompact(context: Context, count: Int) {
         context.settingsDataStore.edit { preferences ->
-            preferences[KEY_GRID_COLUMN_COUNT_COMPACT] = count
+            preferences[KEY_GRID_COLUMN_COUNT_COMPACT] = count.coerceIn(0, 4)
+        }
+    }
+
+    suspend fun setGridColumnCustomizationEnabled(context: Context, enabled: Boolean) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[KEY_GRID_COLUMN_CUSTOMIZATION_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setGridColumnsSharedAcrossPages(context: Context, enabled: Boolean) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[KEY_GRID_COLUMNS_SHARED_ACROSS_PAGES] = enabled
         }
     }
 
@@ -3472,18 +3490,6 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
 
     suspend fun setCardTransitionEnabled(context: Context, value: Boolean) {
         context.settingsDataStore.edit { preferences -> preferences[KEY_CARD_TRANSITION_ENABLED] = value }
-    }
-
-    /** 相关推荐进入下一层详情时是否复用卡片 Morph；关闭后交给默认导航过渡。 */
-    fun getRelatedVideoTransitionEnabled(context: Context): Flow<Boolean> =
-        context.settingsDataStore.data.map { preferences ->
-            preferences[KEY_RELATED_VIDEO_TRANSITION_ENABLED] ?: true
-        }
-
-    suspend fun setRelatedVideoTransitionEnabled(context: Context, value: Boolean) {
-        context.settingsDataStore.edit { preferences ->
-            preferences[KEY_RELATED_VIDEO_TRANSITION_ENABLED] = value
-        }
     }
 
     /** 默认关闭：稳妥封面过渡；开启后 SDR 可用实时画面双向 morph，HDR 仍不强制 TextureView。 */
@@ -4507,7 +4513,7 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
         }
     }
     
-    // 首页顶栏：始终显示，或离开顶部后收起、单击底栏首页回顶后再出现。
+    // 首页顶栏保存收起范围；当前首页把旧收起模式解释为仅搜索，分类栏保留且允许反向拖动恢复。
     fun getHomeHeaderCollapseMode(context: Context): Flow<HomeHeaderCollapseMode> =
         context.settingsDataStore.data.map { preferences ->
             preferences[KEY_HOME_HEADER_COLLAPSE_MODE]
@@ -8761,6 +8767,8 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
             IntShareablePreferenceDefinition(KEY_DISPLAY_MODE, SettingsShareSection.APPEARANCE),
             IntShareablePreferenceDefinition(KEY_GRID_COLUMN_COUNT, SettingsShareSection.APPEARANCE),
             IntShareablePreferenceDefinition(KEY_GRID_COLUMN_COUNT_COMPACT, SettingsShareSection.APPEARANCE),
+            BooleanShareablePreferenceDefinition(KEY_GRID_COLUMN_CUSTOMIZATION_ENABLED, SettingsShareSection.APPEARANCE),
+            BooleanShareablePreferenceDefinition(KEY_GRID_COLUMNS_SHARED_ACROSS_PAGES, SettingsShareSection.APPEARANCE),
             BooleanShareablePreferenceDefinition(
                 KEY_PINCH_TO_CHANGE_GRID_COLUMNS_ENABLED,
                 SettingsShareSection.APPEARANCE
@@ -8781,7 +8789,6 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
                 SettingsShareSection.APPEARANCE,
             ),
             BooleanShareablePreferenceDefinition(KEY_CARD_TRANSITION_ENABLED, SettingsShareSection.APPEARANCE),
-            BooleanShareablePreferenceDefinition(KEY_RELATED_VIDEO_TRANSITION_ENABLED, SettingsShareSection.APPEARANCE),
             BooleanShareablePreferenceDefinition(
                 booleanPreferencesKey("video_return_content_follow_progress_enabled"),
                 SettingsShareSection.APPEARANCE,
