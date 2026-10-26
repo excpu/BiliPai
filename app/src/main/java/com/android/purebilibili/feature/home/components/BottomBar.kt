@@ -189,7 +189,6 @@ import com.android.purebilibili.core.store.LiquidGlassMode
 import androidx.compose.animation.core.EaseOut
 import kotlin.math.sign
 import top.yukonga.miuix.kmp.blur.Backdrop as MiuixBackdrop
-import top.yukonga.miuix.kmp.blur.LayerBackdrop as MiuixLayerBackdrop
 import top.yukonga.miuix.kmp.blur.blur as miuixBlur
 import top.yukonga.miuix.kmp.blur.drawBackdrop as miuixDrawBackdrop
 import top.yukonga.miuix.kmp.blur.highlight.BloomStroke
@@ -2209,7 +2208,7 @@ fun FrostedBottomBar(
     itemLabels: Map<String, String> = emptyMap(),
     dynamicUnreadCount: Int = 0,
     onToggleSidebar: (() -> Unit)? = null,
-    miuixBackdrop: MiuixLayerBackdrop? = null,
+    miuixBackdrop: MiuixBackdrop? = null,
     motionTier: MotionTier = MotionTier.Normal,
     isTransitionRunning: Boolean = false,
     forceLowBlurBudget: Boolean = false,
@@ -2364,7 +2363,7 @@ private fun MaterialBottomBar(
     labelMode: Int,
     blurEnabled: Boolean,
     hazeState: HazeState?,
-    miuixBackdrop: MiuixLayerBackdrop?,
+    miuixBackdrop: MiuixBackdrop?,
     homeSettings: com.android.purebilibili.core.store.HomeSettings,
     onSearchClick: () -> Unit,
     onSearchKeywordSubmit: (String) -> Unit,
@@ -2770,7 +2769,7 @@ private fun OfficialMd3FloatingToolbarContent(
     modifier: Modifier = Modifier,
     blurEnabled: Boolean = false,
     hazeState: HazeState? = null,
-    backdrop: MiuixLayerBackdrop? = null,
+    backdrop: MiuixBackdrop? = null,
     containerColor: Color = Color.Unspecified,
     motionTier: MotionTier = MotionTier.Normal,
     isTransitionRunning: Boolean = false,
@@ -2882,7 +2881,7 @@ private fun OfficialMd3FloatingBottomBar(
     haptic: (HapticType) -> Unit,
     blurEnabled: Boolean = false,
     hazeState: HazeState? = null,
-    backdrop: MiuixLayerBackdrop? = null,
+    backdrop: MiuixBackdrop? = null,
     containerColor: Color = Color.Unspecified,
     motionTier: MotionTier = MotionTier.Normal,
     isTransitionRunning: Boolean = false,
@@ -2958,7 +2957,7 @@ private fun MiuixBottomBar(
     labelMode: Int,
     blurEnabled: Boolean,
     hazeState: HazeState?,
-    miuixBackdrop: MiuixLayerBackdrop?,
+    miuixBackdrop: MiuixBackdrop?,
     homeSettings: com.android.purebilibili.core.store.HomeSettings,
     onSearchClick: () -> Unit,
     onSearchKeywordSubmit: (String) -> Unit,

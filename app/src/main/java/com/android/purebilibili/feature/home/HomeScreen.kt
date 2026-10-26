@@ -69,7 +69,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
-import com.android.purebilibili.core.ui.AdaptivePullToRefreshBox
 import com.android.purebilibili.core.ui.AppAlertDialog
 import com.android.purebilibili.core.ui.AppPullRefreshLoadingIndicator
 import com.android.purebilibili.core.ui.AppScaffold
@@ -1063,8 +1062,8 @@ fun HomeScreen(
     val crashTrackingConsentShown = homeSettings.crashTrackingConsentShown
     val baseCardAnimationEnabled = homeSettings.cardAnimationEnabled      //  卡片进场动画开关
     val baseCardTransitionEnabled = homeSettings.cardTransitionEnabled
-    val baseIsDataSaverActive = remember(context) {
-        com.android.purebilibili.core.store.SettingsManager.isDataSaverActive(context)
+    val baseIsDataSaverActive by remember(context) {
+        com.android.purebilibili.core.store.DataSaverState.get(context).active
     }
     val homePerformanceConfig = remember(
         baseIsHeaderBlurEnabled,
@@ -2201,18 +2200,17 @@ fun HomeScreen(
 
                         // Overlay chrome (status + search + tabs); not for Scaffold-padded screens.
                         // 指示器 inset 跟随可见顶栏（含收起偏移与 tab 收起动画），内容间距保持不变。
-                        val homeRefreshIndicatorTopInset = embeddedPageTopPadding.value
-                        AdaptivePullToRefreshBox(
+                        HomeFeedPullToRefreshBox(
                             isRefreshing = isRefreshing && currentCategory == category,
                             onRefresh = {
                                 viewModel.refresh(category)
                             },
                             state = pullRefreshState,
-                            indicatorTopInset = homeRefreshIndicatorTopInset,
+                            indicatorTopInset = embeddedPageTopPadding,
                             modifier = Modifier.fillMaxSize(),
                              //  不同原生外观使用不同下拉刷新指示器，位移策略仍由 policy 统一控制。
                              //  Custom indicators must include the same top inset as MIUIX contentPadding.
-                             indicator = {
+                             indicator = { homeRefreshIndicatorTopInset ->
                                 when (pullRefreshIndicatorStyle) {
                                     AppPullRefreshIndicatorStyle.MATERIAL_DEFAULT -> {
                                         // Native MD3 pull-to-refresh indicator.
@@ -3213,14 +3211,15 @@ fun HomeScreen(
 
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             snapshotFlow {
-                val visibleKeys = currentGridState.layoutInfo.visibleItemsInfo.map { it.key }
-                visibleKeys to currentGridState.isScrollInProgress
+                // 滚动时不订阅 layoutInfo，也不创建可见项列表；停稳后重新读取最新布局。
+                if (currentGridState.isScrollInProgress) null
+                else currentGridState.layoutInfo.visibleItemsInfo.map { it.key }
             }
                 .distinctUntilChanged()
-                .collectLatest { (visibleKeys, isScrollInProgress) ->
+                .collectLatest { visibleKeys ->
                     // Cancel the previous batch immediately when scrolling starts. Debouncing
                     // upstream would keep that batch alive until the next settled emission.
-                    if (isScrollInProgress) return@collectLatest
+                    if (visibleKeys == null) return@collectLatest
                     // Visible cover work goes first, then card color/online work. Give
                     // those a separate window before starting off-screen decodes.
                     kotlinx.coroutines.delay(HOME_COVER_PRELOAD_SETTLE_MS)
@@ -3233,7 +3232,7 @@ fun HomeScreen(
                         .indexOfLast { it in visibleKeySet }
                     val preloadRange = resolveHomeCoverPreloadRange(
                         isDataSaverActive = isDataSaverActive,
-                        isScrollInProgress = isScrollInProgress,
+                        isScrollInProgress = false,
                         lastVisibleIndex = lastVisibleIndex,
                         totalItemCount = videos.size,
                         preloadAheadCount = preloadAheadCount

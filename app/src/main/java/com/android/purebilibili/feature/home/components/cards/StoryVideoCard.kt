@@ -520,12 +520,16 @@ internal fun StoryVideoCard(
                 ),
                 leadingContent = if ((showUpAvatar ?: com.android.purebilibili.core.ui.LocalUpBadgeVisibility.current.showAvatars) && video.owner.face.isNotEmpty()) {
                     {
-                        PageAwareAsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
+                        val avatarContext = LocalContext.current
+                        val avatarRequest = remember(avatarContext, video.owner.face) {
+                            ImageRequest.Builder(avatarContext)
                                 .data(FormatUtils.fixImageUrl(video.owner.face))
                                 .size(96, 96)
                                 .crossfade(100)
-                                .build(),
+                                .build()
+                        }
+                        PageAwareAsyncImage(
+                            model = avatarRequest,
                             contentDescription = null,
                             modifier = Modifier
                                 .size(AppSpacingTokens.ExtraLarge)

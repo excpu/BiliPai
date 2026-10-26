@@ -17,7 +17,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
-import com.android.purebilibili.core.ui.animation.jiggleOnDissolve
 import com.android.purebilibili.core.ui.components.VideoListLayoutToggle
 import com.android.purebilibili.core.ui.components.resolveVideoListColumns
 import com.android.purebilibili.core.ui.components.rememberVideoListLayoutControl
@@ -87,6 +86,10 @@ fun DownloadListScreen(
 ) {
     val context = LocalContext.current
     val actionScope = rememberCoroutineScope()
+    val deleteDialogExitDelayMs = if (com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled) {
+        com.android.purebilibili.core.ui.AppGlassPopupMotionSpec.UnanchoredExitMillis.toLong()
+    } else 0L
+    var deletingTaskId by remember { mutableStateOf<String?>(null) }
     val downloadHaptic = rememberHapticFeedback(com.android.purebilibili.core.ui.AppHapticScene.REFRESH)
     val listLayout = rememberVideoListLayoutControl(defaultSingleColumn = true)
     val gridState = rememberLazyGridState()
@@ -292,18 +295,25 @@ fun DownloadListScreen(
                     com.android.purebilibili.core.ui.animation.MaybeDissolvableVideoCard(
                         isDissolving = isDissolving,
                         onDissolveComplete = {
-                            dissolvingTaskIds = dissolvingTaskIds - task.id
                             actionScope.launch {
-                                DownloadManager.removeTask(task.id)
-                                pendingDeleteTask = null
+                                try {
+                                    DownloadManager.removeTask(task.id)
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (error: Exception) {
+                                    android.util.Log.e("DownloadList", "Failed to delete cache task ${task.id}", error)
+                                    Toast.makeText(context, "删除失败，请重试", Toast.LENGTH_SHORT).show()
+                                } finally {
+                                    dissolvingTaskIds = dissolvingTaskIds - task.id
+                                    deletingTaskId = null
+                                }
                             }
                         },
                         cardId = task.id,
                         preset = com.android.purebilibili.core.ui.animation.DissolveAnimationPreset.TELEGRAM_FAST,
-                        modifier = Modifier.jiggleOnDissolve(
-                            cardId = task.id,
-                            isCurrentCardDissolving = isDissolving,
-                        ),
+                        // 删除只作用于当前卡片，避免相邻内容在磨砂背景中持续抖动。
+                        publishGlobalDissolveState = false,
+                        keepInvisibleAfterDissolve = true,
                     ) {
                         val playableOffline = remember(task.filePath, task.status) {
                             isDownloadTaskPlayableOffline(task)
@@ -346,7 +356,7 @@ fun DownloadListScreen(
                                 }
                             },
                             onDelete = {
-                                pendingDeleteTask = task
+                                if (deletingTaskId == null) pendingDeleteTask = task
                             },
                             selectionMode = selectionMode,
                             selected = task.id in selectedCompletedIds,
@@ -415,6 +425,7 @@ fun DownloadListScreen(
                         withContext(NonCancellable) {
                             var failedCount = 0
                             try {
+                                delay(deleteDialogExitDelayMs)
                                 idsToDelete.forEach { id ->
                                     if (DownloadManager.tasks.value[id]?.isComplete == true) {
                                         try {
@@ -462,8 +473,14 @@ fun DownloadListScreen(
             confirmButton = {
                 androidx.compose.material3.TextButton(
                     onClick = {
-                        // Dissolve first; the actual removal happens onDissolveComplete.
-                        dissolvingTaskIds = dissolvingTaskIds + taskToDelete.id
+                        if (deletingTaskId != null) return@TextButton
+                        deletingTaskId = taskToDelete.id
+                        pendingDeleteTask = null
+                        actionScope.launch {
+                            // 玻璃弹窗退场完成后再改变背景；原生弹窗关闭后直接开始。
+                            delay(deleteDialogExitDelayMs)
+                            dissolvingTaskIds = dissolvingTaskIds + taskToDelete.id
+                        }
                     }, modifier = Modifier.appElasticPress()
                 ) {
                     AppText("删除", color = AppContentColors.error())

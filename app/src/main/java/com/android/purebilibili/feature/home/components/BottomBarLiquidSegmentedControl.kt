@@ -441,6 +441,8 @@ fun BottomBarLiquidSegmentedControl(
     liquidGlassAnimateLabelWidthChanges: Boolean = false,
     // Explicit native placement opt-in, independent from glass-only geometry and shared defaults.
     centerNativeContent: Boolean = false,
+    // Glass-only indicator measurement can follow visible labels while slots reserve badge limits.
+    liquidGlassIndicatorMeasurementLabels: List<String>? = null,
 ): Unit = AppExactTouchTargets {
     if (items.isEmpty()) return@AppExactTouchTargets
     val effectiveLabelFontSize = com.android.purebilibili.core.ui.appTabLabelFontSize(labelFontSize)
@@ -604,7 +606,8 @@ fun BottomBarLiquidSegmentedControl(
         BottomBarFloatingSegmentedControl(
             adaptIndicatorToLabel = liquidGlassAdaptIndicatorToLabel,
             items = items,
-            liquidGlassMeasurementLabels = glassMeasurementLabels,
+            liquidGlassMeasurementLabels = liquidGlassIndicatorMeasurementLabels
+                ?.takeIf { it.size == items.size } ?: glassMeasurementLabels,
             liquidGlassAnimateLabelWidthChanges = liquidGlassAnimateLabelWidthChanges,
             liquidGlassLabelHorizontalPadding = liquidGlassLabelHorizontalPadding,
             selectedIndex = selectedIndex,

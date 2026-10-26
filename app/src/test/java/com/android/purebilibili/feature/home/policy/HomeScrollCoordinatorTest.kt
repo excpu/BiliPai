@@ -9,6 +9,50 @@ import kotlin.test.assertNull
 class HomeScrollCoordinatorTest {
 
     @Test
+    fun atTop_revealConsumptionLeavesOnlyRemainingDeltaForRefresh() {
+        assertEquals(15f, resolveHomeHeaderRevealConsumedY(-15f, 30f, true, true))
+        assertEquals(0f, resolveHomeHeaderRevealConsumedY(-15f, 30f, false, true))
+        assertEquals(0f, resolveHomeHeaderRevealConsumedY(-15f, 30f, true, false))
+        assertEquals(0f, resolveHomeHeaderRevealConsumedY(-15f, -30f, true, true))
+    }
+
+    @Test
+    fun firstItemStillVisible_reverseScrollMustWaitUntilListActuallyReachesTop() {
+        for (listAtTop in listOf(false, true)) {
+            val result = reduceHomePreScroll(
+                currentHeaderOffsetPx = -120f,
+                deltaY = 48f,
+                minHeaderOffsetPx = -120f,
+                canRevealHeader = true,
+                listAtTop = listAtTop,
+                isHeaderCollapseEnabled = true,
+                isBottomBarAutoHideEnabled = false,
+                useSideNavigation = false,
+                liquidGlassEnabled = false,
+                currentGlobalScrollOffset = 0f,
+            )
+            assertEquals(if (listAtTop) -72f else -120f, result.headerOffsetPx)
+        }
+    }
+
+    @Test
+    fun leavingTop_preservesGradualHeaderCollapseWhileFirstItemIsVisible() {
+        val result = reduceHomePreScroll(
+            currentHeaderOffsetPx = -15f,
+            deltaY = -10f,
+            minHeaderOffsetPx = -120f,
+            canRevealHeader = true,
+            listAtTop = false,
+            isHeaderCollapseEnabled = true,
+            isBottomBarAutoHideEnabled = false,
+            useSideNavigation = false,
+            liquidGlassEnabled = false,
+            currentGlobalScrollOffset = 0f,
+        )
+        assertEquals(-25f, result.headerOffsetPx)
+    }
+
+    @Test
     fun homeRecommendationHeader_usesItsOwnPreference() {
         assertEquals(
             HomeHeaderCollapseMode.BOTH,

@@ -174,6 +174,7 @@ internal fun Modifier.biliPaiFloatingDockShell(
 ): Modifier {
     val isDark = darkTheme ?: com.android.purebilibili.core.ui.isAppInDarkTheme()
     val density = LocalDensity.current
+    val samplingBackdrop = backdrop?.let { com.android.purebilibili.core.ui.blur.rememberContinuousBackdrop(it) }
     val shapeBlock = remember(shape) { { shape } }
     val baseModifier = this
         .graphicsLayer { translationX = panelOffsetPx }
@@ -186,7 +187,7 @@ internal fun Modifier.biliPaiFloatingDockShell(
             ),
         )
 
-    if (enabled && backdrop != null) {
+    if (enabled && samplingBackdrop != null) {
         val baseHighlight = rememberBiliPaiGravityHighlight(extraDegrees = -45f)
         val surfaceColor = containerColor.copy(alpha = liquidGlassTuning.surfaceAlpha)
         val readabilityScrimColor = if (readabilitySurfaceColor != Color.Unspecified) {
@@ -251,7 +252,7 @@ internal fun Modifier.biliPaiFloatingDockShell(
         }
         return baseModifier
             .drawBackdrop(
-                backdrop = backdrop,
+                backdrop = samplingBackdrop,
                 shape = shapeBlock,
                 effects = effects,
                 // Inline capsules (search/input) disable the shell lens and its rim highlight
@@ -276,7 +277,7 @@ internal fun Modifier.biliPaiFloatingDockShell(
                     forceLowBudget = forceLowBlurBudget,
                 )
                 .background(blurSurfaceColor, shape)
-        } else if (backdrop != null) {
+        } else if (samplingBackdrop != null) {
             val blurRadiusPx = with(density) { 25.dp.toPx() }
             val blurSurfaceColor = containerColor.copy(alpha = 0.65f)
             val onDrawBlurSurface = remember(blurSurfaceColor) {
@@ -286,7 +287,7 @@ internal fun Modifier.biliPaiFloatingDockShell(
                 block
             }
             return baseModifier.drawBackdrop(
-                backdrop = backdrop,
+                backdrop = samplingBackdrop,
                 shape = shapeBlock,
                 effects = {
                     blur(blurRadiusPx, blurRadiusPx)

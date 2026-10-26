@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
@@ -92,19 +93,20 @@ internal fun Modifier.biliPaiProgressiveTopBlur(
     val source = requireNotNull(backdrop)
     return composed {
         if (isLowBlurBudgetForced()) return@composed this
+        val continuousSource = com.android.purebilibili.core.ui.blur.rememberContinuousBackdrop(source)
         // The non-composable factory creates new shape/effect callbacks on each call.
         // Keep their identity while the material is unchanged, so an unrelated header
         // recomposition does not rebuild the progressive stack and its sharp-end effect.
         // Geometry changes and source redraws are still handled by Miuix's draw node.
-        val effect = remember(source, shape, blurRadiusDp, gradient, colors, progressiveCompositeEnabled) {
+        val effect = remember(continuousSource, shape, blurRadiusDp, gradient, colors, progressiveCompositeEnabled) {
             if (progressiveCompositeEnabled) Modifier.progressiveTextureBlur(
-                backdrop = source,
+                backdrop = continuousSource,
                 shape = shape,
                 blurRadius = blurRadiusDp,
                 gradient = gradient,
                 colors = colors,
             ) else Modifier.drawBackdrop(
-                backdrop = source,
+                backdrop = continuousSource,
                 shape = { shape },
                 effects = {
                     // Omitting progressiveGradient avoids the downscaled multi-level composite.
@@ -176,6 +178,7 @@ internal fun BiliPaiImmersiveTopBar(
     extendBelowBounds: Boolean = false,
     opaqueBackgroundFallback: Boolean = true,
     progressiveCompositeEnabled: Boolean = true,
+    iconSurfaceColor: Color = Color.Transparent,
     content: @androidx.compose.runtime.Composable () -> Unit,
 ) {
     val themeConfig = com.android.purebilibili.core.ui.LocalAppThemeConfig.current
@@ -261,7 +264,11 @@ internal fun BiliPaiImmersiveTopBar(
                     ),
             )
         }
+        val iconBackground = if (opaqueBackground) {
+            iconSurfaceColor.compositeOver(MaterialTheme.colorScheme.background)
+        } else iconSurfaceColor
         androidx.compose.runtime.CompositionLocalProvider(
+            com.android.purebilibili.core.ui.components.LocalAppTopBarSurfaceColor provides iconBackground,
             com.android.purebilibili.core.ui.LocalImmersiveTopChromeActive provides
                 ((active || headerBlurActive) || solidFadeActive),
             content = content,

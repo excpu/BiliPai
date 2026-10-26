@@ -61,12 +61,6 @@ internal fun rememberHomeHeaderScrollConnection(
     ) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                // 下拉、请求及回弹共用保护，不让同一刷新会话反向收起顶栏。
-                if (currentRefreshInteractionActive.value) {
-                    currentOnHeaderOffsetChanged.value(0f, false)
-                    currentOnTabsCollapsedChanged.value(false)
-                    return Offset.Zero
-                }
                 if (revealLocked || !shouldHandleHomeVerticalPreScroll(
                         deltaX = available.x,
                         deltaY = available.y,
@@ -84,20 +78,24 @@ internal fun rememberHomeHeaderScrollConnection(
                     subscriptionFirstVisibleIndex = subscriptionListState.firstVisibleItemIndex,
                 )
                 val activeList = if (onSubscriptionTab) subscriptionListState else activeGridState
-                // 展开判定沿用首项可见语义：item 0 露出即可跟随回顶展开，避免手势
-                // 恰好在到顶瞬间结束导致顶栏滞留收起；消费判定才要求真正贴顶。
+                // 首项可见只用于收起过程；反向展开还必须确认列表真正到顶。
                 val canRevealHeader = canRevealHomeHeaderForList(
                     firstVisibleItemIndex = headerListIndex,
                     listMissing = !onSubscriptionTab && activeGridState == null,
                 )
                 val listAtTop = activeList?.let { !it.canScrollBackward } == true
+                // 刷新保护只在当前列表顶部生效，避免请求中或切页残留状态强制展开。
+                if (currentRefreshInteractionActive.value && listAtTop) {
+                    currentOnHeaderOffsetChanged.value(0f, false)
+                    currentOnTabsCollapsedChanged.value(false)
+                    return Offset.Zero
+                }
                 val oldHeaderOffset = headerOffsetProvider()
                 val revealConsumedY = resolveHomeHeaderRevealConsumedY(
                     currentHeaderOffsetPx = oldHeaderOffset,
                     deltaY = available.y,
                     listAtTop = listAtTop,
                     collapseEnabled = configuration.collapseEnabled,
-                    userInput = source == NestedScrollSource.UserInput,
                 )
                 val scrollUpdate = reduceHomePreScroll(
                     currentHeaderOffsetPx = oldHeaderOffset,
@@ -113,6 +111,7 @@ internal fun rememberHomeHeaderScrollConnection(
                     hideType = configuration.hideType,
                     isHeaderRevealLocked = revealLocked,
                     headerConsumedY = revealConsumedY,
+                    listAtTop = listAtTop,
                 )
                 currentOnHeaderOffsetChanged.value(
                     scrollUpdate.headerOffsetPx,
@@ -133,6 +132,23 @@ internal fun rememberHomeHeaderScrollConnection(
                 }
                 // 浏览时只观察列表；贴顶下拉先展开顶栏，剩余位移由刷新容器处理。
                 return Offset(0f, revealConsumedY)
+            }
+
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (revealLocked || !configuration.collapseEnabled || available.y <= 0f) return Offset.Zero
+                val onSubscriptionTab = resolveHomeTopTabEntryOrNull(
+                    topTabEntries, pagerState.currentPage,
+                ) == HomeTopTabEntry.Subscriptions
+                val activeList = if (onSubscriptionTab) subscriptionListState else activeGridState
+                if (activeList == null || activeList.canScrollBackward) return Offset.Zero
+                // 同一帧内列表刚到顶时，用剩余位移展开；手指或惯性恰好结束也不依赖下一次 preScroll。
+                val oldOffset = headerOffsetProvider()
+                val reveal = minOf(available.y, (-oldOffset).coerceAtLeast(0f))
+                if (reveal <= 0f) return Offset.Zero
+                val nextOffset = oldOffset + reveal
+                currentOnHeaderOffsetChanged.value(nextOffset, false)
+                currentOnTabsCollapsedChanged.value(configuration.collapseTabs && nextOffset < -0.5f)
+                return Offset(0f, reveal)
             }
         }
     }

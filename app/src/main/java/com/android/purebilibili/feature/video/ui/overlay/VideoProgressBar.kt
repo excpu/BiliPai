@@ -88,6 +88,7 @@ fun VideoProgressBar(
         }
     }
 
+    val glassTrackHighlight = rememberPlayerProgressGlassHighlight()
     val uiSkinState = LocalUiSkinState.current
     val progressSkin = uiSkinState.activeSkin?.takeIf {
         uiSkinState.enabled && UiSkinSurface.PLAYER_PROGRESS in it.manifest.surfaces
@@ -371,6 +372,7 @@ fun VideoProgressBar(
                                         bufferedColor = bufferedTrackColor,
                                         inactiveColor = inactiveTrackColor,
                                     )
+                                    glassTrackHighlight?.draw(this, trackHeightPx)
                                     sponsorLines.forEach { (start, end, color) ->
                                         drawLine(color, start, end, trackHeightPx, StrokeCap.Round)
                                     }

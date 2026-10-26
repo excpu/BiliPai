@@ -18,17 +18,18 @@ internal fun ImageRequest.Builder.originalBiliImage() = apply {
 }
 
 /** 显示、预加载、取色共用同一质量及缓存身份；重复应用不会重复追加。 */
-internal fun ImageRequest.withBiliImageQuality(): ImageRequest {
+internal fun ImageRequest.withBiliImageQuality(
+    dataSaver: Boolean = SettingsManager.isDataSaverActive(context),
+): ImageRequest {
     if (extras[OriginalBiliImage] == true) return this
     val url = when (val value = data) {
         is String -> value
         is android.net.Uri -> value.toString()
         else -> return this
     }
-    val saver = SettingsManager.isDataSaverActive(context)
-    val resolved = BiliImageQualityPolicy.resolveUrl(url, saver)
+    val resolved = BiliImageQualityPolicy.resolveUrl(url, dataSaver)
     if (resolved == url && QUALITY_CACHE_EXTRA !in memoryCacheKeyExtras) return this
-    val quality = if (saver) "10" else "100"
+    val quality = if (dataSaver) "10" else "100"
     if (resolved == url && memoryCacheKeyExtras[QUALITY_CACHE_EXTRA] == quality) return this
     return newBuilder()
         .data(resolved)
@@ -47,6 +48,14 @@ internal fun ImageRequest.withBiliImageQuality(): ImageRequest {
 }
 
 internal class BiliImageQualityInterceptor : Interceptor {
-    override suspend fun intercept(chain: Interceptor.Chain): ImageResult =
-        chain.withRequest(chain.request.withBiliImageQuality()).proceed()
+    override suspend fun intercept(chain: Interceptor.Chain): ImageResult {
+        // 组件已准备好的请求沿用同一快照，避免网络切换时缓存回放与实际加载身份不一致。
+        val request = chain.request
+        val prepared = if (QUALITY_CACHE_EXTRA in request.memoryCacheKeyExtras) {
+            request
+        } else {
+            request.withBiliImageQuality()
+        }
+        return chain.withRequest(prepared).proceed()
+    }
 }

@@ -43,6 +43,7 @@ import com.android.purebilibili.core.ui.AppSurfaceTokens
 import com.android.purebilibili.core.ui.LocalGlobalWallpaperBackdropVisible
 import com.android.purebilibili.core.ui.wallpaper.LocalGlobalWallpaperBackdropSource
 import com.android.purebilibili.core.ui.components.AppText
+import com.android.purebilibili.core.ui.components.clipLiquidDockScrollContent
 import com.android.purebilibili.feature.home.components.miuix.DampedDragTrackingMode
 import top.yukonga.miuix.kmp.blur.Backdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
@@ -315,9 +316,31 @@ internal fun BottomBarFloatingSegmentedControl(
         }
         val floatingModifier = if (scrollState != null && contentWidth != null) {
             Modifier
-                // Expand the scroll clip in both axes, then inset its content by
-                // the same amount. Slots and scroll range retain their resting geometry,
-                // while the first/last indicator can bloom outside the dock ends.
+                .then(
+                    if (liquidGlassEnabled) Modifier.clipLiquidDockScrollContent(
+                        leadingInsetPx = {
+                            if (!contentAdaptiveIndicatorEnabled) 0f else indicatorContentWidths?.firstOrNull()?.let {
+                                resolveFloatingDockScrollableShellInsetPx(
+                                    with(density) { fittedSegmentedIndicatorWidth.toPx() },
+                                    with(density) { it.toPx() }, scrollState.value.toFloat(),
+                                ).roundToInt().toFloat()
+                            } ?: 0f
+                        },
+                        trailingInsetPx = {
+                            if (!contentAdaptiveIndicatorEnabled) 0f else indicatorContentWidths?.lastOrNull()?.let {
+                                resolveFloatingDockScrollableShellInsetPx(
+                                    with(density) { fittedSegmentedIndicatorWidth.toPx() },
+                                    with(density) { it.toPx() },
+                                    (scrollState.maxValue - scrollState.value).toFloat(),
+                                ).roundToInt().toFloat()
+                            } ?: 0f
+                        },
+                        translationYPx = { dockTranslationProvider.value() },
+                        verticalOverflowPx = with(density) { captureInsets.verticalDp.dp.toPx() },
+                    ) else Modifier
+                )
+                // 左右按外壳收口，上下与采样层共享形变余量，避免放大指示器被静态行高截断。
+                // 不改变槽位尺寸、滚动范围或原生路径。
                 .bottomBarMatchedCaptureOverflow(
                     horizontalInset = captureInsets.horizontalDp.dp,
                     verticalInset = captureInsets.verticalDp.dp,

@@ -436,6 +436,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val todayDislikedCreatorMids = mutableSetOf<Long>()
     private val todayDislikedKeywords = linkedSetOf<String>()
     private val pendingNotInterestedRefilterBvids = mutableSetOf<String>()
+    private var lastHomeFeedNotice: Pair<AccountSessionIdentity, String?>? = null
     private val _feedbackEvents = Channel<String>(capacity = Channel.BUFFERED)
     val feedbackEvents = _feedbackEvents.receiveAsFlow()
     private var todayWatchPluginObserverJob: Job? = null
@@ -554,6 +555,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         accountRequests.observe { resetForAccountChange() }
+        viewModelScope.launch {
+            MessageRepository.readEvents.collect {
+                messageUnreadRefreshJob?.cancel()
+                messageUnreadRefreshJob = accountRequests.launch { refreshMessageUnreadCount() }
+            }
+        }
         refreshUserInfoInBackground()
         loadData()
     }
@@ -1604,8 +1611,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         )
 
         //  视频类分类处理
+        var homeFeedNotice: String? = null
         val videoResult = when (currentCategory) {
-            HomeCategory.RECOMMEND -> VideoRepository.getHomeVideos(recommendRequestIndex) // Recommend uses idx, slightly different
+            HomeCategory.RECOMMEND -> VideoRepository.getHomeFeed(recommendRequestIndex).map { page ->
+                homeFeedNotice = page.notice
+                page.videos
+            }
             HomeCategory.POPULAR -> {
                 when (popularSubCategory) {
                     PopularSubCategory.COMPREHENSIVE -> VideoRepository.getPopularVideos(pageToFetch)
@@ -1624,6 +1635,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         ensureAccountCurrent(identity)
+        if (currentCategory == HomeCategory.RECOMMEND && videoResult.isSuccess) {
+            val notice = identity to homeFeedNotice
+            if (lastHomeFeedNotice != notice) {
+                homeFeedNotice?.let { _feedbackEvents.send(it) }
+                lastHomeFeedNotice = notice
+            }
+        }
         videoResult.exceptionOrNull()?.let { error ->
             if (error is CancellationException) throw error
         }

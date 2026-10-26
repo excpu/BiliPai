@@ -110,14 +110,13 @@ internal fun canRevealHomeHeaderForList(
     return listMissing || firstVisibleItemIndex == 0
 }
 
-/** 只在列表真正贴顶时，把下拉位移先分配给尚未展开的顶栏。 */
+/** 只在列表真正贴顶时，把手势或惯性的下拉位移先分配给尚未展开的顶栏。 */
 internal fun resolveHomeHeaderRevealConsumedY(
     currentHeaderOffsetPx: Float,
     deltaY: Float,
     listAtTop: Boolean,
     collapseEnabled: Boolean,
-    userInput: Boolean,
-): Float = if (collapseEnabled && userInput && listAtTop && deltaY > 0f) {
+): Float = if (collapseEnabled && listAtTop && deltaY > 0f) {
     minOf(deltaY, (-currentHeaderOffsetPx).coerceAtLeast(0f))
 } else 0f
 
@@ -164,11 +163,14 @@ internal fun reduceHomePreScroll(
     instantDirectionThresholdPx: Float = 0.5f,
     isHeaderRevealLocked: Boolean = false,
     headerConsumedY: Float = 0f,
+    listAtTop: Boolean = canRevealHeader,
 ): HomeScrollUpdate {
     // 搜索框跟手下滑收起；离开首屏后保持收起，回顶锁定期内强制展开。
     val nextHeaderOffset = when {
         !isHeaderCollapseEnabled -> 0f
         isHeaderRevealLocked -> 0f
+        collapseMode == CommonListHeaderCollapseMode.SHOW_AT_TOP_ONLY && deltaY > 0f && !listAtTop ->
+            minHeaderOffsetPx
         collapseMode == CommonListHeaderCollapseMode.SHOW_AT_TOP_ONLY && !canRevealHeader ->
             minHeaderOffsetPx
         else -> (currentHeaderOffsetPx + deltaY).coerceIn(minHeaderOffsetPx, 0f)

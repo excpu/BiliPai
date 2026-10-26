@@ -25,6 +25,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -237,37 +238,54 @@ fun ThinWigglyProgressBar(
         ,
         contentAlignment = Alignment.CenterStart
     ) {
-        // 背景轨道
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(barHeight)
-                .background(
-                    Color.White.copy(alpha = 0.3f),
-                    RoundedCornerShape(layoutPolicy.trackCornerRadiusDp.dp)
-                )
-        )
+        val glassTrackHighlight = rememberPlayerProgressGlassHighlight()
+        val trackContent: @Composable () -> Unit = {
+            // 背景轨道
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(barHeight)
+                    .background(
+                        Color.White.copy(alpha = 0.3f),
+                        RoundedCornerShape(layoutPolicy.trackCornerRadiusDp.dp)
+                    )
+            )
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(bufferProgress.coerceIn(0f, 1f))
-                .height(barHeight)
-                .background(
-                    Color.White.copy(alpha = 0.55f),
-                    RoundedCornerShape(layoutPolicy.trackCornerRadiusDp.dp)
-                )
-        )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(bufferProgress.coerceIn(0f, 1f))
+                    .height(barHeight)
+                    .background(
+                        Color.White.copy(alpha = 0.55f),
+                        RoundedCornerShape(layoutPolicy.trackCornerRadiusDp.dp)
+                    )
+            )
 
-        // 进度 (当前进度)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(displayProgress)
-                .height(barHeight)
-                .background(
-                    Color.White.copy(alpha = 0.9f),
-                    RoundedCornerShape(layoutPolicy.trackCornerRadiusDp.dp)
-                )
-        )
+            // 进度 (当前进度)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(displayProgress)
+                    .height(barHeight)
+                    .background(
+                        Color.White.copy(alpha = 0.9f),
+                        RoundedCornerShape(layoutPolicy.trackCornerRadiusDp.dp)
+                    )
+            )
+        }
+        if (glassTrackHighlight != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(barHeight)
+                    .drawWithContent {
+                        drawContent()
+                        glassTrackHighlight.draw(this, size.height)
+                    },
+                contentAlignment = Alignment.CenterStart,
+            ) { trackContent() }
+        } else {
+            trackContent()
+        }
 
         // 滑块 (Thumb) - 仅拖拽时显示
         if (isSeekScrubbing) {

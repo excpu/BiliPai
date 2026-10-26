@@ -1,17 +1,9 @@
 package com.android.purebilibili.feature.video.ui.components
 
-import com.android.purebilibili.core.ui.motion.AppMotionEasing
-import com.android.purebilibili.core.ui.components.AppText
 import com.android.purebilibili.core.ui.videoCardTitleMaxLines
-import com.android.purebilibili.core.ui.videoCardTitleOverflow
 import com.android.purebilibili.feature.home.HomeFeedCardLayout
 import com.android.purebilibili.core.ui.AppContentColors
 
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import com.android.purebilibili.core.ui.skeleton.skeletonBackground
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -41,13 +34,12 @@ import com.android.purebilibili.feature.home.resolveHomeFeedCardLayout
 import com.android.purebilibili.core.ui.AppSurfaceTokens
 import com.android.purebilibili.core.ui.AppShapes
 import com.android.purebilibili.core.ui.ContainerLevel
-import com.android.purebilibili.feature.video.ui.VideoDetailShapes
 
 /**
  *  骨架屏组件 - iOS 风格加载占位
  */
 
-private val LocalVideoSkeletonPulse = staticCompositionLocalOf<Float?> { null }
+private val LocalVideoSkeletonPulse = staticCompositionLocalOf<androidx.compose.runtime.State<Float>?> { null }
 
 // 基础 Shimmer 容器
 @Composable
@@ -56,7 +48,11 @@ fun ShimmerContainer(
     animated: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val pulse = if (animated) LocalVideoSkeletonPulse.current ?: rememberVideoSkeletonPulse() else 0.5f
+    val pulse = if (animated) {
+        LocalVideoSkeletonPulse.current ?: rememberVideoSkeletonPulse()
+    } else {
+        androidx.compose.runtime.rememberUpdatedState(Float.NaN)
+    }
     CompositionLocalProvider(LocalVideoSkeletonPulse provides pulse) {
         Box(modifier = modifier) {
             content()
@@ -388,7 +384,7 @@ private fun RelatedSkeletonText(
     com.android.purebilibili.core.ui.skeleton.ContentSkeletonText(
         text = text,
         style = style,
-        colorProvider = { color },
+        colorProvider = color,
         modifier = modifier,
         maxLines = maxLines,
     )
@@ -402,46 +398,28 @@ private fun SkeletonBlock(
     Box(
         modifier = modifier
             .clip(shape)
-            .background(rememberVideoSkeletonBlockColor())
+            .skeletonBackground(rememberVideoSkeletonBlockColor())
     )
 }
 
 @Composable
-private fun rememberVideoSkeletonPulse(): Float {
-    if (com.android.purebilibili.core.ui.skeleton.rememberSkeletonBreathingEnabled()) {
-        return com.android.purebilibili.core.ui.skeleton.rememberGentleSkeletonPulse().value
-    }
-    val transition = rememberInfiniteTransition(label = "videoSkeletonPulse")
-    val pulse by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = VIDEO_SKELETON_PULSE_DURATION_MILLIS,
-                easing = AppMotionEasing.M1Standard
-            ),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "videoSkeletonPulseAlpha"
-    )
-    return pulse
-}
+private fun rememberVideoSkeletonPulse(): androidx.compose.runtime.State<Float> =
+    com.android.purebilibili.core.ui.skeleton.rememberSkeletonSweepState()
 
 @Composable
-private fun rememberVideoSkeletonBlockColor(): Color {
-    val pulse = LocalVideoSkeletonPulse.current ?: 0.5f
+private fun rememberVideoSkeletonBlockColor(): () -> Color {
+    val pulse = LocalVideoSkeletonPulse.current
     val isDarkTheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val alpha = if (isDarkTheme) {
-        VIDEO_SKELETON_DARK_MIN_ALPHA +
-            (VIDEO_SKELETON_DARK_MAX_ALPHA - VIDEO_SKELETON_DARK_MIN_ALPHA) * pulse
-    } else {
-        VIDEO_SKELETON_LIGHT_MIN_ALPHA +
-            (VIDEO_SKELETON_LIGHT_MAX_ALPHA - VIDEO_SKELETON_LIGHT_MIN_ALPHA) * pulse
+    val base = AppContentColors.primaryText()
+    return androidx.compose.runtime.remember(pulse, isDarkTheme, base) {
+        com.android.purebilibili.core.ui.skeleton.skeletonFill(
+            base = base.copy(alpha = if (isDarkTheme) VIDEO_SKELETON_DARK_MIN_ALPHA else VIDEO_SKELETON_LIGHT_MAX_ALPHA),
+            highlight = base.copy(alpha = if (isDarkTheme) VIDEO_SKELETON_DARK_MAX_ALPHA else VIDEO_SKELETON_LIGHT_MIN_ALPHA),
+            position = { pulse?.value ?: Float.NaN },
+        )
     }
-    return AppContentColors.primaryText().copy(alpha = alpha)
 }
 
-private const val VIDEO_SKELETON_PULSE_DURATION_MILLIS = 2_000
 private const val VIDEO_SKELETON_LIGHT_MIN_ALPHA = 0.06f
 private const val VIDEO_SKELETON_LIGHT_MAX_ALPHA = 0.11f
 private const val VIDEO_SKELETON_DARK_MIN_ALPHA = 0.10f

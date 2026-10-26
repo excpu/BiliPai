@@ -13,14 +13,14 @@ import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import kotlinx.coroutines.CompletableDeferred
-import top.yukonga.miuix.kmp.blur.LayerBackdrop
+import top.yukonga.miuix.kmp.blur.Backdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 
 /** A source and its recording modifier; attach [modifier] to exactly one content container. */
 @Stable
 class ChromeBackdropSource internal constructor(
-    val backdrop: LayerBackdrop,
+    val backdrop: Backdrop,
     val modifier: Modifier,
     private val recorded: State<Boolean>,
 ) {
@@ -62,7 +62,7 @@ fun rememberChromeBackdropSource(
     })
     return remember(backdrop, contentLayer, drawContentToScreen) {
         ChromeBackdropSource(
-            backdrop = backdrop,
+            backdrop = ContinuousBackdrop(backdrop),
             recorded = recorded,
             modifier = Modifier
                 .layerBackdrop(backdrop)

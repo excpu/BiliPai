@@ -56,7 +56,8 @@ internal fun buildRecommendationFeedbackRequest(
 internal fun buildRecommendationFeedbackParams(
     request: RecommendationFeedbackRequest,
     accessToken: String,
-    timestamp: Long
+    timestamp: Long,
+    tokenPlatform: String = TokenManager.ACCESS_TOKEN_PLATFORM_TV,
 ): Map<String, String> {
     require((request.reasonId != null) xor (request.feedbackId != null)) {
         "reason_id 与 feedback_id 必须且只能提供一个"
@@ -67,9 +68,14 @@ internal fun buildRecommendationFeedbackParams(
         request.reasonId?.let { put("reason_id", it.toString()) }
         request.feedbackId?.let { put("feedback_id", it.toString()) }
         put("build", "1")
-        put("mobi_app", "android")
+        put("mobi_app", if (tokenPlatform == TokenManager.ACCESS_TOKEN_PLATFORM_ANDROID_HD) "android_hd" else "android")
         put("access_key", accessToken)
-        put("appkey", AppSignUtils.TV_APP_KEY)
+        put("appkey", when (tokenPlatform) {
+            TokenManager.ACCESS_TOKEN_PLATFORM_TV -> AppSignUtils.TV_APP_KEY
+            TokenManager.ACCESS_TOKEN_PLATFORM_ANDROID -> AppSignUtils.ANDROID_APP_KEY
+            TokenManager.ACCESS_TOKEN_PLATFORM_ANDROID_HD -> AppSignUtils.ANDROID_HD_APP_KEY
+            else -> throw IllegalArgumentException("当前授权不支持推荐反馈")
+        })
         put("ts", timestamp.toString())
     }
 }
@@ -336,18 +342,26 @@ object ActionRepository {
         metadata: RecommendationFeedbackMetadata,
         reason: RecommendationFeedbackReason
     ): Result<Unit> = withContext(Dispatchers.IO) {
+        TokenManager.awaitRestore()
         val accessToken = TokenManager.accessTokenCache
             ?.takeIf { it.isNotBlank() }
             ?: return@withContext Result.failure(Exception("缺少移动端登录凭证"))
         val request = buildRecommendationFeedbackRequest(metadata, reason)
             ?: return@withContext Result.failure(Exception("当前推荐不支持服务器同步"))
         try {
+            val tokenPlatform = TokenManager.accessTokenPlatformCache
             val params = buildRecommendationFeedbackParams(
                 request = request,
                 accessToken = accessToken,
-                timestamp = AppSignUtils.getTimestamp()
+                timestamp = AppSignUtils.getTimestamp(),
+                tokenPlatform = tokenPlatform,
             )
-            val response = api.submitMobileFeedDislike(AppSignUtils.signForTvLogin(params))
+            val signed = when (tokenPlatform) {
+                TokenManager.ACCESS_TOKEN_PLATFORM_ANDROID_HD -> AppSignUtils.signForAndroidHdLogin(params)
+                TokenManager.ACCESS_TOKEN_PLATFORM_ANDROID -> AppSignUtils.signForAndroidApi(params)
+                else -> AppSignUtils.signForTvLogin(params)
+            }
+            val response = api.submitMobileFeedDislike(signed)
             if (response.code != 0) {
                 throw Exception(response.message.ifBlank { "反馈失败: ${response.code}" })
             }

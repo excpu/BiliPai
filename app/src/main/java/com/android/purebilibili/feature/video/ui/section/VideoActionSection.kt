@@ -137,13 +137,11 @@ fun ActionButtonsRow(
     val activeColors = remember(
         uiStyle,
         colorScheme.primary,
-        colorScheme.secondary,
-        colorScheme.tertiary
+        colorScheme.secondary
     ) {
         resolveVideoDetailActionActiveColors(
             primary = colorScheme.primary,
             secondary = colorScheme.secondary,
-            tertiary = colorScheme.tertiary,
             uiStyle = uiStyle,
         )
     }

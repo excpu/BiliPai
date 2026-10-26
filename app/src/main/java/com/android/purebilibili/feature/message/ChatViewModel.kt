@@ -451,10 +451,17 @@ class ChatViewModel(
             )
         }
     }
-    fun loadChatUser() {
+    fun loadChatUser(fallbackName: String = "") {
+        if (sessionType != 1) return
+        val cached = MessageUserInfoLoader.cached(talkerId)
+        val initial = InboxUserInfoResolver.mergeFetchedUserInfo(
+            UserBasicInfo(talkerId, fallbackName, ""),
+            cached,
+        )
+        _uiState.update { it.copy(userInfo = InboxUserInfoResolver.mergeFetchedUserInfo(it.userInfo, initial)) }
         accountRequests.launch {
             val user = MessageUserInfoLoader.fetch(talkerId)
-            _uiState.update { it.copy(userInfo = user) }
+            _uiState.update { it.copy(userInfo = InboxUserInfoResolver.mergeFetchedUserInfo(it.userInfo, user)) }
         }
     }
     fun togglePinned() {
@@ -560,6 +567,8 @@ class ChatViewModel(
         accountRequests.launch {
             MessageRepository.markAsRead(talkerId, sessionType, seqno).onSuccess {
                 lastReadSeqno = maxOf(lastReadSeqno, seqno)
+            }.onFailure { error ->
+                _uiState.update { it.copy(refreshError = "标记已读失败：${error.message ?: "请稍后重试"}") }
             }
         }
     }

@@ -593,16 +593,16 @@ fun BottomBarSettingsContent(
                                 optionLeading = { value -> SettingsOptionPreviewThumb(SettingsOptionPreview.HeaderCollapse(
                                     searchVisible = !value.collapseSearch, tabsVisible = !value.collapseTabs,
                                 )) },
-                                options = listOf(
-                                    AppSegmentOption(HomeHeaderCollapseMode.OFF, "始终显示"),
-                                    AppSegmentOption(HomeHeaderCollapseMode.SEARCH_ONLY, "仅收起搜索"),
-                                    AppSegmentOption(HomeHeaderCollapseMode.BOTH, "全部收起"),
-                                ),
-                                selectedValue = if (homeHeaderCollapseMode == HomeHeaderCollapseMode.TABS_ONLY) {
-                                    HomeHeaderCollapseMode.BOTH
-                                } else {
-                                    homeHeaderCollapseMode
+                                options = buildList {
+                                    add(AppSegmentOption(HomeHeaderCollapseMode.OFF, "始终显示"))
+                                    add(AppSegmentOption(HomeHeaderCollapseMode.SEARCH_ONLY, "仅收起搜索"))
+                                    add(AppSegmentOption(HomeHeaderCollapseMode.BOTH, "全部收起"))
+                                    // 旧版「仅标签」保留原行为，并如实显示当前值。
+                                    if (homeHeaderCollapseMode == HomeHeaderCollapseMode.TABS_ONLY) {
+                                        add(AppSegmentOption(HomeHeaderCollapseMode.TABS_ONLY, "仅收起标签"))
+                                    }
                                 },
+                                selectedValue = homeHeaderCollapseMode,
                                 onSelectionChange = { mode ->
                                     scope.launch { SettingsManager.setHomeHeaderCollapseMode(context, mode) }
                                 },

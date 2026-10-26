@@ -1389,11 +1389,22 @@ fun SearchScreen(
                         val searchChromeSurface = com.android.purebilibili.core.ui.globalWallpaperAwareChromeColor(
                             AppSurfaceTokens.groupedListContainer()
                         )
+                        // 分类与排序只采样列表；顶部控件额外采样它们的已渲染像素，避免自采样。
+                        val lowerChromeSource = if (effectiveLiquidGlassEnabled) {
+                            com.android.purebilibili.core.ui.blur.rememberChromeBackdropSource()
+                        } else null
+                        val topControlContentBackdrop = if (searchChromeBackdrop != null && lowerChromeSource?.isReady == true) {
+                            com.android.purebilibili.feature.home.components.liquid.rememberCombinedBackdrop(
+                                searchChromeBackdrop, lowerChromeSource.backdrop,
+                            )
+                        } else searchChromeBackdrop
                         BiliPaiImmersiveTopBar(
                             backdrop = searchChromeBackdrop,
                             enabled = immersiveSearchChrome,
                             headerBlurActive = shouldUseSearchTopBarBlur && !immersiveSearchChrome,
                             surfaceColor = searchChromeSurface,
+                            iconSurfaceColor = if (immersiveSearchChrome || searchFadeActive) Color.Transparent
+                            else searchChromeSurface.copy(alpha = if (shouldUseSearchTopBarBlur) AppSurfaceTokens.FrostedScrimAlpha else searchChromeSurface.alpha),
                             fadeEnabled = searchFadeActive,
                             extendBelowBounds = false,
                             modifier = Modifier.then(
@@ -1414,6 +1425,10 @@ fun SearchScreen(
                                 }
                             ),
                         ) {
+                            val topControlBackdrop = com.android.purebilibili.core.ui.blur.rememberSurfaceOverlayBackdrop(
+                                topControlContentBackdrop,
+                                com.android.purebilibili.core.ui.components.LocalAppTopBarSurfaceColor.current,
+                            )
                             val searchCollapseFraction = if (isSearchCollapseEnabled && searchCollapseDistancePx > 0f) {
                                 (-searchHeaderOffsetPx / searchCollapseDistancePx).coerceIn(0f, 1f)
                             } else {
@@ -1460,9 +1475,11 @@ fun SearchScreen(
                                                     exitMotionSpec = exitMotionSpec,
                                                     exitMotionKey = exitMotionKey,
                                                     liquidGlassEnabled = effectiveLiquidGlassEnabled,
-                                                    miuixBackdrop = searchChromeBackdrop,
+                                                    miuixBackdrop = topControlBackdrop,
                                                     includeStatusBarPadding = false,
-                                                    modifier = Modifier,
+                                                    // 返回、输入框和筛选共用前景层，拖拽越过行高时绘制在分类 dock 上方。
+                                                    // 只调整兄弟节点绘制顺序，玻璃、MD3 与 Miuix 均保留原有布局和触摸区域。
+                                                    modifier = Modifier.zIndex(1f),
                                                 ),
                                                 if (state.searchType == SearchType.VIDEO || state.searchType == SearchType.ALL) {
                                                     val videoFilters: @Composable RowScope.() -> Unit = {
@@ -1472,7 +1489,7 @@ fun SearchScreen(
                                                             currentPubTimeType = state.pubTimeType,
                                                             currentPubBegin = state.pubBegin,
                                                             currentPubEnd = state.pubEnd,
-                                                            miuixBackdrop = searchChromeBackdrop,
+                                                            miuixBackdrop = topControlBackdrop,
                                                             onDurationSelect = { viewModel.setSearchDuration(it) },
                                                             onVideoTidChange = { viewModel.setVideoTid(it) },
                                                             onPubTimeTypeChange = { viewModel.setPubTimeType(it) },
@@ -1487,101 +1504,108 @@ fun SearchScreen(
                                                 },
                                                 searchTopBarCallbacks,
                                             )
-                                            //  搜索彩蛋消息横幅
-                                            val easterEggMsg = state.easterEggMessage
-                                            if (easterEggMsg != null) {
-                                                val easterEggColors = resolveAccessibleContainerColors(
-                                                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
-                                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                                    backgroundColor = MaterialTheme.colorScheme.surface,
-                                                    fallbackContentColors = listOf(
-                                                        AppContentColors.primaryText(),
-                                                        MaterialTheme.colorScheme.onBackground,
-                                                    ),
-                                                )
-                                                AppSurface(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                                                    color = easterEggColors.containerColor,
-                                                    shape = AppShapes.container(ContainerLevel.Card)
-                                                ) {
-                                                    Row(
+                                            val lowerChromeContent: @Composable () -> Unit = {
+                                                //  搜索彩蛋消息横幅
+                                                val easterEggMsg = state.easterEggMessage
+                                                if (easterEggMsg != null) {
+                                                    val easterEggColors = resolveAccessibleContainerColors(
+                                                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                        backgroundColor = MaterialTheme.colorScheme.surface,
+                                                        fallbackContentColors = listOf(
+                                                            AppContentColors.primaryText(),
+                                                            MaterialTheme.colorScheme.onBackground,
+                                                        ),
+                                                    )
+                                                    AppSurface(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
-                                                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                                                        horizontalArrangement = Arrangement.Center,
-                                                        verticalAlignment = Alignment.CenterVertically
+                                                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                                                        color = easterEggColors.containerColor,
+                                                        shape = AppShapes.container(ContainerLevel.Card)
                                                     ) {
-                                                        AppText(
-                                                            text = easterEggMsg,
-                                                            color = easterEggColors.contentColor,
-                                                            style = MaterialTheme.typography.bodyMedium,
-                                                            fontWeight = FontWeight.Medium,
-                                                            maxLines = 2,
-                                                            overflow = TextOverflow.Ellipsis,
-                                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                                        Row(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                                                            horizontalArrangement = Arrangement.Center,
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            AppText(
+                                                                text = easterEggMsg,
+                                                                color = easterEggColors.contentColor,
+                                                                style = MaterialTheme.typography.bodyMedium,
+                                                                fontWeight = FontWeight.Medium,
+                                                                maxLines = 2,
+                                                                overflow = TextOverflow.Ellipsis,
+                                                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                                SearchResultTypeTabRow(
+                                                    tabs = searchTabs,
+                                                    pagerState = searchPagerState,
+                                                    counts = state.searchTypeCounts,
+                                                    miuixBackdrop = searchChromeBackdrop,
+                                                    onTabClick = { page, type ->
+                                                        if (searchPagerState.currentPage == page && state.searchType == type) {
+                                                            scrollToTopSearchType = type
+                                                            scrollToTopRequestId += 1
+                                                            animateSearchHeaderOffsetTo(0f)
+                                                        } else {
+                                                            scope.launch { animatePagerSelection(searchPagerState, page) }
+                                                        }
+                                                    }
+                                                )
+                                                val showStableFilterBar = resolveSearchFilterControls(
+                                                    currentType = state.searchType,
+                                                    currentUpOrder = state.upOrder
+                                                ).isNotEmpty()
+                                                AnimatedVisibility(
+                                                    visible = showStableFilterBar,
+                                                    enter = fadeIn(animationSpec = tween(90)),
+                                                    exit = fadeOut(animationSpec = tween(70))
+                                                ) {
+                                                    if (state.searchType == SearchType.VIDEO || state.searchType == SearchType.ALL) {
+                                                        SearchVideoFilterBar(
+                                                            currentOrder = state.searchOrder,
+                                                            miuixBackdrop = searchChromeBackdrop,
+                                                            onOrderChange = { viewModel.setSearchOrder(it) },
+                                                        )
+                                                    } else {
+                                                        SearchFilterBar(
+                                                            currentType = state.searchType,
+                                                            currentOrder = state.searchOrder,
+                                                            currentDurations = state.searchDurations,
+                                                            currentVideoTid = state.videoTid,
+                                                            currentUpOrder = state.upOrder,
+                                                            currentUpOrderSort = state.upOrderSort,
+                                                            currentUpUserType = state.upUserType,
+                                                            currentLiveOrder = state.liveOrder,
+                                                            currentArticleOrder = state.articleOrder,
+                                                            currentArticleCategory = state.articleCategory,
+                                                            currentPhotoOrder = state.photoOrder,
+                                                            currentPhotoCategory = state.photoCategory,
+                                                            onOrderChange = { viewModel.setSearchOrder(it) },
+                                                            onDurationToggle = { viewModel.toggleSearchDuration(it) },
+                                                            onVideoTidChange = { viewModel.setVideoTid(it) },
+                                                            onUpOrderChange = { viewModel.setUpOrder(it) },
+                                                            onUpOrderSortChange = { viewModel.setUpOrderSort(it) },
+                                                            onUpUserTypeChange = { viewModel.setUpUserType(it) },
+                                                            onLiveOrderChange = { viewModel.setLiveOrder(it) },
+                                                            onArticleOrderChange = viewModel::setArticleOrder,
+                                                            onArticleCategoryChange = viewModel::setArticleCategory,
+                                                            onPhotoOrderChange = viewModel::setPhotoOrder,
+                                                            onPhotoCategoryChange = viewModel::setPhotoCategory
                                                         )
                                                     }
                                                 }
                                             }
-                                            SearchResultTypeTabRow(
-                                                tabs = searchTabs,
-                                                pagerState = searchPagerState,
-                                                counts = state.searchTypeCounts,
-                                                miuixBackdrop = searchChromeBackdrop,
-                                                onTabClick = { page, type ->
-                                                    if (searchPagerState.currentPage == page && state.searchType == type) {
-                                                        scrollToTopSearchType = type
-                                                        scrollToTopRequestId += 1
-                                                        animateSearchHeaderOffsetTo(0f)
-                                                    } else {
-                                                        scope.launch { animatePagerSelection(searchPagerState, page) }
-                                                    }
-                                                }
-                                            )
-                                            val showStableFilterBar = resolveSearchFilterControls(
-                                                currentType = state.searchType,
-                                                currentUpOrder = state.upOrder
-                                            ).isNotEmpty()
-                                            AnimatedVisibility(
-                                                visible = showStableFilterBar,
-                                                enter = fadeIn(animationSpec = tween(90)),
-                                                exit = fadeOut(animationSpec = tween(70))
-                                            ) {
-                                                if (state.searchType == SearchType.VIDEO || state.searchType == SearchType.ALL) {
-                                                    SearchVideoFilterBar(
-                                                        currentOrder = state.searchOrder,
-                                                        miuixBackdrop = searchChromeBackdrop,
-                                                        onOrderChange = { viewModel.setSearchOrder(it) },
-                                                    )
-                                                } else {
-                                                    SearchFilterBar(
-                                                        currentType = state.searchType,
-                                                        currentOrder = state.searchOrder,
-                                                        currentDurations = state.searchDurations,
-                                                        currentVideoTid = state.videoTid,
-                                                        currentUpOrder = state.upOrder,
-                                                        currentUpOrderSort = state.upOrderSort,
-                                                        currentUpUserType = state.upUserType,
-                                                        currentLiveOrder = state.liveOrder,
-                                                        currentArticleOrder = state.articleOrder,
-                                                        currentArticleCategory = state.articleCategory,
-                                                        currentPhotoOrder = state.photoOrder,
-                                                        currentPhotoCategory = state.photoCategory,
-                                                        onOrderChange = { viewModel.setSearchOrder(it) },
-                                                        onDurationToggle = { viewModel.toggleSearchDuration(it) },
-                                                        onVideoTidChange = { viewModel.setVideoTid(it) },
-                                                        onUpOrderChange = { viewModel.setUpOrder(it) },
-                                                        onUpOrderSortChange = { viewModel.setUpOrderSort(it) },
-                                                        onUpUserTypeChange = { viewModel.setUpUserType(it) },
-                                                        onLiveOrderChange = { viewModel.setLiveOrder(it) },
-                                                        onArticleOrderChange = viewModel::setArticleOrder,
-                                                        onArticleCategoryChange = viewModel::setArticleCategory,
-                                                        onPhotoOrderChange = viewModel::setPhotoOrder,
-                                                        onPhotoCategoryChange = viewModel::setPhotoCategory
-                                                    )
-                                                }
+                                            if (lowerChromeSource != null) {
+                                                Column(modifier = lowerChromeSource.modifier) { lowerChromeContent() }
+                                            } else {
+                                                lowerChromeContent()
                                             }
                                         }
                                 }
@@ -3555,7 +3579,10 @@ private fun SearchResultTypeTabRow(
 
         BottomBarLiquidSegmentedControl(
             items = tabLabels,
+            // 玻璃槽位按计数上限预留，指示器按当前文字适配；原生路径不使用这些测量参数。
             liquidGlassMeasurementLabels = glassMeasurementLabels,
+            liquidGlassIndicatorMeasurementLabels = tabLabels,
+            liquidGlassAdaptIndicatorToLabel = true,
             liquidGlassAnimateLabelWidthChanges = false,
             // Both renderers center on wide devices; each keeps its own sizing and indicator style.
             centerGlassContent = LocalWindowSizeClass.current.let { it.isTabletDevice && it.isTablet },

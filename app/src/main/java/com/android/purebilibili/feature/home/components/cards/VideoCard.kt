@@ -349,13 +349,17 @@ private fun VideoCardOwnerMetadata(
         },
         leadingContent = if (showUpAvatar && video.owner.face.isNotEmpty()) {
             {
-                PageAwareAsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
+                val avatarContext = LocalContext.current
+                val avatarRequest = remember(avatarContext, video.owner.face) {
+                    ImageRequest.Builder(avatarContext)
                         .data(FormatUtils.fixImageUrl(video.owner.face))
                         .crossfade(100)
                         .size(32, 32)
                         .memoryCacheKey("avatar_${video.owner.face.hashCode()}")
-                        .build(),
+                        .build()
+                }
+                PageAwareAsyncImage(
+                    model = avatarRequest,
                     contentDescription = null,
                     modifier = Modifier
                         .size(AppSpacingTokens.Medium + AppSpacingTokens.Micro)
@@ -811,9 +815,12 @@ internal fun ElegantVideoCard(
     }
     val useRealtimeWallpaperBackdrop =
         homeWallpaperSurfaceMode == HomeCardWallpaperSurfaceMode.REALTIME_FROSTED
-    val cardYFraction = remember { mutableFloatStateOf(0.5f) }
     val infoLayoutCoordinates = remember { mutableStateOf<LayoutCoordinates?>(null) }
     val homeScrollTickProvider = LocalHomeScrollTickProvider.current
+    // 其他列表没有首页滚动驱动，继续用位置回调保持原有壁纸跟随行为。
+    val nonHomeCardYFraction = if (homeScrollTickProvider == null && resolvedWallpaperTintEnabled) {
+        remember { mutableFloatStateOf(0.5f) }
+    } else null
     val infoSurfaceAppearance = remember(
         resolvedWallpaperTintEnabled,
         wallpaperEffectMode,
@@ -1019,6 +1026,14 @@ internal fun ElegantVideoCard(
         CardPositionManager.newVideoCardSourceInstanceId()
     }
     val coverCoordsRef = remember { object { var value: LayoutCoordinates? = null } }
+    // 封面位置只在绘制或点击时读取，不随列表滚动通过全局布局回调回写 snapshot 状态。
+    fun currentCoverYFraction(): Float {
+        nonHomeCardYFraction?.let { return it.floatValue }
+        val coordinates = coverCoordsRef.value?.takeIf { it.isAttached }
+        return if (coordinates != null && screenMetrics.heightPx > 0f) {
+            (coordinates.positionInRoot().y / screenMetrics.heightPx).coerceIn(0f, 1f)
+        } else 0.5f
+    }
     val titleCoordsRef = remember { object { var value: LayoutCoordinates? = null } }
     val menuButtonCoordsRef = remember { object { var value: LayoutCoordinates? = null } }
     val localSharedElementSourceRoute = LocalVideoCardSharedElementSourceRoute.current
@@ -1104,7 +1119,7 @@ internal fun ElegantVideoCard(
                             ?.takeIf { it.isAttached }?.positionInRoot()?.y
                         val fraction = if (infoY != null && screenMetrics.heightPx > 0f) {
                             (infoY / screenMetrics.heightPx).coerceIn(0f, 1f)
-                        } else cardYFraction.floatValue
+                        } else currentCoverYFraction()
                         val backing = resolvedInfoBackingColor(fraction)
                         val plate = if (useRealtimeWallpaperBackdrop) {
                             infoBaseContainerColor.copy(alpha = if (isDarkCardTheme) 0.44f else 0.36f)
@@ -1418,11 +1433,9 @@ internal fun ElegantVideoCard(
                 .onPlaced { coordinates -> coverCoordsRef.value = coordinates }
                 .onSizeChanged { if (coverRequestSpec == null) measuredCoverSize = it }
                 .then(
-                    // Only wallpaper backing uses the scrolling cover position. Interaction
-                    // bounds are queried from the live coordinates when the user acts.
-                    if (resolvedWallpaperTintEnabled) Modifier.onGloballyPositioned { coordinates ->
+                    if (nonHomeCardYFraction != null) Modifier.onGloballyPositioned { coordinates ->
                         if (screenMetrics.heightPx > 0f) {
-                            cardYFraction.floatValue =
+                            nonHomeCardYFraction.floatValue =
                                 (coordinates.boundsInRoot().top / screenMetrics.heightPx).coerceIn(0f, 1f)
                         }
                     } else Modifier
@@ -1815,7 +1828,9 @@ internal fun ElegantVideoCard(
                         Modifier.sharedGlobalWallpaperBackground(
                             fallbackColor = resolvedInfoBackingColor(0.5f),
                             fallbackColorProvider = {
-                                resolvedInfoBackingColor(cardYFraction.floatValue)
+                                // 滚动只使绘制失效，使用实时坐标保持壁纸取色对齐。
+                                homeScrollTickProvider?.invoke()
+                                resolvedInfoBackingColor(currentCoverYFraction())
                             },
                         )
                     } else Modifier
@@ -1863,7 +1878,7 @@ internal fun ElegantVideoCard(
                                 val yFraction = if (currentY != null && screenMetrics.heightPx > 0f) {
                                     (currentY / screenMetrics.heightPx).coerceIn(0f, 1f)
                                 } else {
-                                    cardYFraction.floatValue
+                                    currentCoverYFraction()
                                 }
                                 // Only the wallpaper RGB depends on Y; alpha/glow/border remain cached.
                                 interpolateWallpaperColor(requireNotNull(wallpaperPalette), yFraction)

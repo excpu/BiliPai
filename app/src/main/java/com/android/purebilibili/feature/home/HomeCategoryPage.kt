@@ -373,13 +373,16 @@ internal fun HomeCategoryPageContent(
     val videoGridKeys = remember(visibleGridVideos) {
         resolveHomeCategoryVideoGridKeys(visibleGridVideos)
     }
-    SideEffect { cardReflowState.retainKeys(videoGridKeys.toSet()) }
-    val oldContentVideoIndex = oldContentAnchorBvid?.let { anchor ->
-        visibleGridVideos.indexOfFirst { it.bvid == anchor }.takeIf { it >= 0 }
-    } ?: oldContentStartIndex
-    val oldContentDividerIndex = oldContentAnchorBvid?.let { anchor ->
-        visibleGridVideos.indexOfFirst { it.bvid == anchor }.takeIf { it > 0 }
-    } ?: oldContentStartIndex?.takeIf { it > 0 && it < visibleGridVideos.size }
+    SideEffect { cardReflowState.retainKeys(videoGridKeys) }
+    // 旧内容定位与分界共用一次查找，滚动启停等无关重组不再遍历全部视频。
+    val oldContentAnchorIndex = remember(visibleGridVideos, oldContentAnchorBvid) {
+        oldContentAnchorBvid?.let { anchor ->
+            visibleGridVideos.indexOfFirst { it.bvid == anchor }.takeIf { it >= 0 }
+        }
+    }
+    val oldContentVideoIndex = oldContentAnchorIndex ?: oldContentStartIndex
+    val oldContentDividerIndex = oldContentAnchorIndex?.takeIf { it > 0 }
+        ?: oldContentStartIndex?.takeIf { it > 0 && it < visibleGridVideos.size }
     val oldContentGridItemIndex = remember(
         category,
         visibleGridVideos,
@@ -419,10 +422,12 @@ internal fun HomeCategoryPageContent(
     val visibleLazyItemKeys = remember(gridState) {
         derivedStateOf { gridState.layoutInfo.visibleItemsInfo.mapTo(HashSet()) { it.key } }
     }
-    val alignedDividerIndex = remember(category, visibleGridVideos, oldContentAnchorBvid, oldContentStartIndex) {
+    val alignedDividerIndex = remember(
+        category, visibleGridVideos, oldContentAnchorBvid, oldContentStartIndex, oldContentAnchorIndex,
+    ) {
         if (category != HomeCategory.RECOMMEND) null
         else if (oldContentAnchorBvid != null) {
-            visibleGridVideos.indexOfFirst { it.bvid == oldContentAnchorBvid }.takeIf { it > 0 }
+            oldContentAnchorIndex?.takeIf { it > 0 }
         } else oldContentStartIndex?.takeIf { it > 0 && it < visibleGridVideos.size }
     }
     val alignedRows = remember(visibleGridVideos.size, gridColumns, alignedDividerIndex, showFullVideoCardContent) {

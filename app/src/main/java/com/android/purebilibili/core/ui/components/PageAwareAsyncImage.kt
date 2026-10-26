@@ -25,7 +25,10 @@ import coil3.compose.asPainter
 import coil3.imageLoader
 import coil3.memory.MemoryCache
 import coil3.request.ImageRequest
+import coil3.request.crossfade
+import com.android.purebilibili.core.store.DataSaverState
 import com.android.purebilibili.core.util.withBiliImageQuality
+import com.android.purebilibili.feature.home.LocalHomeCardCoverLoadingAllowed
 
 /** Defaults to normal loading outside the retained bottom-tab page scope. */
 internal val LocalPageImageLoadingAllowed = staticCompositionLocalOf { true }
@@ -49,7 +52,17 @@ internal fun PageAwareAsyncImage(
     val context = LocalContext.current
     val resolvedImageLoader = imageLoader ?: context.imageLoader
     // 请求和暂停时的缓存回放使用同一质量身份，避免返回列表时丢失封面占位。
-    val request = (model as? ImageRequest)?.withBiliImageQuality()
+    val dataSaver by remember(context) { DataSaverState.get(context).active }
+    // 首页封面、头像直接显示。只按是否属于首页选择策略，不把滚动/加载许可作为请求 key，
+    // 避免滚动启停重建请求；其他列表继续使用各自的淡入配置。
+    val homeFeedImage = LocalHomeCardCoverLoadingAllowed.current != null
+    val request = remember(model, dataSaver, homeFeedImage, context) {
+        val source = model as? ImageRequest
+            ?: if (homeFeedImage && model != null) ImageRequest.Builder(context).data(model).build() else null
+        source?.withBiliImageQuality(dataSaver)?.let {
+            if (homeFeedImage) it.newBuilder().crossfade(false).build() else it
+        }
+    }
     val imageKey = request?.data ?: model
     var retainedImage by remember(imageKey, request?.memoryCacheKey, request?.memoryCacheKeyExtras, resolvedImageLoader) {
         mutableStateOf<coil3.Image?>(null)

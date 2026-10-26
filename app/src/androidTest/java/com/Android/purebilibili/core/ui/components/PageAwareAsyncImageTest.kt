@@ -19,6 +19,9 @@ import coil3.asImage
 import coil3.memory.MemoryCache
 import coil3.request.ImageRequest
 import coil3.request.CachePolicy
+import coil3.request.crossfade
+import coil3.request.crossfadeMillis
+import com.android.purebilibili.feature.home.LocalHomeCardCoverLoadingAllowed
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -26,6 +29,60 @@ import org.junit.Test
 
 class PageAwareAsyncImageTest {
     @get:Rule val composeRule = createComposeRule()
+
+    @Test
+    fun homeImageHasNoFadeAndDoesNotRestartWhenLoadWindowChanges() {
+        val loadWindow = mutableStateOf(true)
+        val successes = AtomicInteger()
+        val requests = java.util.concurrent.ConcurrentLinkedQueue<ImageRequest>()
+        val bitmap = solidBitmap(android.graphics.Color.RED)
+        composeRule.setContent {
+            val context = LocalContext.current
+            val request = androidx.compose.runtime.remember(context) {
+                ImageRequest.Builder(context).data(bitmap).crossfade(200).build()
+            }
+            CompositionLocalProvider(LocalHomeCardCoverLoadingAllowed provides loadWindow.value) {
+                PageAwareAsyncImage(
+                    model = request,
+                    // 单独改变首页窗口许可，验证它不会作为图片请求身份的一部分。
+                    loadingAllowed = true,
+                    contentDescription = null,
+                    modifier = Modifier.size(64.dp),
+                    onSuccess = {
+                        requests.add(it.result.request)
+                        successes.incrementAndGet()
+                    },
+                )
+            }
+        }
+        composeRule.waitUntil(5_000) { successes.get() == 1 }
+        assertEquals(0, requests.single().crossfadeMillis)
+        composeRule.runOnIdle { loadWindow.value = false }
+        composeRule.waitForIdle()
+        composeRule.runOnIdle { loadWindow.value = true }
+        composeRule.waitForIdle()
+        assertEquals(1, successes.get())
+    }
+
+    @Test
+    fun nonHomeImageRetainsItsRequestedFade() {
+        val requests = java.util.concurrent.ConcurrentLinkedQueue<ImageRequest>()
+        val bitmap = solidBitmap(android.graphics.Color.RED)
+        composeRule.setContent {
+            val context = LocalContext.current
+            val request = androidx.compose.runtime.remember(context) {
+                ImageRequest.Builder(context).data(bitmap).crossfade(100).build()
+            }
+            PageAwareAsyncImage(
+                model = request,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                onSuccess = { requests.add(it.result.request) },
+            )
+        }
+        composeRule.waitUntil(5_000) { requests.isNotEmpty() }
+        assertEquals(100, requests.single().crossfadeMillis)
+    }
 
     @Test
     fun inactivePageDefersRequestAndKeepsDecodedImageWhenHiddenAgain() {

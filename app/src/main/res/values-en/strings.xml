@@ -355,7 +355,7 @@
     <string name="animation_glass_share_title">Share Liquid Glass settings</string>
     <string name="animation_glass_share_failed">Could not open the system share sheet</string>
     <string name="animation_glass_export_failed">Could not export Liquid Glass settings</string>
-    <string name="animation_skeleton_summary">Subtle brightness changes on placeholder cards while loading</string>
+    <string name="animation_skeleton_summary">A soft highlight sweeps across loading placeholders; turn off for static placeholders</string>
     <string name="animation_header_blur_summary">Blur content behind the top bar, without refraction or lighting</string>
     <string name="animation_progressive_blur_summary">Gradually adjust top bar blur while scrolling (Android 13+)</string>
     <string name="animation_progressive_fade_summary">Use a solid color fade from the status bar to the top bar; more power efficient than blur</string>

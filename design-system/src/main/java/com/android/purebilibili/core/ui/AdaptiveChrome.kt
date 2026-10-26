@@ -36,6 +36,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -307,6 +308,7 @@ fun AdaptiveTopAppBar(
     style: AdaptiveTopAppBarStyle = AdaptiveTopAppBarStyle.SMALL,
     scrollBehavior: TopAppBarScrollBehavior? = null,
     collapseBehavior: AppTopBarCollapseBehavior? = null,
+    smallTitleColor: Color = Color.Unspecified,
 ) {
     val scaffoldHaze = LocalAdaptiveScaffoldHaze.current
     val hazeModifier = if (scaffoldHaze != null) {
@@ -344,6 +346,7 @@ fun AdaptiveTopAppBar(
             style = style,
             scrollBehavior = scrollBehavior,
             collapseBehavior = collapseBehavior,
+            smallTitleColor = smallTitleColor,
         )
     }
 }
@@ -366,6 +369,7 @@ private fun NativeAdaptiveTopAppBar(
     style: AdaptiveTopAppBarStyle = AdaptiveTopAppBarStyle.SMALL,
     scrollBehavior: TopAppBarScrollBehavior? = null,
     collapseBehavior: AppTopBarCollapseBehavior? = null,
+    smallTitleColor: Color = Color.Unspecified,
 ) {
     // Keep crowded phone chrome readable: long dynamic titles must not collapse into
     // one-character-per-line text when actions consume the remaining width.
@@ -410,6 +414,21 @@ private fun NativeAdaptiveTopAppBar(
         else -> effectiveColors
     }
 
+    // 与原生顶栏实际容器色合成，透明顶栏继承外层遮色；不改变 MD3/Miuix 绘制参数。
+    val iconSurfaceColor = topAppBarColors.containerColor.compositeOver(
+        com.android.purebilibili.core.ui.components.LocalAppTopBarSurfaceColor.current
+    )
+    val decoratedNavigationIcon: @Composable () -> Unit = {
+        CompositionLocalProvider(
+            com.android.purebilibili.core.ui.components.LocalAppTopBarSurfaceColor provides iconSurfaceColor,
+        ) { navigationIcon() }
+    }
+    val decoratedActions: @Composable RowScope.() -> Unit = {
+        CompositionLocalProvider(
+            com.android.purebilibili.core.ui.components.LocalAppTopBarSurfaceColor provides iconSurfaceColor,
+        ) { actions() }
+    }
+
     if (rememberIsNativeMiuixEnabled()) {
         SideEffect {
             // Native Miuix bars do not consume the caller's Material scroll state. Leaving its
@@ -425,14 +444,14 @@ private fun NativeAdaptiveTopAppBar(
                 CompositionLocalProvider(
                     LocalContentColor provides topAppBarColors.navigationIconContentColor
                 ) {
-                    navigationIcon()
+                    decoratedNavigationIcon()
                 }
             }
         val actionsContent: @Composable RowScope.() -> Unit = {
             CompositionLocalProvider(
                 LocalContentColor provides topAppBarColors.actionIconContentColor
             ) {
-                actions()
+                decoratedActions()
             }
         }
         when (style) {
@@ -454,6 +473,9 @@ private fun NativeAdaptiveTopAppBar(
                 if (isMiuixNonGlassEnabled()) {
                     MiuixSmallTopAppBar(
                         title = displayTitle,
+                        titleColor = if (smallTitleColor == Color.Unspecified) {
+                            top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme.onSurface
+                        } else smallTitleColor,
                         modifier = modifier,
                         color = topAppBarColors.containerColor,
                         navigationIcon = navigationContent,
@@ -465,7 +487,7 @@ private fun NativeAdaptiveTopAppBar(
                 } else {
                     TopAppBar(
                         modifier = modifier,
-                        title = { Text(displayTitle, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        title = { Text(displayTitle, color = smallTitleColor, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         navigationIcon = navigationContent,
                         actions = actionsContent,
                         colors = topAppBarColors,
@@ -496,9 +518,9 @@ private fun NativeAdaptiveTopAppBar(
         AdaptiveTopAppBarStyle.SMALL -> {
             TopAppBar(
                 modifier = modifier,
-                title = { Text(displayTitle, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = navigationIcon,
-                actions = actions,
+                title = { Text(displayTitle, color = smallTitleColor, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                navigationIcon = decoratedNavigationIcon,
+                actions = decoratedActions,
                 colors = topAppBarColors,
                 scrollBehavior = scrollBehavior,
                 windowInsets = topBarWindowInsets
@@ -509,8 +531,8 @@ private fun NativeAdaptiveTopAppBar(
             CenterAlignedTopAppBar(
                 modifier = modifier,
                 title = { Text(displayTitle, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = navigationIcon,
-                actions = actions,
+                navigationIcon = decoratedNavigationIcon,
+                actions = decoratedActions,
                 colors = topAppBarColors,
                 scrollBehavior = scrollBehavior,
                 windowInsets = topBarWindowInsets
@@ -521,8 +543,8 @@ private fun NativeAdaptiveTopAppBar(
             LargeTopAppBar(
                 modifier = modifier,
                 title = { Text(displayLargeTitle, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = navigationIcon,
-                actions = actions,
+                navigationIcon = decoratedNavigationIcon,
+                actions = decoratedActions,
                 colors = TopAppBarDefaults.largeTopAppBarColors(
                     containerColor = topAppBarColors.containerColor,
                     scrolledContainerColor = topAppBarColors.scrolledContainerColor,
@@ -638,6 +660,8 @@ fun AppTopBar(
     style: AppTopBarStyle = AppTopBarStyle.SMALL,
     scrollBehavior: TopAppBarScrollBehavior? = null,
     collapseBehavior: AppTopBarCollapseBehavior? = null,
+    // 仅显式调用方控制小标题的状态色；未指定时保留各原生样式的默认标题颜色。
+    smallTitleColor: Color = Color.Unspecified,
 ) = AdaptiveTopAppBar(
     title = title,
     modifier = modifier,
@@ -653,4 +677,5 @@ fun AppTopBar(
     },
     scrollBehavior = scrollBehavior,
     collapseBehavior = collapseBehavior,
+    smallTitleColor = smallTitleColor,
 )

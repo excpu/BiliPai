@@ -3,7 +3,9 @@ package com.android.purebilibili.feature.home
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.MutableFloatState
@@ -22,6 +24,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.android.purebilibili.core.store.HomeBarHideType
+import com.android.purebilibili.core.theme.AppUiStyle
+import com.android.purebilibili.core.theme.LocalAppUiStyle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -34,6 +38,45 @@ class HomeScrollLayoutUiRegressionTest {
     val rule = createComposeRule()
 
     private var hostCompositions = 0
+
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Test
+    fun refreshInsetUpdatesIndicatorWithoutRecomposingFeedOrPageHost() {
+        val inset = mutableStateOf(120.dp)
+        var pageCompositions = 0
+        var feedCompositions = 0
+        rule.setContent {
+            CompositionLocalProvider(LocalAppUiStyle provides AppUiStyle.MATERIAL3) {
+                MaterialTheme {
+                    SideEffect { pageCompositions++ }
+                    HomeFeedPullToRefreshBox(
+                        isRefreshing = false,
+                        onRefresh = {},
+                        state = rememberPullToRefreshState(),
+                        indicatorTopInset = inset,
+                        indicator = { topInset -> Text("刷新起点：${topInset.value.toInt()}") },
+                    ) {
+                        SideEffect { feedCompositions++ }
+                        Text("首页列表")
+                    }
+                }
+            }
+        }
+        rule.onNodeWithText("刷新起点：120").assertIsDisplayed()
+        var initialPageCompositions = 0
+        var initialFeedCompositions = 0
+        rule.runOnIdle {
+            initialPageCompositions = pageCompositions
+            initialFeedCompositions = feedCompositions
+            inset.value = 64.dp
+        }
+        rule.onNodeWithText("刷新起点：64").assertIsDisplayed()
+        rule.onNodeWithText("首页列表").assertIsDisplayed()
+        rule.runOnIdle {
+            assertEquals(initialPageCompositions, pageCompositions)
+            assertEquals(initialFeedCompositions, feedCompositions)
+        }
+    }
 
     @Test
     fun embeddedPaddingUpdatesKeepPageHostStableAndRespectStatusBar() {
@@ -119,6 +162,19 @@ class HomeScrollLayoutUiRegressionTest {
             connection.onPreScroll(Offset(20f, -5f), NestedScrollSource.UserInput)
             assertEquals(-15f, headerOffset.floatValue, 0f)
             assertEquals(1, bottomBarVisibility.size)
+            // 列表已贴顶后，尾帧剩余位移也能展开，覆盖手势与惯性两条路径。
+            assertEquals(
+                Offset(0f, 6f),
+                connection.onPostScroll(Offset.Zero, Offset(0f, 6f), NestedScrollSource.SideEffect),
+            )
+            assertEquals(-9f, headerOffset.floatValue, 0f)
+            assertEquals(
+                Offset(0f, 9f),
+                connection.onPostScroll(Offset.Zero, Offset(0f, 30f), NestedScrollSource.UserInput),
+            )
+            assertEquals(0f, headerOffset.floatValue, 0f)
+            assertEquals(false, tabsCollapsed)
+            headerOffset.floatValue = -15f
             revealLocked.value = true
         }
         rule.waitForIdle()

@@ -1303,7 +1303,7 @@ fun WatchLaterScreen(
                         val skeletonColumns = pinchListColumns
                         val skeletonBlockColor = com.android.purebilibili.core.ui.skeleton
                             .rememberContentSkeletonBlockColor(
-                                com.android.purebilibili.core.ui.skeleton.rememberContentSkeletonPulse()
+                                com.android.purebilibili.core.ui.skeleton.rememberContentSkeletonPulseState()
                             )
                         LazyVerticalGrid(
                             columns = GridCells.Fixed(skeletonColumns),

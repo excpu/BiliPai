@@ -286,6 +286,7 @@ class PureApplication : Application(), SingletonImageLoader.Factory, ComponentCa
         applyThemePreference()
         
         super.onCreate()
+        com.android.purebilibili.core.store.DataSaverState.get(this)
         initializeNormalRuntime()
     }
 

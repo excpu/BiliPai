@@ -450,6 +450,9 @@ fun DynamicSidebar(
                 fadeEnabled = themeConfig.progressiveTopFadeEnabled && !themeConfig.headerBlurEnabled,
                 surfaceColor = AppSurfaceTokens.surface(),
                 opaqueBackgroundFallback = false,
+                iconSurfaceColor = if (glassWallpaperSidebar || progressiveRequested ||
+                    (themeConfig.progressiveTopFadeEnabled && !themeConfig.headerBlurEnabled)
+                ) Color.Transparent else returnHeaderColor,
                 extendBelowBounds = false,
                 modifier = Modifier
                     .fillMaxWidth()

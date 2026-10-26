@@ -36,6 +36,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -166,6 +167,9 @@ fun ChatScreen(
     val rawUiState by viewModel.uiState.collectAsStateWithLifecycle()
     val uiState = rawUiState.takeIf { it.accountIdentity == accountIdentity }
         ?: ChatUiState(accountIdentity = accountIdentity)
+    LaunchedEffect(viewModel, accountIdentity, userName) {
+        viewModel.loadChatUser(userName)
+    }
     var inputValue by rememberSaveable(talkerId, sessionType, accountIdentity, stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue("")) }
     val inputText = inputValue.text
     LaunchedEffect(viewModel, uiState.sentText) {
@@ -296,7 +300,9 @@ fun ChatScreen(
         blurContentReady = !uiState.isLoading,
         topBar = {
             AppTopBar(
-                title = userName,
+                title = if (sessionType == 1) {
+                    "${uiState.userInfo?.name?.takeIf { it.isNotBlank() } ?: userName} · UID $talkerId"
+                } else userName,
                 modifier = if (sessionType == 1) Modifier.clickable { onOpenBilibiliLink("bilibili://space/$talkerId") } else Modifier,
                 navigationIcon = {
                     AppIconButton(onClick = onBack) {
@@ -305,6 +311,18 @@ fun ChatScreen(
                 },
                 actions = {
                     if (sessionType == 1) {
+                        AppIconButton(onClick = { onOpenBilibiliLink("bilibili://space/$talkerId") }) {
+                            if (uiState.userInfo?.face.isNullOrBlank()) {
+                                AppIcon(Icons.Default.Person, "对方资料")
+                            } else {
+                                AsyncImage(
+                                    model = uiState.userInfo?.face,
+                                    contentDescription = "对方头像",
+                                    modifier = Modifier.size(32.dp).clip(CircleShape),
+                                    contentScale = ContentScale.Crop,
+                                )
+                            }
+                        }
                         AppIconButton(onClick = { showSettings = true }) { AppIcon(Icons.Default.MoreVert, "聊天设置") }
                     } else ChatSessionControlMenu(
                         sessionType = sessionType,

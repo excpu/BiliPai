@@ -24,8 +24,10 @@ class ContentLoadingSkeletonStructureTest {
         assertTrue(source.contains("fun ContentCategoryGridSkeleton("))
         assertTrue(source.contains("fun TrendingListSkeleton("))
         assertTrue(source.contains("rememberContentSkeletonPulseState("))
-        // Home-style soft pulse; no left-right shimmer sweep flicker.
-        assertTrue(source.contains("RepeatMode.Reverse"))
+        // Sweep progress stays in the shared State and is consumed by draw helpers.
+        assertTrue(source.contains("rememberSkeletonSweepState()"))
+        assertTrue(source.contains("colorProvider.skeletonBrush(size)"))
+        assertFalse(source.contains("fun rememberContentSkeletonPulse(): Float"))
         assertFalse(source.contains("shimmerEffect()"))
     }
 

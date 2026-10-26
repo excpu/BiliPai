@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 /** Survives aligned-row regrouping, whose parent keys change after a card is removed. */
 internal class HomeCardReflowState {
     private val cards = mutableMapOf<String, CardMotion>()
+    private var retainedKeys: List<String>? = null
 
     internal class CardMotion {
         var position: Offset? = null
@@ -31,9 +32,19 @@ internal class HomeCardReflowState {
 
     fun card(key: String): CardMotion = cards.getOrPut(key) { CardMotion() }
 
-    fun retainKeys(keys: Set<String>) {
-        val removed = cards.keys - keys
-        removed.forEach { cards.remove(it)?.job?.cancel() }
+    fun retainKeys(keys: List<String>) {
+        // 列表 key 由数据变化时生成；同一份快照重复提交无需重新建集合或扫描状态。
+        if (retainedKeys === keys) return
+        retainedKeys = keys
+        val currentKeys = keys.toHashSet()
+        val entries = cards.entries.iterator()
+        while (entries.hasNext()) {
+            val entry = entries.next()
+            if (entry.key !in currentKeys) {
+                entry.value.job?.cancel()
+                entries.remove()
+            }
+        }
     }
 }
 

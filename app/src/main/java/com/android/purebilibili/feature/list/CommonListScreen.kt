@@ -1802,6 +1802,9 @@ fun CommonListScreen(
                 enabled = useProgressiveHeaderBlur,
                 headerBlurActive = headerBlurActive,
                 surfaceColor = headerBackgroundColor,
+                iconSurfaceColor = if (useProgressiveHeaderBlur ||
+                    (isProgressiveTopFadeEnabled && !isHeaderBlurEnabled) || historyUsesFloatingLiquidDocks
+                ) Color.Transparent else headerBackgroundColor,
                 fadeEnabled = isProgressiveTopFadeEnabled && !isHeaderBlurEnabled,
                 extendBelowBounds = false,
                 modifier = Modifier
@@ -1818,6 +1821,10 @@ fun CommonListScreen(
                         }
                     }
             ) {
+                val visibleHeaderBackdrop = com.android.purebilibili.core.ui.blur.rememberSurfaceOverlayBackdrop(
+                    commonListChromeBackdrop,
+                    com.android.purebilibili.core.ui.components.LocalAppTopBarSurfaceColor.current,
+                )
                 Layout(
                     modifier = if (supportsCollapsibleCommonListHeader) {
                         Modifier
@@ -2042,7 +2049,7 @@ fun CommonListScreen(
                             ListScopedSearchActiveBar(
                                 searchQuery = searchQuery,
                                 onClear = { searchQuery = "" },
-                                backdrop = commonListChromeBackdrop,
+                                backdrop = visibleHeaderBackdrop,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .onGloballyPositioned { coordinates ->
@@ -2091,7 +2098,7 @@ fun CommonListScreen(
                                     androidx.compose.ui.unit.Dp.Unspecified
                                 },
                                 placeholder = searchPlaceholder,
-                                backdrop = commonListChromeBackdrop,
+                                backdrop = visibleHeaderBackdrop,
                                 isScrollInProgressProvider = {
                                     primaryGridState.isScrollInProgress
                                 },
@@ -2134,7 +2141,7 @@ fun CommonListScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = AppSpacingTokens.Medium),
-                                miuixBackdrop = commonListChromeBackdrop,
+                                miuixBackdrop = visibleHeaderBackdrop,
                             )
                         }
                         Spacer(modifier = Modifier.height(AppSpacingTokens.Small))
@@ -2227,7 +2234,7 @@ fun CommonListScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = historyFilterChrome.horizontalPaddingDp.dp),
-                                miuixBackdrop = commonListChromeBackdrop,
+                                miuixBackdrop = visibleHeaderBackdrop,
                                 indicatorPositionProvider = {
                                     historyPagerState.currentPage + historyPagerState.currentPageOffsetFraction
                                 },
@@ -2832,7 +2839,7 @@ internal fun CommonListContent(
     val showInitialSkeleton = isLoading && items.isEmpty()
     val historySkeletonBlockColor = if (showInitialSkeleton && isPersonalList) {
         com.android.purebilibili.core.ui.skeleton.rememberContentSkeletonBlockColor(
-            com.android.purebilibili.core.ui.skeleton.rememberContentSkeletonPulse()
+            com.android.purebilibili.core.ui.skeleton.rememberContentSkeletonPulseState()
         )
     } else {
         null

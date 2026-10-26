@@ -139,6 +139,9 @@ fun DynamicTopBarWithTabs(
             hazeState?.let { recoverableBlurEnabled(it) } == true &&
             !isProgressiveBlurActive,
         fadeEnabled = isProgressiveFadeActive,
+        iconSurfaceColor = if (!isProgressiveBlurActive && headerBlurEnabled && hazeState != null) {
+            AppSurfaceTokens.cardContainer().copy(alpha = AppSurfaceTokens.FrostedScrimAlpha)
+        } else Color.Transparent,
         surfaceColor = globalWallpaperAwareChromeColor(MaterialTheme.colorScheme.background),
         // 不让顶栏的渐进模糊向下越界盖住 UP 头像或动态卡片。
         // 顶栏自身渐进模糊效果保持不变，仅收敛其向下延伸。
@@ -151,6 +154,9 @@ fun DynamicTopBarWithTabs(
             } else Modifier
         ),
     ) {
+    val visibleDockBackdrop = com.android.purebilibili.core.ui.blur.rememberSurfaceOverlayBackdrop(
+        dockBackdrop, com.android.purebilibili.core.ui.components.LocalAppTopBarSurfaceColor.current,
+    )
     Column {
         Spacer(modifier = Modifier.height(statusBarHeight))
 
@@ -184,7 +190,7 @@ fun DynamicTopBarWithTabs(
                 isScrollInProgressProvider = isScrollInProgressProvider,
                 dragSelectionEnabled = tabs.size > 1,
                 tapPressRefractionEnabled = true,
-                miuixBackdrop = dockBackdrop.takeIf { liquidGlassEnabled },
+                miuixBackdrop = visibleDockBackdrop.takeIf { liquidGlassEnabled },
             )
             CompositionLocalProvider(
                 LocalAppTopBarIconDecorationEnabled provides liquidGlassEnabled,

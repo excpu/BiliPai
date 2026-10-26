@@ -6080,8 +6080,8 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
      */
     enum class FeedApiType(val value: Int, val label: String, val description: String) {
         WEB(0, "网页端", "使用 B 站网页端的推荐内容"),
-        MOBILE(1, "手机端", "使用 B 站手机端的推荐内容，需登录"),
-        MERGED(2, "合并推荐", "合并网页端和手机端推荐；手机端需登录，不可用时使用网页端");
+        MOBILE(1, "手机端", "需移动端登录凭证；按授权来源使用手机端或平板兼容推荐，不可用时提示并使用网页端"),
+        MERGED(2, "合并推荐", "合并网页端与当前登录授权支持的移动端推荐；缺少移动端凭证时仅使用网页端");
         
         companion object {
             fun fromValue(value: Int): FeedApiType = entries.find { it.value == value } ?: WEB
@@ -7443,20 +7443,7 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
      * 根据模式和当前网络状态判断
      */
     fun isDataSaverActive(context: Context): Boolean {
-        val mode = getDataSaverModeSync(context)
-        return when (mode) {
-            DataSaverMode.OFF -> false
-            DataSaverMode.ALWAYS -> true
-            DataSaverMode.MOBILE_ONLY -> {
-                // 检测当前网络是否为移动数据
-                val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) 
-                    as android.net.ConnectivityManager
-                val network = connectivityManager.activeNetwork
-                val capabilities = connectivityManager.getNetworkCapabilities(network)
-                // 如果是蜂窝网络，则启用省流量
-                capabilities?.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) == true
-            }
-        }
+        return DataSaverState.get(context).active.value
     }
     
     //  [新增] --- 底栏顺序配置 ---

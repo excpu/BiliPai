@@ -2049,7 +2049,7 @@ private fun TabletVideoInfoStaggeredItem(
 @Composable
 private fun TabletRelatedCarouselSkeleton(modifier: Modifier = Modifier) {
     val color = com.android.purebilibili.core.ui.skeleton.rememberContentSkeletonBlockColor(
-        com.android.purebilibili.core.ui.skeleton.rememberContentSkeletonPulse(),
+        com.android.purebilibili.core.ui.skeleton.rememberContentSkeletonPulseState(),
     )
     Column(modifier = modifier) {
         Spacer(Modifier.height(24.dp))
@@ -2077,14 +2077,14 @@ private fun TabletRelatedCarouselSkeleton(modifier: Modifier = Modifier) {
                     com.android.purebilibili.core.ui.skeleton.ContentSkeletonText(
                         text = "推荐视频标题占位\n第二行标题占位",
                         style = MaterialTheme.typography.bodySmall,
-                        colorProvider = { color },
+                        colorProvider = color,
                         maxLines = 2,
                     )
                     Spacer(Modifier.height(2.dp))
                     com.android.purebilibili.core.ui.skeleton.ContentSkeletonText(
                         text = "UP 主名称",
                         style = MaterialTheme.typography.labelSmall,
-                        colorProvider = { color },
+                        colorProvider = color,
                     )
                 }
             }
