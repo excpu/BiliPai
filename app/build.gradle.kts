@@ -1,3 +1,6 @@
+import java.io.StringReader
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // AGP 9+ provides built-in Kotlin; do not apply org.jetbrains.kotlin.android
@@ -121,6 +124,59 @@ val buildReleaseTag = providers.gradleProperty("bili.build.releaseTag")
     .orElse("")
     .get()
 
+// ---------------------------------------------------------------------------
+// release 签名：凭据留在本机，仓库只保留读取逻辑。
+// 值来源优先级：rootProject/signing.properties → Gradle 属性 → 环境变量。
+// signing.properties / *.jks / *.keystore 已在 .gitignore 中，不会被提交。
+// 用 fileContents / environmentVariable 读取，保证 configuration-cache 能在
+// 修改 signing.properties 后失效重建（直接 File 读取不会被追踪）。
+// ---------------------------------------------------------------------------
+val releaseSigningPropsText = providers.fileContents(
+    rootProject.layout.projectDirectory.file("signing.properties")
+).asText.orNull
+
+val releaseSigningProps = Properties().apply {
+    if (!releaseSigningPropsText.isNullOrBlank()) {
+        load(StringReader(releaseSigningPropsText))
+    }
+}
+
+// 未填写的占位符（形如 <FILL_ME>）视为“未配置”，避免把字面量当密码传给 apksigner。
+fun normalizeSigningValue(rawValue: String?): String? = rawValue
+    ?.trim()
+    ?.trim('"', '\'')
+    ?.takeIf { value -> value.isNotEmpty() && !(value.startsWith("<") && value.endsWith(">")) }
+
+fun biliSigningValue(key: String): String? =
+    normalizeSigningValue(releaseSigningProps.getProperty(key))
+        ?: normalizeSigningValue(providers.gradleProperty(key).orNull)
+        ?: normalizeSigningValue(providers.environmentVariable(key).orNull)
+
+val releaseStoreFile = biliSigningValue("BILLIPAI_STORE_FILE")
+val releaseStorePassword = biliSigningValue("BILLIPAI_STORE_PASSWORD")
+val releaseKeyAlias = biliSigningValue("BILLIPAI_KEY_ALIAS")
+val releaseKeyPassword = biliSigningValue("BILLIPAI_KEY_PASSWORD")
+val releaseStoreType = biliSigningValue("BILLIPAI_STORE_TYPE")
+
+// 四项齐全才启用签名，避免半填状态把错误密码交给 apksigner。
+val releaseSigningConfigured =
+    releaseStoreFile != null && releaseStorePassword != null &&
+        releaseKeyAlias != null && releaseKeyPassword != null
+
+if (releaseStoreFile == null &&
+    (releaseStorePassword != null || releaseKeyAlias != null || releaseKeyPassword != null)
+) {
+    logger.warn(
+        "BiliPai release 签名未启用：检测到部分 BILLIPAI_* 凭据，但缺少 BILLIPAI_STORE_FILE。"
+    )
+} else if (releaseStoreFile != null && !releaseSigningConfigured) {
+    logger.warn(
+        "BiliPai release 签名未启用：BILLIPAI_STORE_FILE 已设置，但 " +
+            "BILLIPAI_STORE_PASSWORD / BILLIPAI_KEY_ALIAS / BILLIPAI_KEY_PASSWORD 仍有占位符或未填写。" +
+            " release APK 将保持未签名（不可安装）。"
+    )
+}
+
 android {
     namespace = "com.android.purebilibili"
     androidResources {
@@ -168,6 +224,24 @@ android {
         }
     }
 
+    signingConfigs {
+        // 仅当 signing.properties（或 Gradle 属性 / 环境变量）四项凭据齐全时创建；
+        // 未配置时 release 保持现状（未签名），CI 行为不变。
+        if (releaseSigningConfigured) {
+            create("release") {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+                releaseStoreType?.let { storeType = it }
+                // minSdk 26：V1 可省，V2/V3 足够覆盖现代设备安装校验。
+                enableV1Signing = false
+                enableV2Signing = true
+                enableV3Signing = true
+            }
+        }
+    }
+
     buildTypes {
         release {
             // Disable PNG crunching to avoid AAPT errors
@@ -179,6 +253,10 @@ android {
             isMinifyEnabled = true
             // 🔥 启用资源压缩 (移除未使用的资源)
             isShrinkResources = true
+            // 本机配置了 signing.properties 时自动签名；否则维持未签名产物。
+            if (releaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

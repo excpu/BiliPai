@@ -25,6 +25,11 @@ local.properties
 !app/src/main/java/com/android/purebilibili/build/
 !app/src/main/java/com/android/purebilibili/build/**
 
+# VS Code Java 扩展（Eclipse JDT LS）自带的编译输出目录，与 Gradle 的 build/ 平行且无关。
+# 仓库内没有任何被跟踪的 bin/ 目录，因此可以整体忽略；
+# 之前 build-logic/bin 只是被上面的 **/build/ 顺带命中（其包名含 .build），并非有意配置。
+**/bin/
+
 # 🔥 忽略 Kotlin 编译器临时文件和错误日志
 *.compiler.options
 .kotlin/
