@@ -52,6 +52,9 @@ import com.android.purebilibili.feature.settings.share.SettingsShareApplyResult
 import com.android.purebilibili.feature.settings.share.SettingsShareEntryDefinition
 import com.android.purebilibili.feature.settings.share.SettingsShareSection
 import com.android.purebilibili.feature.settings.AppLanguage
+import com.android.purebilibili.feature.plugin.PLAYBACK_CDN_FALLBACK_CUSTOM_MAX_TIMEOUT_SECONDS
+import com.android.purebilibili.feature.plugin.PLAYBACK_CDN_FALLBACK_CUSTOM_MIN_TIMEOUT_SECONDS
+import com.android.purebilibili.feature.plugin.PLAYBACK_CDN_FALLBACK_DEFAULT_TIMEOUT_SECONDS
 import com.android.purebilibili.feature.settings.AppThemeMode
 import com.android.purebilibili.feature.settings.DarkThemeSchedule
 import com.android.purebilibili.feature.settings.normalizeDarkThemeSchedule
@@ -109,6 +112,8 @@ internal const val DEFAULT_ANALYTICS_ENABLED = true
 internal const val DEFAULT_QUALITY_SWITCH_FAILURE_DIALOG_ENABLED = true
 internal const val DEFAULT_QUALITY_SWITCH_FAILURE_DIALOG_ONCE_ENABLED = false
 internal const val DEFAULT_DASH_SEGMENT_REQUESTS_ENABLED = false
+internal val DEFAULT_PLAYBACK_CDN_CUSTOM_FALLBACK_TIMEOUT_SECONDS: Float =
+    PLAYBACK_CDN_FALLBACK_DEFAULT_TIMEOUT_SECONDS
 
 internal fun resolveDefaultPlayerDiagnosticLoggingEnabled(isDebugBuild: Boolean): Boolean {
     return !isDebugBuild
@@ -7589,6 +7594,8 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
         booleanPreferencesKey("dash_segment_requests_enabled")
     private val KEY_PLAYBACK_CDN_PREFERENCE = stringPreferencesKey("playback_cdn_preference")
     private val KEY_PLAYBACK_CDN_CUSTOM_HOST = stringPreferencesKey("playback_cdn_custom_host")
+    private val KEY_PLAYBACK_CDN_CUSTOM_FALLBACK_TIMEOUT =
+        floatPreferencesKey("playback_cdn_custom_fallback_timeout")
     private val KEY_QUALITY_SWITCH_FAILURE_DIALOG_ENABLED =
         booleanPreferencesKey("quality_switch_failure_dialog_enabled")
     private val KEY_QUALITY_SWITCH_FAILURE_DIALOG_ONCE_ENABLED =
@@ -8110,6 +8117,29 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
             val normalized = host?.trim()
             if (normalized.isNullOrEmpty()) preferences.remove(KEY_PLAYBACK_CDN_CUSTOM_HOST)
             else preferences[KEY_PLAYBACK_CDN_CUSTOM_HOST] = normalized
+        }
+    }
+
+    /** 自定义 CDN 主机生效时的首帧超时回退时长（秒）；仅在配置了自定义主机时参与播放逻辑。 */
+    fun getPlaybackCdnCustomFallbackTimeoutSeconds(context: Context): Flow<Float> =
+        context.settingsDataStore.data.map { preferences ->
+            preferences[KEY_PLAYBACK_CDN_CUSTOM_FALLBACK_TIMEOUT]
+                ?: DEFAULT_PLAYBACK_CDN_CUSTOM_FALLBACK_TIMEOUT_SECONDS
+        }
+
+    suspend fun setPlaybackCdnCustomFallbackTimeoutSeconds(context: Context, seconds: Float) {
+        context.settingsDataStore.edit { preferences ->
+            val clamped = seconds
+                .takeIf { it.isFinite() }
+                ?.coerceIn(
+                    PLAYBACK_CDN_FALLBACK_CUSTOM_MIN_TIMEOUT_SECONDS,
+                    PLAYBACK_CDN_FALLBACK_CUSTOM_MAX_TIMEOUT_SECONDS
+                )
+            if (clamped == null || clamped == DEFAULT_PLAYBACK_CDN_CUSTOM_FALLBACK_TIMEOUT_SECONDS) {
+                preferences.remove(KEY_PLAYBACK_CDN_CUSTOM_FALLBACK_TIMEOUT)
+            } else {
+                preferences[KEY_PLAYBACK_CDN_CUSTOM_FALLBACK_TIMEOUT] = clamped
+            }
         }
     }
 

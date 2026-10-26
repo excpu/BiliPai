@@ -104,6 +104,35 @@ internal fun applyPlaybackCdnPreference(
 private fun rewriteCandidateHost(url: String, host: String, unrestricted: Boolean): String? =
     if (unrestricted) rewriteCdnUrlHost(url, host) else rewriteBilivideoHost(url, host)
 
+/** 首帧超时回退的默认时长（秒），与原有硬编码 2.5s 行为一致。 */
+const val PLAYBACK_CDN_FALLBACK_DEFAULT_TIMEOUT_SECONDS = 2.5f
+
+/** 自定义 CDN 主机生效时，设置页允许配置的首帧超时范围（秒）。 */
+const val PLAYBACK_CDN_FALLBACK_CUSTOM_MIN_TIMEOUT_SECONDS = 2.5f
+const val PLAYBACK_CDN_FALLBACK_CUSTOM_MAX_TIMEOUT_SECONDS = 60f
+
+/**
+ * 解析首帧超时回退时长：配置了合法的自定义 CDN 主机时，允许用户把超时放宽到 2.5~60 秒；
+ * 未配置或非法时始终保持默认 2.5 秒，不影响内置镜像线路。
+ */
+internal fun resolvePlaybackCdnFallbackTimeoutSeconds(
+    customHost: String?,
+    configuredTimeoutSeconds: Float?,
+): Float {
+    val hasCustomHost = normalizePlaybackCdnHost(customHost) != null
+    if (!hasCustomHost) return PLAYBACK_CDN_FALLBACK_DEFAULT_TIMEOUT_SECONDS
+    return configuredTimeoutSeconds
+        ?.takeIf { it.isFinite() }
+        ?.coerceIn(
+            PLAYBACK_CDN_FALLBACK_CUSTOM_MIN_TIMEOUT_SECONDS,
+            PLAYBACK_CDN_FALLBACK_CUSTOM_MAX_TIMEOUT_SECONDS
+        )
+        ?: PLAYBACK_CDN_FALLBACK_DEFAULT_TIMEOUT_SECONDS
+}
+
+internal fun playbackCdnFallbackTimeoutMillisFromSeconds(seconds: Float): Long =
+    (seconds * 1_000f).toLong().coerceAtLeast(1L)
+
 private val playbackCdnHostNamePattern =
     Regex("^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$")
 private val playbackCdnIpv6Pattern = Regex("^\\[[0-9A-Fa-f:.]+]$")

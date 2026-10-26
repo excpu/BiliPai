@@ -54,6 +54,8 @@ import com.android.purebilibili.plugin.sdk.PlaybackCdnPlugin
 import com.android.purebilibili.feature.plugin.PlaybackCdnPreference
 import com.android.purebilibili.feature.plugin.applyPlaybackCdnPreference
 import com.android.purebilibili.feature.plugin.normalizePlaybackCdnHost
+import com.android.purebilibili.feature.plugin.resolvePlaybackCdnFallbackTimeoutSeconds
+import com.android.purebilibili.feature.plugin.playbackCdnFallbackTimeoutMillisFromSeconds
 import com.android.purebilibili.feature.plugin.buildPlaybackCdnCacheKeys
 import com.android.purebilibili.feature.plugin.buildCdnLineDiagnostics
 import com.android.purebilibili.feature.plugin.buildCdnTrackCacheKey
@@ -159,7 +161,6 @@ import com.android.purebilibili.feature.video.subtitle.mapPlayerInfoSubtitleTrac
 import com.android.purebilibili.feature.video.subtitle.normalizeBilibiliSubtitleUrl
 import com.android.purebilibili.feature.video.subtitle.resolveDefaultSubtitleLanguages
 
-private const val PLAYBACK_CDN_FIRST_FRAME_FALLBACK_TIMEOUT_MS = 2_500L
 private const val PLAYBACK_STALL_RECOVERY_TIMEOUT_MS = 10_000L
 private const val PLAYBACK_STARTUP_RECOVERY_TIMEOUT_MS = 5_000L
 
@@ -1374,6 +1375,26 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
         .getPlaybackCdnCustomHost(application.applicationContext)
         .map { normalizePlaybackCdnHost(it) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    private val playbackCdnFallbackTimeoutMs = SettingsManager
+        .getPlaybackCdnCustomHost(application.applicationContext)
+        .map { normalizePlaybackCdnHost(it) }
+        .combine(
+            SettingsManager.getPlaybackCdnCustomFallbackTimeoutSeconds(application.applicationContext)
+        ) { host, configuredSeconds ->
+            playbackCdnFallbackTimeoutMillisFromSeconds(
+                resolvePlaybackCdnFallbackTimeoutSeconds(
+                    customHost = host,
+                    configuredTimeoutSeconds = configuredSeconds
+                )
+            )
+        }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            playbackCdnFallbackTimeoutMillisFromSeconds(
+                resolvePlaybackCdnFallbackTimeoutSeconds(null, null)
+            )
+        )
 
     // HDR auto-upgrade state
     private val attemptedUpgradeKeys = mutableSetOf<String>()
@@ -9305,7 +9326,7 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
         val scheduledPlayer = exoPlayer
 
         playbackCdnFallbackJob = viewModelScope.launch {
-            delay(PLAYBACK_CDN_FIRST_FRAME_FALLBACK_TIMEOUT_MS)
+            delay(playbackCdnFallbackTimeoutMs.value)
             if (ticket != playbackRecoveryGeneration || exoPlayer !== scheduledPlayer) return@launch
             val playbackReady = exoPlayer?.playbackState == Player.STATE_READY
             val expectedAudioTrack = playbackCdnFallbackState.selectedAudioUrl != null

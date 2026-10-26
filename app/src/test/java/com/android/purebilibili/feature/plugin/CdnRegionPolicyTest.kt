@@ -525,4 +525,48 @@ class CdnRegionPolicyTest {
         assertNull(normalizePlaybackCdnHost("proxy.example.com:0"))
         assertNull(normalizePlaybackCdnHost("proxy.example.com:notaport"))
     }
+
+    @Test
+    fun `fallback timeout only honors configured value when custom host is set`() {
+        // 未配置自定义主机：无论存了什么值都用默认 2.5s，内置线路行为不变。
+        assertEquals(
+            2.5f,
+            resolvePlaybackCdnFallbackTimeoutSeconds(customHost = null, configuredTimeoutSeconds = 30f)
+        )
+        assertEquals(
+            2.5f,
+            resolvePlaybackCdnFallbackTimeoutSeconds(customHost = "bad host", configuredTimeoutSeconds = 30f)
+        )
+        // 配置了自定义主机：采用用户设置并夹取到 2.5~60s。
+        assertEquals(
+            30f,
+            resolvePlaybackCdnFallbackTimeoutSeconds(
+                customHost = normalizePlaybackCdnHost("proxy.example.com"),
+                configuredTimeoutSeconds = 30f
+            )
+        )
+        assertEquals(
+            2.5f,
+            resolvePlaybackCdnFallbackTimeoutSeconds("cdn.example.net", configuredTimeoutSeconds = 1f)
+        )
+        assertEquals(
+            60f,
+            resolvePlaybackCdnFallbackTimeoutSeconds("cdn.example.net", configuredTimeoutSeconds = 120f)
+        )
+        assertEquals(
+            2.5f,
+            resolvePlaybackCdnFallbackTimeoutSeconds("cdn.example.net", configuredTimeoutSeconds = null)
+        )
+        assertEquals(
+            2.5f,
+            resolvePlaybackCdnFallbackTimeoutSeconds("cdn.example.net", configuredTimeoutSeconds = Float.NaN)
+        )
+    }
+
+    @Test
+    fun `fallback timeout converts seconds to millis`() {
+        assertEquals(2_500L, playbackCdnFallbackTimeoutMillisFromSeconds(2.5f))
+        assertEquals(60_000L, playbackCdnFallbackTimeoutMillisFromSeconds(60f))
+        assertEquals(1L, playbackCdnFallbackTimeoutMillisFromSeconds(0f))
+    }
 }

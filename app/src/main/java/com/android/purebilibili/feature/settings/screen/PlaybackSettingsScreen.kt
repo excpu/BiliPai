@@ -40,6 +40,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.android.purebilibili.R
 import com.android.purebilibili.core.store.DEFAULT_DASH_SEGMENT_REQUESTS_ENABLED
+import com.android.purebilibili.core.store.DEFAULT_PLAYBACK_CDN_CUSTOM_FALLBACK_TIMEOUT_SECONDS
 import com.android.purebilibili.core.store.DEFAULT_PLAYER_DIAGNOSTIC_LOGGING_ENABLED
 import com.android.purebilibili.core.store.DEFAULT_QUALITY_SWITCH_FAILURE_DIALOG_ENABLED
 import com.android.purebilibili.core.store.DEFAULT_QUALITY_SWITCH_FAILURE_DIALOG_ONCE_ENABLED
@@ -70,6 +71,8 @@ import com.android.purebilibili.feature.screenshot.AppScreenshotGestureMode
 import com.android.purebilibili.feature.video.subtitle.SubtitleAutoPreference
 import com.android.purebilibili.feature.video.subtitle.isSubtitleFeatureEnabledForUser
 import com.android.purebilibili.feature.plugin.PlaybackCdnPreference
+import com.android.purebilibili.feature.plugin.PLAYBACK_CDN_FALLBACK_CUSTOM_MAX_TIMEOUT_SECONDS
+import com.android.purebilibili.feature.plugin.PLAYBACK_CDN_FALLBACK_CUSTOM_MIN_TIMEOUT_SECONDS
 import com.android.purebilibili.feature.plugin.normalizePlaybackCdnHost
 import com.android.purebilibili.core.ui.AppAlertDialog
 import kotlin.math.roundToInt
@@ -226,6 +229,9 @@ fun PlaybackSettingsContent(
     }
     val playbackCdnCustomHost by remember(context) { SettingsManager.getPlaybackCdnCustomHost(context) }
         .collectAsStateWithLifecycle(initialValue = "")
+    val playbackCdnFallbackTimeoutSeconds by remember(context) {
+        SettingsManager.getPlaybackCdnCustomFallbackTimeoutSeconds(context)
+    }.collectAsStateWithLifecycle(initialValue = DEFAULT_PLAYBACK_CDN_CUSTOM_FALLBACK_TIMEOUT_SECONDS)
     var showPlaybackCdnCustomHostDialog by rememberSaveable { mutableStateOf(false) }
     var playbackCdnCustomHostDraft by rememberSaveable { mutableStateOf("") }
     var playbackCdnCustomHostError by remember { mutableStateOf<String?>(null) }
@@ -1092,6 +1098,37 @@ SettingsSingleChoicePreference(
                                     },
                                     iconTint = AppContentColors.secondaryText(),
                                 )
+                            }
+
+                            if (playbackCdnCustomHost.isNotBlank()) {
+                                AppPreferenceDivider()
+
+                                SettingsItemAnchor("playback.playback_cdn_custom_fallback_timeout") {
+                                    AppSliderDialogPreference(
+                                        icon = com.android.purebilibili.feature.settings.rememberMaterialSymbol(com.android.purebilibili.R.drawable.ms_timer_24),
+                                        title = "首帧超时回退",
+                                        subtitle = "自定义线路首帧超过此时长仍未就绪时，自动回退原始线路",
+                                        value = playbackCdnFallbackTimeoutSeconds,
+                                        onValueChange = { seconds ->
+                                            scope.launch {
+                                                SettingsManager.setPlaybackCdnCustomFallbackTimeoutSeconds(
+                                                    context,
+                                                    seconds,
+                                                )
+                                            }
+                                        },
+                                        valueRange = PLAYBACK_CDN_FALLBACK_CUSTOM_MIN_TIMEOUT_SECONDS..PLAYBACK_CDN_FALLBACK_CUSTOM_MAX_TIMEOUT_SECONDS,
+                                        steps = ((PLAYBACK_CDN_FALLBACK_CUSTOM_MAX_TIMEOUT_SECONDS -
+                                            PLAYBACK_CDN_FALLBACK_CUSTOM_MIN_TIMEOUT_SECONDS) / 0.5f)
+                                            .roundToInt() - 1,
+                                        valueFormatter = { seconds ->
+                                            if (seconds % 1f == 0f) "${seconds.toInt()} 秒"
+                                            else "${seconds} 秒"
+                                        },
+                                        dialogTitle = "首帧超时回退",
+                                        iconTint = AppContentColors.secondaryText(),
+                                    )
+                                }
                             }
                         }
 
