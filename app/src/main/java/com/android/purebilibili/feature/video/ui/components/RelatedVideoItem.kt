@@ -26,6 +26,9 @@ import androidx.compose.material.icons.filled.MoreVert
 import com.android.purebilibili.core.ui.components.AppIcon
 import com.android.purebilibili.core.ui.components.AppSurface
 import com.android.purebilibili.core.ui.components.AppText
+import com.android.purebilibili.core.ui.components.AppGlassMenuSource
+import com.android.purebilibili.core.ui.components.appGlassMenuSource
+import com.android.purebilibili.core.ui.components.rememberAppGlassMenuSource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -171,6 +174,7 @@ internal fun chunkRelatedVideosForHomeStyleGrid(
 
 @Composable
 internal fun rememberRelatedVideoCardLayout(): HomeFeedCardLayout {
+    LocalRelatedVideoCardLayout.current?.let { return it }
     val context = LocalContext.current
     val homeFeedCardStyle by SettingsManager
         .getHomeFeedCardStyle(context)
@@ -179,6 +183,11 @@ internal fun rememberRelatedVideoCardLayout(): HomeFeedCardLayout {
         resolveHomeFeedCardLayout(homeFeedCardStyle)
     }
 }
+
+/** 详情加载、占位交接和真实推荐共用页面已读取的卡片样式。 */
+internal val LocalRelatedVideoCardLayout = androidx.compose.runtime.staticCompositionLocalOf<HomeFeedCardLayout?> { null }
+
+internal const val RELATED_VIDEO_SKELETON_ROW_COUNT = 3
 
 
 
@@ -196,7 +205,8 @@ fun RelatedVideoItem(
     stacked: Boolean = false,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
-    onMoreClick: (() -> Unit)? = null
+    onMoreClick: (() -> Unit)? = null,
+    moreMenuSource: AppGlassMenuSource? = null,
 ) {
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
@@ -418,7 +428,9 @@ fun RelatedVideoItem(
                                 {
                                     AsyncImage(
                                         model = ImageRequest.Builder(context)
-                                            .data(FormatUtils.fixImageUrl(video.owner.face))
+                                            .data(FormatUtils.fixImageUrl(
+                                                video.owner.face
+                                            ))
                                             .crossfade(false)
                                             .build(),
                                         contentDescription = null,
@@ -453,6 +465,7 @@ fun RelatedVideoItem(
                     Box(
                         modifier = Modifier
                             .size(48.dp)
+                            .then(moreMenuSource?.let { Modifier.appGlassMenuSource(it, onOpen = moreClick) } ?: Modifier)
                             .clip(CircleShape)
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
@@ -489,6 +502,7 @@ internal fun RelatedVideoGridRow(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var actionVideo by remember { mutableStateOf<RelatedVideo?>(null) }
+    val actionMenuSource = rememberAppGlassMenuSource()
     var blockCreatorRequest by remember {
         mutableStateOf<RelatedVideoBlockRequest?>(null)
     }
@@ -508,7 +522,8 @@ internal fun RelatedVideoGridRow(
                 stacked = cardPresentation == RelatedVideoCardLayout.STACKED,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { onVideoClick(video) },
-                onMoreClick = { actionVideo = video }
+                onMoreClick = { actionVideo = video },
+                moreMenuSource = actionMenuSource,
             )
         }
     }
@@ -517,6 +532,7 @@ internal fun RelatedVideoGridRow(
     if (pendingVideo != null) {
         RelatedVideoActionSheet(
             video = pendingVideo,
+            source = actionMenuSource,
             onWatchLater = {
                 scope.launch {
                     val result = withContext(Dispatchers.IO) {

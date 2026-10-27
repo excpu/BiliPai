@@ -425,7 +425,7 @@ fun <T> AppNativeTabRow(
     selectedValue: T,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    centerContent: Boolean = false,
+    centerContent: Boolean = com.android.purebilibili.core.ui.isMiuixNonGlassEnabled(),
     scrollable: Boolean = false,
     forceEqualWidth: Boolean = false,
     minTabWidth: Dp = 72.dp,
@@ -574,6 +574,7 @@ fun <T> AppNativeTabRow(
             contentSizedNonGlassItems = useContentSizedMiuixItems,
             contentSizedNonGlassMaxItemWidth = contentSizedMiuixNonGlassMaxItemWidth,
             drawNonGlassTrack = drawMiuixNonGlassTrack,
+            stretchToFill = forceEqualWidth,
             onSelectionChange = onSelectionChange,
         )
     }

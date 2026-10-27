@@ -36,6 +36,8 @@ sealed interface NavSettleSpec {
         val dampingRatio: Float = NavDriverSpec.DAMPING_RATIO,
         val stiffness: Float = NavDriverSpec.STIFFNESS,
         val clampOvershoot: Boolean = true,
+        /** Position tolerance passed directly to Compose's spring; defaults preserve existing routes. */
+        val visibilityThreshold: Float = NavDriverSpec.VISIBILITY_THRESHOLD,
     ) : NavSettleSpec {
         init {
             require(dampingRatio >= 1f || !clampOvershoot) {

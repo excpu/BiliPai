@@ -2072,6 +2072,7 @@ fun AppNavigation(
                 it is BiliPaiNavKey.Web &&
                     !com.android.purebilibili.feature.web.shouldOpenWebUrlExternally(it.url)
             }
+        val floatingBackdropDemand = remember { com.android.purebilibili.core.ui.blur.FloatingChromeBackdropDemand() }
         val shouldCaptureBottomBarBackdrop = navigationBackdropCaptureEnabled &&
             (homeSettings.androidNativeLiquidGlassEnabled || isBottomBarBlurEnabled)
         val bottomBarBackdropSource = if (shouldCaptureBottomBarBackdrop) {
@@ -2082,6 +2083,14 @@ fun AppNavigation(
             null
         }
         val bottomBarBackdrop = bottomBarBackdropSource?.backdrop
+        // 仅玻璃路径在视频完全覆盖来源页时暂停采样；返回和悬浮内容会重新请求。
+        val recordBottomBarBackdrop = com.android.purebilibili.core.ui.transition.shouldRecordVideoCardFloatingBackdrop(
+            liquidGlassEnabled = homeSettings.androidNativeLiquidGlassEnabled,
+            isVideoDetailDestination = isVideoDetailDestination,
+            exposure = videoCardChromeExposure,
+            hasActiveAudioPlayback = hasActiveAudioPlayback,
+            hasFloatingConsumer = floatingBackdropDemand.isRequired,
+        )
         val componentMotionEnabled = com.android.purebilibili.core.ui.resolveComponentMotionEnabled(
             entranceEnabled = com.android.purebilibili.core.ui.LocalAppThemeConfig.current.uiEntranceAnimationEnabled,
             cardEntranceEnabled = homeSettings.cardAnimationEnabled,
@@ -2103,6 +2112,8 @@ fun AppNavigation(
                 com.android.purebilibili.core.ui.components.BiliPaiPopupSurfaceRenderer,
             com.android.purebilibili.core.ui.blur.LocalFloatingChromeBackdrop provides
                 bottomBarBackdrop,
+            com.android.purebilibili.core.ui.blur.LocalFloatingChromeBackdropDemand provides
+                floatingBackdropDemand,
             com.android.purebilibili.feature.aicu.LocalAicuNavigation provides { uid: Long? ->
                 pushNavigation3Key(BiliPaiNavKey.AicuQuery(uid = uid ?: 0L))
             },
@@ -2381,7 +2392,7 @@ fun AppNavigation(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .then(bottomBarBackdropSource?.modifier ?: Modifier)
+                        .then(if (recordBottomBarBackdrop) bottomBarBackdropSource?.modifier ?: Modifier else Modifier)
                         // [Fix] 将内容标记为全局底栏模糊的源
                         // 必须添加 hazeSource，否则底栏的 hazeEffect 无法获取背景内容，导致模糊失效
                         .then(
@@ -2766,12 +2777,13 @@ fun AppNavigation(
                                 )
                             )
                         },
-                        onMessageClick = { talkerId, userName, _ ->
+                        onMessageClick = { talkerId, userName, userFace ->
                             pushNavigation3Key(
                                 BiliPaiNavKey.Chat(
                                     talkerId = talkerId,
                                     sessionType = 1,
-                                    userName = userName
+                                    userName = userName,
+                                    userFace = userFace
                                 )
                             )
                         },
@@ -3032,6 +3044,9 @@ fun AppNavigation(
                                 onBangumiSeasonClick = { seasonId ->
                                     pushNavigation3Key(BiliPaiNavKey.BangumiDetail(seasonId = seasonId))
                                 },
+                                onBangumiPlayFollow = { seasonId ->
+                                    pushNavigation3Key(BiliPaiNavKey.BangumiPlayer(seasonId = seasonId, epId = 0L))
+                                },
                                 onBangumiEpisodeClick = { seasonId, epId ->
                                     pushNavigation3Key(
                                         BiliPaiNavKey.BangumiDetail(seasonId = seasonId, epId = epId)
@@ -3127,9 +3142,7 @@ fun AppNavigation(
                                     isCurrentPage = isBottomPagerPageActive,
                                     initialSearchQuery = historySearchKey?.query.orEmpty(),
                                     isSearchDestination = historySearchKey != null,
-                                    onOpenSearchDestination = if (historySearchKey == null) {
-                                        { query, _ -> pushNavigation3Key(BiliPaiNavKey.HistorySearch(query)) }
-                                    } else null,
+                                    onOpenSearchDestination = null,
                                     listScopedSearchChannel = if (historySearchKey == null) {
                                         historyListScopedSearchChannel
                                     } else {
@@ -4355,6 +4368,7 @@ fun AppNavigation(
                                     talkerId = chatKey.talkerId,
                                     sessionType = chatKey.sessionType,
                                     userName = chatKey.userName.ifBlank { "用户${chatKey.talkerId}" },
+                                    userFace = chatKey.userFace,
                                     onBack = { performSystemBackAction() },
                                     onNavigateToVideo = { bvid ->
                                         navigateToVideoInNavigation3(bvid, 0L, "")
@@ -4677,6 +4691,9 @@ fun AppNavigation(
                                     onBangumiClick = { seasonId ->
                                         pushNavigation3Key(BiliPaiNavKey.BangumiDetail(seasonId = seasonId))
                                     },
+                                    onPlayFollow = { seasonId ->
+                                        pushNavigation3Key(BiliPaiNavKey.BangumiPlayer(seasonId = seasonId, epId = 0L))
+                                    },
                                     onBangumiEpisodeClick = { seasonId, epId ->
                                         pushNavigation3Key(
                                             BiliPaiNavKey.BangumiDetail(
@@ -4716,6 +4733,9 @@ fun AppNavigation(
                                     onBack = { performSystemBackAction() },
                                     onNavigateToLogin = { pushNavigation3Key(BiliPaiNavKey.Login) },
                                     onUserClick = { mid -> pushNavigation3Key(BiliPaiNavKey.Space(mid)) },
+                                    onSeasonClick = { seasonId ->
+                                        replaceNavigation3TopWithKey(BiliPaiNavKey.BangumiPlayer(seasonId = seasonId, epId = 0L))
+                                    },
                                     onOpenBilibiliLink = { url ->
                                         pushNavigation3Key(BiliPaiNavKey.Web(url = url))
                                     }
@@ -4938,7 +4958,10 @@ fun AppNavigation(
                                     onBack = { performSystemBackAction() },
                                     onOpenWeb = { url, webTitle ->
                                         pushNavigation3Key(BiliPaiNavKey.Web(url = url, title = webTitle))
-                                    }
+                                    },
+                                    onOpenArticle = { articleId, title ->
+                                        pushNavigation3Key(BiliPaiNavKey.ArticleDetail(articleId = articleId, title = title))
+                                    },
                                 )
                             }
                         }

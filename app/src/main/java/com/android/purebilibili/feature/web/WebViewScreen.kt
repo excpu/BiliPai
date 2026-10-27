@@ -1,5 +1,7 @@
 package com.android.purebilibili.feature.web
 
+import com.android.purebilibili.core.ui.components.AppTextButton as TextButton
+
 import com.android.purebilibili.core.ui.AppContentColors
 import com.android.purebilibili.core.ui.components.appElasticPress
 
@@ -12,6 +14,11 @@ import android.widget.Toast
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.WebChromeClient
+import android.webkit.ValueCallback
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -66,8 +73,10 @@ fun WebViewScreen(
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     // 组合期读取明暗主题，factory 里不能再调用 @Composable。
-    val webViewBackground =
-        if (androidx.compose.foundation.isSystemInDarkTheme()) 0xFF101010.toInt() else 0xFFFFFFFF.toInt()
+    val shortReviewReport = remember(url) { isShortReviewReportUrl(url) }
+    val darkTheme = com.android.purebilibili.core.ui.isAppInDarkTheme()
+    val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val webViewBackground = if (if (shortReviewReport) darkTheme else systemDark) 0xFF101010.toInt() else 0xFFFFFFFF.toInt()
     val openInitialUrlExternally = remember(url) { shouldOpenWebUrlExternally(url) }
     if (openInitialUrlExternally) {
         val currentOnBack by rememberUpdatedState(onBack)
@@ -85,6 +94,11 @@ fun WebViewScreen(
         return
     }
 
+    var pendingFileWebView by remember(url) { mutableStateOf<BrowserWebView?>(null) }
+    val reportImagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        pendingFileWebView?.finishReportFileSelection(uris)
+        pendingFileWebView = null
+    }
     var rendererFailed by remember(url) { mutableStateOf(false) }
     var externalUrl by remember(url) { mutableStateOf<String?>(null) }
     val externalOpenGate = remember(url) { LinkOpenGate() }
@@ -147,12 +161,44 @@ fun WebViewScreen(
                                 setBackgroundColor(webViewBackground)
                                 settings.javaScriptEnabled = true
                                 settings.domStorageEnabled = true
-                                if (mobileUserAgent) {
+                                if (mobileUserAgent || shortReviewReport) {
                                     settings.userAgentString = MOBILE_USER_AGENT
+                                }
+                                if (shortReviewReport) {
+                                    settings.useWideViewPort = true
+                                    settings.loadWithOverviewMode = true
+                                }
+
+                                if (shortReviewReport) {
+                                    webChromeClient = object : WebChromeClient() {
+                                        override fun onShowFileChooser(
+                                            webView: WebView,
+                                            filePathCallback: ValueCallback<Array<Uri>>,
+                                            fileChooserParams: FileChooserParams,
+                                        ): Boolean {
+                                            if (!isShortReviewReportUrl(webView.url.orEmpty())) return false
+                                            val browser = webView as BrowserWebView
+                                            pendingFileWebView?.finishReportFileSelection(emptyList())
+                                            browser.beginReportFileSelection(filePathCallback, fileChooserParams.mode == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE)
+                                            pendingFileWebView = browser
+                                            try {
+                                                reportImagePicker.launch("image/*")
+                                            } catch (_: Exception) {
+                                                browser.finishReportFileSelection(emptyList())
+                                                pendingFileWebView = null
+                                                Toast.makeText(context, "无法打开图片选择器", Toast.LENGTH_SHORT).show()
+                                            }
+                                            return true
+                                        }
+                                    }
                                 }
 
                                 // [核心] 自定义 WebViewClient 拦截 Bilibili 链接
                                 webViewClient = object : WebViewClient() {
+                                    override fun onPageFinished(view: WebView, loadedUrl: String?) {
+                                        super.onPageFinished(view, loadedUrl)
+                                        (view as? BrowserWebView)?.applyShortReviewReportTheme(loadedUrl)
+                                    }
                                     override fun shouldOverrideUrlLoading(
                                         view: WebView?,
                                         request: WebResourceRequest?
@@ -300,6 +346,7 @@ fun WebViewScreen(
                         },
                         update = { webView ->
                             // Compare the caller's request, not the current URL after redirects.
+                            webView.setShortReviewReportTheme(if (shortReviewReport) darkTheme else null, webViewBackground)
                             webView.loadRequestedUrl(url)
                         },
                         onRelease = { it.release() },
@@ -315,9 +362,74 @@ private const val MOBILE_USER_AGENT =
     "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) " +
         "Version/4.0 Chrome/124.0.0.0 Mobile Safari/537.36"
 
+internal fun isShortReviewReportUrl(url: String): Boolean = runCatching {
+    val uri = android.net.Uri.parse(url)
+    uri.scheme == "https" && uri.host.equals("www.bilibili.com", ignoreCase = true) &&
+        uri.path?.trimEnd('/') == "/appeal" && uri.getQueryParameter("type") == "shortComment"
+}.getOrDefault(false)
+
 private class BrowserWebView(context: Context) : WebView(context) {
+    private var reportDarkTheme: Boolean? = null
+    private var reportFileCallback: ValueCallback<Array<Uri>>? = null
+    private var reportAllowsMultiple = false
+
+    fun beginReportFileSelection(callback: ValueCallback<Array<Uri>>, allowsMultiple: Boolean) {
+        reportFileCallback?.onReceiveValue(null)
+        reportFileCallback = callback
+        reportAllowsMultiple = allowsMultiple
+    }
+
+    fun finishReportFileSelection(uris: List<Uri>) {
+        val callback = reportFileCallback
+        reportFileCallback = null
+        val selected = if (reportAllowsMultiple) uris else uris.take(1)
+        reportAllowsMultiple = false
+        callback?.onReceiveValue(selected.takeIf { it.isNotEmpty() }?.toTypedArray())
+    }
     private var requestedUrl: String? = null
     private var released = false
+
+    fun setShortReviewReportTheme(dark: Boolean?, background: Int) {
+        if (released) return
+        setBackgroundColor(background)
+        if (reportDarkTheme != dark) {
+            reportDarkTheme = dark
+            applyShortReviewReportTheme(this.url)
+        }
+    }
+
+    fun applyShortReviewReportTheme(loadedUrl: String?) {
+        val dark = reportDarkTheme ?: return
+        if (released || loadedUrl == null || !isShortReviewReportUrl(loadedUrl)) return
+        val layoutCss = """
+            #app .question { min-height: 56px !important; height: auto !important; padding: 12px 16px !important; font-size: 16px !important; line-height: 1.5 !important; overflow-wrap: anywhere; }
+            #app .selector, #app .option, #app .option .child-option { font-size: 16px !important; line-height: 1.5 !important; }
+            #app .option, #app .option .child-option { margin: 16px !important; }
+            #app .selector .memo, #app .input .memo, #app .textarea .memo, #app .link .memo { height: auto !important; line-height: 1.5 !important; padding: 12px 16px !important; font-size: 14px !important; white-space: normal !important; overflow-wrap: anywhere; }
+            #app .input .textarea-warp textarea, #app .textarea .textarea-warp textarea, #app .link input { box-sizing: border-box !important; width: calc(100% - 32px) !important; padding: 12px !important; font-size: 16px !important; line-height: 1.5 !important; }
+            #app .upload-area { height: auto !important; min-height: 48px; line-height: 1.5 !important; font-size: 14px !important; padding: 8px 16px !important; overflow-wrap: anywhere; }
+            #app .upload-area .add-img, #app .upload-area .img-file, #app .upload-area img:not(.close) { width: 64px !important; height: 64px !important; line-height: 64px !important; }
+            #app .submit { padding: 12px 16px 24px !important; }
+            #app .submit div { height: auto !important; min-height: 48px; line-height: 48px !important; font-size: 16px !important; }
+        """.trimIndent()
+        val darkCss = if (dark) """
+            html, body, #app { background-color: #151a17 !important; color: #e1e6df !important; }
+            body, #app, main, section, article, header, footer, ul, li, label { background-color: transparent !important; color: #e1e6df !important; border-color: #454c46 !important; }
+            #app .question, #app .option, #app .selector, #app .memo, #app .upload-area { color: #e1e6df !important; border-color: #454c46 !important; }
+            p, span, h1, h2, h3 { color: #e1e6df !important; }
+            input, textarea, select { background-color: #242b26 !important; color: #e1e6df !important; border-color: #68736a !important; }
+            input[type=radio], input[type=checkbox] { accent-color: #80c99a; }
+        """.trimIndent() else ""
+        val quotedCss = org.json.JSONObject.quote(layoutCss + "\n" + darkCss)
+        evaluateJavascript("""(function(){
+            var viewport = document.querySelector('meta[name=viewport]');
+            if (!viewport) { viewport = document.createElement('meta'); viewport.name = 'viewport'; document.head.appendChild(viewport); }
+            viewport.content = 'width=device-width, initial-scale=1';
+            var style = document.getElementById('bilipai-review-report-theme');
+            if (!style) { style = document.createElement('style'); style.id = 'bilipai-review-report-theme'; document.head.appendChild(style); }
+            style.textContent = $quotedCss;
+        })();""", null)
+    }
 
     fun loadRequestedUrl(url: String) {
         if (released || requestedUrl == url) return
@@ -328,6 +440,7 @@ private class BrowserWebView(context: Context) : WebView(context) {
     fun release(rendererGone: Boolean = false) {
         if (released) return
         released = true
+        finishReportFileSelection(emptyList())
         (parent as? ViewGroup)?.removeView(this)
         if (!rendererGone) stopLoading()
         webViewClient = WebViewClient()

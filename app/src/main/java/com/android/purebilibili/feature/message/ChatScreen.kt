@@ -34,9 +34,10 @@ import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.EmojiEmotions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -158,6 +159,7 @@ fun ChatScreen(
     talkerId: Long,
     sessionType: Int,
     userName: String,
+    userFace: String = "",
     onBack: () -> Unit,
     onNavigateToVideo: (String) -> Unit,
     onOpenBilibiliLink: (String) -> Unit = {},
@@ -204,6 +206,7 @@ fun ChatScreen(
             }
     }
     var showInterceptConfirm by remember(accountIdentity) { mutableStateOf(false) }
+    var showBlockConfirm by remember(accountIdentity) { mutableStateOf(false) }
     var imagePickIdentity by remember { mutableStateOf<com.android.purebilibili.core.store.AccountSessionIdentity?>(null) }
     val context = LocalContext.current
     val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
@@ -300,30 +303,41 @@ fun ChatScreen(
         blurContentReady = !uiState.isLoading,
         topBar = {
             AppTopBar(
-                title = if (sessionType == 1) {
-                    "${uiState.userInfo?.name?.takeIf { it.isNotBlank() } ?: userName} · UID $talkerId"
-                } else userName,
+                title = if (sessionType == 1) uiState.userInfo?.name?.takeIf { it.isNotBlank() } ?: userName else userName,
                 modifier = if (sessionType == 1) Modifier.clickable { onOpenBilibiliLink("bilibili://space/$talkerId") } else Modifier,
                 navigationIcon = {
-                    AppIconButton(onClick = onBack) {
-                        AppIcon(rememberAppBackIcon(), contentDescription = "返回")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AppIconButton(onClick = onBack) {
+                            AppIcon(rememberAppBackIcon(), contentDescription = "返回")
+                        }
+                        if (sessionType == 1) {
+                            val face = uiState.userInfo?.face?.takeIf { it.isNotBlank() } ?: userFace
+                            AppIconButton(onClick = { onOpenBilibiliLink("bilibili://space/$talkerId") }) {
+                                if (face.isBlank()) AppIcon(Icons.Default.Person, "对方资料")
+                                else AsyncImage(model = face, contentDescription = "对方头像", modifier = Modifier.size(32.dp).clip(CircleShape), contentScale = ContentScale.Crop)
+                            }
+                        }
                     }
                 },
                 actions = {
                     if (sessionType == 1) {
-                        AppIconButton(onClick = { onOpenBilibiliLink("bilibili://space/$talkerId") }) {
-                            if (uiState.userInfo?.face.isNullOrBlank()) {
-                                AppIcon(Icons.Default.Person, "对方资料")
-                            } else {
-                                AsyncImage(
-                                    model = uiState.userInfo?.face,
-                                    contentDescription = "对方头像",
-                                    modifier = Modifier.size(32.dp).clip(CircleShape),
-                                    contentScale = ContentScale.Crop,
-                                )
-                            }
+                        if (chatThemeConfig.liquidGlassEnabled) {
+                            val info = uiState.sessionControlInfo
+                            val enabled = !uiState.isSessionControlLoading && !uiState.isSessionControlUpdating
+                            AppWindowActionMenu(groups = listOf(buildList {
+                                add(AppWindowAction(label = if (info.isDnd == true) "关闭免打扰" else "开启免打扰", enabled = enabled && info.isDnd != null, onClick = viewModel::toggleDnd))
+                                if (info.showPushSetting) add(AppWindowAction(label = if (info.pushMuted == true) "接收推送" else "关闭推送", enabled = enabled && info.pushMuted != null, onClick = viewModel::togglePushMuted))
+                                add(AppWindowAction(label = if (info.isPinned == true) "取消置顶" else "置顶聊天", enabled = enabled && info.isPinned != null, onClick = viewModel::togglePinned))
+                                add(AppWindowAction(label = if (info.followStatus == 128) "移出黑名单" else "加入黑名单", enabled = enabled && info.followStatus != null, onClick = { if (info.followStatus == 128) viewModel.toggleBlocked() else showBlockConfirm = true }))
+                                add(AppWindowAction(label = if (info.isIntercept == true) "移出拦截" else "移入拦截", enabled = enabled && info.isIntercept != null, onClick = { if (info.isIntercept == true) viewModel.toggleIntercept() else showInterceptConfirm = true }))
+                                add(AppWindowAction(label = "聊天设置", onClick = { showSettings = true }))
+                                if (info.isLimit == true) add(AppWindowAction(label = "会话受限", enabled = false))
+                                if (info.reportLimit == true) add(AppWindowAction(label = "举报受限", enabled = false))
+                                add(AppWindowAction(label = "刷新状态", enabled = enabled, onClick = viewModel::loadSessionControlInfo))
+                            })) { AppIcon(Icons.Default.Settings, "聊天设置") }
+                        } else {
+                            AppIconButton(onClick = { showSettings = true }) { AppIcon(Icons.Default.Settings, "聊天设置") }
                         }
-                        AppIconButton(onClick = { showSettings = true }) { AppIcon(Icons.Default.MoreVert, "聊天设置") }
                     } else ChatSessionControlMenu(
                         sessionType = sessionType,
                         controlInfo = uiState.sessionControlInfo,
@@ -417,7 +431,10 @@ fun ChatScreen(
                                     bottom = CHAT_MESSAGE_LIST_BOTTOM_PADDING +
                                         miniPlayerBottomAvoidance + emoteBottomAvoidance,
                                 ),
-                                verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.Bottom)
+                                verticalArrangement = Arrangement.spacedBy(
+                                    8.dp,
+                                    if (uiState.messages.size == 1 && uiState.messages[0].msg_type == 18) Alignment.Top else Alignment.Bottom,
+                                )
                             ) {
                                 uiState.refreshError?.let { error ->
                                     item(key = "message_refresh_error") {
@@ -549,6 +566,12 @@ fun ChatScreen(
     }
     }
 
+    if (showBlockConfirm) {
+        MessageConfirmDialog("确认拉黑该用户", "加入黑名单后，将自动解除关注和合集订阅关系，并限制对方与你互动或查看你的空间。", onDismiss = { showBlockConfirm = false }) {
+            showBlockConfirm = false
+            viewModel.toggleBlocked()
+        }
+    }
     if (showInterceptConfirm) {
         AppAlertDialog(
             onDismissRequest = { showInterceptConfirm = false },
@@ -790,7 +813,7 @@ fun ChatInputBar(
                         Box(contentAlignment = Alignment.CenterStart) {
                             if (text.text.isEmpty()) {
                                 AppText(
-                                    "输入消息...",
+                                    "发个消息聊聊呗~",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = placeholderColor,
                                     maxLines = 1,
@@ -806,7 +829,7 @@ fun ChatInputBar(
                     onValueChange = onTextChange,
                     modifier = Modifier.fillMaxWidth().heightIn(max = 112.dp).onFocusChanged { if (it.hasFocus) onInputFocus() },
                     focusRequester = inputFocus,
-                    placeholder = "输入消息...",
+                    placeholder = "发个消息聊聊呗~",
                     containerColor = panelColor,
                     readOnly = isBusy,
                     singleLine = false,
@@ -856,7 +879,7 @@ fun ChatInputBar(
                         imageVector = if (showSendAction) {
                             Icons.AutoMirrored.Filled.Send
                         } else {
-                            Icons.Filled.AddCircle
+                            Icons.Outlined.AddPhotoAlternate
                         },
                         contentDescription = if (showSendAction) "发送" else "图片",
                         tint = if (showSendAction) {
@@ -933,6 +956,17 @@ fun MessageBubble(
             color = AppContentColors.secondaryText(),
             textAlign = TextAlign.Center,
         )
+
+        if (message.msg_type == 18 && message.msg_status != 1) {
+            Spacer(modifier = Modifier.height(18.dp))
+            AppText(
+                text = parseChatTip(message.content).ifBlank { "[会话提示]" },
+                color = AppContentColors.secondaryText(),
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+            )
+            return@Column
+        }
 
         if (isLargeVideoMessage && parsedCard != null) {
             MessageLargeVideoCard(

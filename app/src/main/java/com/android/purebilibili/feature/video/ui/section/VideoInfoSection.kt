@@ -70,8 +70,8 @@ import com.android.purebilibili.feature.video.ui.components.VideoCardSkeleton
 import com.android.purebilibili.core.ui.common.AppSelectionContainer as SelectionContainer
 import androidx.compose.ui.draw.rotate
 import com.android.purebilibili.core.ui.common.copyOnClick
-import com.android.purebilibili.core.ui.OfficialVerifyBadge
 import com.android.purebilibili.core.ui.UserAvatarCornerMarkBadge
+import com.android.purebilibili.core.ui.AppSurfaceTokens
 import com.android.purebilibili.core.ui.resolveUserAvatarCornerMark
 import com.android.purebilibili.core.ui.components.AppIconButton
 import com.android.purebilibili.core.ui.components.AppSurface
@@ -79,7 +79,6 @@ import com.android.purebilibili.core.ui.components.resolveUpNameColor
 import com.android.purebilibili.core.ui.components.UserUpBadge
 import com.android.purebilibili.core.theme.AppUiStyle
 import com.android.purebilibili.core.theme.LocalAppUiStyle
-import com.android.purebilibili.core.ui.resolveOfficialVerifyBadgeFromRole
 import com.android.purebilibili.core.ui.transition.LocalVideoSharedTransitionSpeedSettings
 import com.android.purebilibili.core.ui.transition.resolveVideoMetadataSharedTransitionMotionSpec
 import com.android.purebilibili.core.ui.transition.shouldEnableVideoCoverSharedTransition
@@ -819,7 +818,6 @@ fun VideoTitleWithDesc(
                 videoBadges.forEach { badge ->
                     VideoDetailBadgeChip(
                         text = badge,
-                        emphasized = badge.startsWith("充电专属"),
                     )
                 }
                 honorChips.forEach { (_, text, jumpUrl) ->
@@ -994,13 +992,11 @@ fun VideoDescriptionAndTags(
 @Composable
 private fun VideoDetailBadgeChip(
     text: String,
-    emphasized: Boolean
 ) {
-    val colors = MaterialTheme.colorScheme
     VideoInfoChip(
         text = text,
-        containerColor = if (emphasized) colors.primaryContainer else colors.surfaceContainerHighest,
-        contentColor = if (emphasized) colors.onPrimaryContainer else colors.onSurfaceVariant,
+        containerColor = AppSurfaceTokens.primaryContainer(),
+        contentColor = AppSurfaceTokens.onPrimaryContainer(),
     )
 }
 
@@ -1235,7 +1231,9 @@ fun UpInfoSection(
                     if (info.owner.face.isNotBlank()) {
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
-                                .data(FormatUtils.fixImageUrl(info.owner.face))
+                                .data(FormatUtils.fixImageUrl(
+                                    info.owner.face
+                                ))
                                 .crossfade(true)
                                 .build(),
                             contentDescription = "UP主头像",
@@ -1322,6 +1320,10 @@ fun UpInfoSection(
                 }
             }
 
+            val nativeFollowColors = com.android.purebilibili.core.ui.AppInteractionColors.nativeFollow(
+                isFollowing = isFollowing,
+                enabled = followStatusKnown,
+            )
             val followAccent = AppContentColors.selectionAccent(
                 com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled
             )
@@ -1332,8 +1334,8 @@ fun UpInfoSection(
                     darkTheme = followDarkTheme,
                 )
             }
-            // 关注状态未确认时不再用空格+灰底占位：直接按“未关注”的主题配色渲染完整按钮，
-            // 状态回填后仅用 Crossfade 切换文案，避免灰胶囊→蓝色按钮的硬跳与闪烁。
+            // 状态未确认仍显示完整文案；非玻璃 Miuix 使用原生禁用配色，其余材质保留既有占位策略。
+            // 关系状态回填继续沿用原有文案过渡。
             AppSurface(
                 onClick = rememberFollowActionWithConfirmation(
                     targetKey = info.owner.mid,
@@ -1342,7 +1344,7 @@ fun UpInfoSection(
                     onFollowClick = onFollowClick,
                 ),
                 enabled = followStatusKnown,
-                color = if (isFollowing) followAccent.copy(alpha = 0.14f) else when (followVisualPolicy.detailButtonTone) {
+                color = nativeFollowColors?.container ?: if (isFollowing) followAccent.copy(alpha = 0.14f) else when (followVisualPolicy.detailButtonTone) {
                     FollowButtonTone.PRIMARY -> AppContentColors.accent()
                     FollowButtonTone.PRIMARY_CONTAINER -> MaterialTheme.colorScheme.primaryContainer
                 },
@@ -1364,7 +1366,7 @@ fun UpInfoSection(
                             maxLines = 1,
                             softWrap = false,
                             style = MaterialTheme.typography.labelMedium,
-                            color = if (isFollowing) followAccent else when (followVisualPolicy.detailTextTone) {
+                            color = nativeFollowColors?.content ?: if (isFollowing) followAccent else when (followVisualPolicy.detailTextTone) {
                                 FollowTextTone.ON_PRIMARY -> AppContentColors.onAccent()
                                 FollowTextTone.ON_PRIMARY_CONTAINER -> MaterialTheme.colorScheme.onPrimaryContainer
                             },
@@ -1540,6 +1542,7 @@ private fun CreatorTeamMemberChip(
     onFollowToggle: () -> Unit,
     onClick: () -> Unit
 ) {
+    val nativeFollowColors = com.android.purebilibili.core.ui.AppInteractionColors.nativeFollow(isFollowing)
     val followAccent = AppContentColors.selectionAccent(
         com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled
     )
@@ -1548,15 +1551,6 @@ private fun CreatorTeamMemberChip(
         resolveVideoFollowVisualPolicy(
             isFollowing = isFollowing,
             darkTheme = followDarkTheme,
-        )
-    }
-    val officialBadge = remember(member.official) {
-        resolveOfficialVerifyBadgeFromRole(
-            type = member.official.type,
-            role = member.official.role,
-            title = member.official.title,
-            desc = member.official.desc,
-            compact = true
         )
     }
     Row(
@@ -1570,7 +1564,9 @@ private fun CreatorTeamMemberChip(
         Box(modifier = Modifier.size(36.dp)) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
-                    .data(FormatUtils.fixImageUrl(member.face))
+                    .data(FormatUtils.fixImageUrl(
+                        member.face
+                    ))
                     .crossfade(true)
                     .build(),
                 contentDescription = "${member.name} 头像",
@@ -1606,12 +1602,6 @@ private fun CreatorTeamMemberChip(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false)
                 )
-                if (officialBadge != null) {
-                    OfficialVerifyBadge(
-                        badge = officialBadge,
-                        compact = true
-                    )
-                }
             }
             if (member.title.isNotBlank()) {
                 AppText(
@@ -1640,7 +1630,7 @@ private fun CreatorTeamMemberChip(
                 contentAlignment = Alignment.Center
             ) {
                 AppSurface(
-                    color = if (isFollowing) followAccent.copy(alpha = 0.14f) else when (followVisualPolicy.detailButtonTone) {
+                    color = nativeFollowColors?.container ?: if (isFollowing) followAccent.copy(alpha = 0.14f) else when (followVisualPolicy.detailButtonTone) {
                         FollowButtonTone.PRIMARY -> AppContentColors.accent()
                         FollowButtonTone.PRIMARY_CONTAINER -> MaterialTheme.colorScheme.primaryContainer
                     },
@@ -1656,7 +1646,7 @@ private fun CreatorTeamMemberChip(
                             maxLines = 1,
                             softWrap = false,
                             style = MaterialTheme.typography.labelMedium,
-                            color = if (isFollowing) followAccent else when (followVisualPolicy.detailTextTone) {
+                            color = nativeFollowColors?.content ?: if (isFollowing) followAccent else when (followVisualPolicy.detailTextTone) {
                                 FollowTextTone.ON_PRIMARY -> AppContentColors.onAccent()
                                 FollowTextTone.ON_PRIMARY_CONTAINER -> MaterialTheme.colorScheme.onPrimaryContainer
                             },

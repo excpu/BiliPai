@@ -53,10 +53,11 @@ internal fun HomeTopAvatarContent(
     fallbackBackgroundColor: Color,
     modifier: Modifier = Modifier
 ) {
-    if (user.isLogin && user.face.isNotEmpty()) {
+    val displayFace = user.face
+    if (user.isLogin && displayFace.isNotEmpty()) {
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
-                .data(FormatUtils.fixImageUrl(user.face))
+                .data(FormatUtils.fixImageUrl(displayFace))
                 .size(128, 128)
                 .crossfade(true)
                 .build(),

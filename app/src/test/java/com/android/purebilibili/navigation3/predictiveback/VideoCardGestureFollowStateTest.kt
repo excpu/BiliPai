@@ -196,6 +196,26 @@ class VideoCardGestureFollowStateTest {
     }
 
     @Test
+    fun nearCompleteFollowCommitKeepsReleaseDepthAndPose() {
+        val scope = Scope()
+        val progress = MiuixVideoCardTransitionProgress(gestureTranslationEnabled = true, gesturePoseEnabled = true)
+        progress.bind(scope)
+        progress.gestureFollow.onTransitionState(event(0f, 700f))
+        pose(progress, scope)
+        scope.relativeDepth = -.99f
+        scope.gesture = NavGesture(.99f, NavSwipeEdge.Left, 1000f, 700f)
+        progress.gestureFollow.onTransitionState(event(600f, 1000f))
+        val releaseDepth = progress.depthOrNull()!!
+        val releasePose = pose(progress, scope)
+        scope.settle = Settle(NavSettlePhase.Commit)
+        scope.role = NavRole.Outgoing
+        assertEquals(releaseDepth, progress.depthOrNull()!!, .0001f)
+        assertEquals(releasePose, pose(progress, scope))
+        scope.relativeDepth = -1f
+        assertOffset(Offset.Zero, pose(progress, scope).translation)
+    }
+
+    @Test
     fun cancellingVerticalOnlyMoveStillAnimatesWithoutDepthTravel() {
         val scope = Scope()
         val progress = MiuixVideoCardTransitionProgress(gestureTranslationEnabled = true, gesturePoseEnabled = true)

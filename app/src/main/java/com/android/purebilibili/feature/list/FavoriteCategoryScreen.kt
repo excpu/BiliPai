@@ -24,8 +24,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.MaterialTheme
 import com.android.purebilibili.core.ui.components.AppFloatingToolbar
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Row
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -463,20 +461,18 @@ private fun FavoriteCategoryContent(
                 modifier = Modifier.align(Alignment.BottomCenter)
                     .padding(start = 12.dp, end = 12.dp, bottom = contentPadding.calculateBottomPadding() + 12.dp),
             ) {
-                Row(Modifier.horizontalScroll(rememberScrollState())) {
-                    if (state.section == FavoriteSection.BANGUMI || state.section == FavoriteSection.CINEMA) {
-                        FavoritePgcStatus.entries.forEach { status ->
-                            AppTextButton(onClick = { onUpdateSelectedPgcStatus(status) }) {
-                                AppText("移至${status.label}")
-                            }
-                        }
-                    } else {
-                        AppTextButton(onClick = onRemoveSelected) {
-                            AppText("删除(${state.selectedIds.size})")
+                if (state.section == FavoriteSection.BANGUMI || state.section == FavoriteSection.CINEMA) {
+                    FavoritePgcStatus.entries.forEach { status ->
+                        AppTextButton(onClick = { onUpdateSelectedPgcStatus(status) }) {
+                            AppText("移至${status.label}")
                         }
                     }
-                    AppTextButton(onClick = onClearSelection) { AppText("取消选择") }
+                } else {
+                    AppTextButton(onClick = onRemoveSelected) {
+                        AppText("删除(${state.selectedIds.size})")
+                    }
                 }
+                AppTextButton(onClick = onClearSelection) { AppText("取消选择") }
             }
         }
     }

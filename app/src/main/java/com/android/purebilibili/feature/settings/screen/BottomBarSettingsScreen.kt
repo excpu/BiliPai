@@ -376,7 +376,7 @@ fun BottomBarSettingsContent(
                             AppSwitchPreference(
                                 icon = rememberSettingsSemanticIcon(SettingsIconRole.BOTTOM_BAR_SCROLL_COMPACT),
                                 title = settingItemTitle("navigation.bottom_bar_scroll_compact_enabled"),
-                                subtitle = "无听视频播放条时，悬浮底栏下滑累计 24dp 收为当前入口圆钮，上滑或点击展开；有播放条时保留原联动",
+                                subtitle = "浏览时收起底栏，上滑或点击展开；有播放条时保持联动",
                                 checked = bottomBarScrollCompactEnabled,
                                 onCheckedChange = { enabled ->
                                     scope.launch { SettingsManager.setBottomBarScrollCompactEnabled(context, enabled) }
@@ -586,18 +586,16 @@ fun BottomBarSettingsContent(
                                 icon = com.android.purebilibili.feature.settings.rememberMaterialSymbol(com.android.purebilibili.R.drawable.ms_troubleshoot_24),
                                 iconTint = AppContentColors.secondaryText(),
                                 title = "首页顶栏显示",
-                                subtitle = when (homeHeaderCollapseMode) {
-                                    HomeHeaderCollapseMode.OFF -> "首页顶栏始终显示"
-                                    HomeHeaderCollapseMode.SEARCH_ONLY,
-                                    HomeHeaderCollapseMode.BOTH,
-                                    HomeHeaderCollapseMode.TABS_ONLY -> "向上浏览时收起搜索框，反向下拉时恢复，分类栏保留"
-                                },
+                                subtitle = homeHeaderCollapseMode.description,
                                 optionLeading = { value -> SettingsOptionPreviewThumb(SettingsOptionPreview.HeaderCollapse(
                                     searchVisible = !value.collapseSearch, tabsVisible = !value.collapseTabs,
                                 )) },
                                 options = buildList {
                                     add(AppSegmentOption(HomeHeaderCollapseMode.OFF, "始终显示"))
                                     add(AppSegmentOption(HomeHeaderCollapseMode.SEARCH_ONLY, "仅收起搜索"))
+                                    add(AppSegmentOption(HomeHeaderCollapseMode.TABS_ONLY, "仅收起标签"))
+                                    add(AppSegmentOption(HomeHeaderCollapseMode.BOTH, "全部收起"))
+                                    add(AppSegmentOption(HomeHeaderCollapseMode.SHOW_AT_TOP_ONLY, "仅回顶显示"))
                                 },
                                 selectedValue = homeHeaderCollapseMode,
                                 onSelectionChange = { mode ->

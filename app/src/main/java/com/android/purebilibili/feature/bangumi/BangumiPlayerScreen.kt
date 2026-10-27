@@ -125,6 +125,7 @@ fun BangumiPlayerScreen(
     onNavigateToLogin: () -> Unit = {},
     onUserClick: (Long) -> Unit = {},
     onOpenBilibiliLink: ((String) -> Unit)? = null,
+    onSeasonClick: (Long) -> Unit = {},
     viewModel: BangumiPlayerViewModel = viewModel(),
     commentViewModel: VideoCommentViewModel = viewModel()
 ) {
@@ -139,9 +140,13 @@ fun BangumiPlayerScreen(
     val configuration = LocalConfiguration.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val coinDialogVisible by viewModel.coinDialogVisible.collectAsStateWithLifecycle()
+    val favoriteFolders by viewModel.favoriteFolders.collectAsStateWithLifecycle()
     val userCoinBalance by viewModel.userCoinBalance.collectAsStateWithLifecycle()
     val successState = uiState as? BangumiPlayerState.Success
     val currentEpisodeIdForDebug = successState?.currentEpisode?.id ?: epId
+    var pendingEpisodeShare by remember(currentEpisodeIdForDebug) {
+        mutableStateOf<com.android.purebilibili.feature.share.ContentSharePayload?>(null)
+    }
     val currentCidForDebug = successState?.currentEpisode?.cid ?: 0L
     var playbackDebugSnapshot by remember {
         mutableStateOf(
@@ -1182,28 +1187,52 @@ fun BangumiPlayerScreen(
                             onUserClick = onUserClick,
                             onCommentUrlClick = onOpenBilibiliLink,
                             onDownloadClick = { viewModel.downloadCurrentEpisode(context) },
+                            isLiked = state.isLiked,
+                            likeStatusKnown = state.likeStatusKnown,
+                            coinCount = state.coinCount,
+                            onToggleLike = viewModel::toggleLike,
+                            onCoin = viewModel::openCoinDialog,
+                            isFavorited = state.isFavorited,
+                            onFavorite = viewModel::openFavoriteFolders,
+                            inWatchLater = state.inWatchLater,
+                            watchLaterBusy = state.watchLaterBusy,
+                            onWatchLater = viewModel::toggleWatchLater,
+                            onSeasonClick = onSeasonClick,
+                            tripleInProgress = state.tripleInProgress,
+                            onTriple = viewModel::tripleEpisode,
                             onTimestampClick = ::seekFromComment,
                             currentVideoPositionMsProvider = { exoPlayer.currentPosition.coerceAtLeast(0L) },
                             onShareClick = {
                                 val episode = state.currentEpisode
-                                val shareUrl = "https://www.bilibili.com/cheese/play/ep${episode.id}"
-                                val shareText = listOf(
-                                    state.seasonDetail.title,
-                                    episode.title,
-                                    shareUrl
-                                ).filter { it.isNotBlank() }.joinToString("\n")
-                                runCatching {
-                                    context.startActivity(
-                                        android.content.Intent.createChooser(
-                                            android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                                type = "text/plain"
-                                                putExtra(android.content.Intent.EXTRA_TEXT, shareText)
-                                            },
-                                            "分享课程"
+                                val isCourse = state.seasonDetail.seasonType == 10
+                                if (isCourse) {
+                                    val shareUrl = "https://www.bilibili.com/cheese/play/ep${episode.id}"
+                                    val shareText = listOf(state.seasonDetail.title, episode.title, shareUrl)
+                                        .filter { it.isNotBlank() }.joinToString("\n")
+                                    runCatching {
+                                        context.startActivity(
+                                            android.content.Intent.createChooser(
+                                                android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                                    type = "text/plain"
+                                                    putExtra(android.content.Intent.EXTRA_TEXT, shareText)
+                                                },
+                                                "分享课程"
+                                            )
                                         )
+                                    }.onFailure {
+                                        Toast.makeText(context, "暂时无法打开分享面板", Toast.LENGTH_SHORT).show()
+                                    }
+                                } else if (episode.id > 0L) {
+                                    pendingEpisodeShare = com.android.purebilibili.feature.share.buildBangumiContentSharePayload(
+                                        epId = episode.id,
+                                        title = resolveBangumiOverlayShareTitle(state.seasonDetail.title, episode.title),
+                                        cover = episode.cover.ifBlank { state.seasonDetail.cover },
+                                        seasonType = state.seasonDetail.seasonType,
+                                        positionMs = exoPlayer.currentPosition.coerceAtLeast(0L),
+                                        aid = episode.aid,
                                     )
-                                }.onFailure {
-                                    Toast.makeText(context, "暂时无法打开分享面板", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "当前剧集暂时无法分享", Toast.LENGTH_SHORT).show()
                                 }
                             }
                         )
@@ -1374,6 +1403,23 @@ fun BangumiPlayerScreen(
         },
     )
 
+    if (!isInPipMode) pendingEpisodeShare?.let { payload ->
+        com.android.purebilibili.feature.share.ContentShareSheet(payload, onDismiss = { pendingEpisodeShare = null })
+    }
+    favoriteFolders?.let { folders ->
+        if (!isInPipMode) {
+            com.android.purebilibili.feature.video.ui.components.FavoriteFolderSheet(
+                folders = folders.folders,
+                isLoading = folders.loading,
+                selectedFolderIds = folders.selected,
+                isSaving = folders.saving,
+                onFolderToggle = viewModel::toggleFavoriteFolder,
+                onSaveClick = viewModel::saveFavoriteFolders,
+                onDismissRequest = viewModel::dismissFavoriteFolders,
+                onCreateFolder = viewModel::createFavoriteFolder,
+            )
+        }
+    }
     CoinDialog(
         visible = coinDialogVisible,
         currentCoinCount = successState?.coinCount ?: 0,

@@ -64,7 +64,9 @@ internal fun ScrollCompactNavigation(
         else scrollCompactExpansionSpring(),
         label = "scrollCompactNavigation",
     )
-    val accent = AppContentColors.selectionAccent(glassEnabled)
+    val accent = com.android.purebilibili.core.ui.AppInteractionColors.nativeNavigation(
+        com.android.purebilibili.core.ui.AppNavigationColorRole.BAR,
+    )?.selectedContent ?: AppContentColors.selectionAccent(glassEnabled)
     Box(Modifier.fillMaxSize()) {
         Box(
             Modifier.fillMaxSize()

@@ -521,9 +521,10 @@ internal fun StoryVideoCard(
                 leadingContent = if ((showUpAvatar ?: com.android.purebilibili.core.ui.LocalUpBadgeVisibility.current.showAvatars) && video.owner.face.isNotEmpty()) {
                     {
                         val avatarContext = LocalContext.current
-                        val avatarRequest = remember(avatarContext, video.owner.face) {
+                        val face = video.owner.face
+                        val avatarRequest = remember(avatarContext, face) {
                             ImageRequest.Builder(avatarContext)
-                                .data(FormatUtils.fixImageUrl(video.owner.face))
+                                .data(FormatUtils.fixImageUrl(face))
                                 .size(96, 96)
                                 .crossfade(100)
                                 .build()

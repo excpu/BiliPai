@@ -76,7 +76,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.compose.animation.ExperimentalSharedTransitionApi
-import coil3.compose.AsyncImage
+import com.android.purebilibili.core.ui.components.PageAwareAsyncImage
 import coil3.request.ImageRequest
 import com.android.purebilibili.core.ui.adaptive.adaptiveCardHoverEffect
 import com.android.purebilibili.core.ui.AppShapes
@@ -251,15 +251,14 @@ internal fun HomeHeroCarousel(
                             )
                         }
                 ) {
-                    AsyncImage(
+                    PageAwareAsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
                             .data(normalizedReflectionUrl)
                             .crossfade(false)
                             .build(),
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxWidth(),
-                        alpha = 0.30f,
+                        modifier = Modifier.fillMaxWidth().graphicsLayer { alpha = 0.30f },
                     )
                 }
             }
@@ -541,7 +540,7 @@ private fun HomeHeroCarouselCard(
                         scaleY = transform.contentScale
                     }
             ) {
-                AsyncImage(
+                PageAwareAsyncImage(
                     model = stationaryCoverRequest,
                     contentDescription = video.title,
                     contentScale = ContentScale.Crop,

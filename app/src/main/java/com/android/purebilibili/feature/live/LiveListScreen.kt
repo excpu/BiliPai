@@ -986,12 +986,21 @@ private fun LiveFollowAvatarRow(
     val palette = rememberLiveChromePalette()
     LazyRow(state = listState) {
         items(items, key = { it.roomId }) { item ->
+            val avatarTransition = rememberLiveCardContainerTransition(
+                roomId = item.roomId,
+                title = item.title,
+                hostName = item.uname,
+                color = palette.surface,
+                cornerRadius = ((metrics.followAvatarSizeDp + 4) / 2f).dp,
+                onClick = { onLiveClick(item.roomId, item.title, item.uname) },
+                includeAvatarCompanions = true,
+            )
             Column(
                 modifier = Modifier
                     .width(metrics.followItemExtentDp.dp)
                     .liveSecondaryClick { if (item.uid > 0) onUserClick(item.uid) }
                     .combinedClickable(
-                        onClick = { onLiveClick(item.roomId, item.title, item.uname) },
+                        onClick = avatarTransition.onClick,
                         onLongClick = { if (item.uid > 0) onUserClick(item.uid) },
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -1000,6 +1009,7 @@ private fun LiveFollowAvatarRow(
                     Box(
                         modifier = Modifier
                             .size((metrics.followAvatarSizeDp + 4).dp)
+                            .then(avatarTransition.modifier)
                             .then(if (item.liveStatus == 1) Modifier.border(1.5.dp, palette.accentStrong, CircleShape) else Modifier)
                             .padding(2.dp)
                     ) {
@@ -1018,6 +1028,7 @@ private fun LiveFollowAvatarRow(
                             modifier = Modifier
                                 .align(Alignment.BottomEnd)
                                 .size(22.dp)
+                                .then(avatarTransition.badgeModifier)
                                 .background(palette.accentStrong, CircleShape)
                                 .border(1.5.dp, palette.backgroundTop, CircleShape)
                                 .padding(5.dp),
@@ -1039,7 +1050,8 @@ private fun LiveFollowAvatarRow(
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
+                    modifier = avatarTransition.companionModifier,
                 )
             }
         }

@@ -75,8 +75,8 @@ class ThemeRoleOverridePolicyTest {
         val dark = darkColorScheme(background = Color.Blue, onBackground = Color.Yellow)
         for (amoled in listOf(false, true)) {
             val result = themeRoleOverridesFromSchemes(light, dark, AppUiStyle.MIUIX, amoled)
-            val nativeLight = resolveNativeMiuixColors(light, false, amoled)
-            val nativeDark = resolveNativeMiuixColors(dark, true, amoled)
+            val nativeLight = resolveMiuixColorsFromMaterialBridge(createMiuixMaterialBridge(light), false, useMonetMapping = true)
+            val nativeDark = resolveMiuixColorsFromMaterialBridge(createMiuixMaterialBridge(dark), true, useMonetMapping = true)
             assertFalse(result.enabled)
             assertEquals(formatMd3CustomColorHex(nativeLight.surface), result.light.backgroundHex)
             assertEquals(formatMd3CustomColorHex(nativeLight.onSurface), result.light.primaryTextHex)

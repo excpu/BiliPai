@@ -5124,13 +5124,16 @@ private fun VideoPlayerSectionContent(
         var localSubtitleDisplayModePreference by rememberSaveable("${subtitleToggleKey}_mode") {
             mutableStateOf(
                 if (subtitleFeatureEnabled) {
+                    val subtitleSuccess = uiState as? VideoPlaybackUiState.Success
                     resolveSubtitleDisplayModeByAutoPreference(
                         preference = subtitleAutoPreference,
                         hasPrimaryTrack = subtitlePrimaryTrackBound,
                         hasSecondaryTrack = subtitleSecondaryTrackBound,
                         primaryTrackLikelyAi = subtitlePrimaryLikelyAi,
                         secondaryTrackLikelyAi = subtitleSecondaryLikelyAi,
-                        isMuted = subtitleAutoModeMuted
+                        isMuted = subtitleAutoModeMuted,
+                        primaryTrackLanguage = subtitleSuccess?.subtitlePrimaryLanguage,
+                        secondaryTrackLanguage = subtitleSuccess?.subtitleSecondaryLanguage
                     )
                 } else {
                     SubtitleDisplayMode.OFF

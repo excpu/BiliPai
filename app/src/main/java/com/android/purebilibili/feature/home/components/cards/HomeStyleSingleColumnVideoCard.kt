@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -106,6 +107,8 @@ internal fun HomeStyleSingleColumnVideoCard(
     onLongClick: (() -> Unit)? = null,
     highlightedTitle: androidx.compose.ui.text.AnnotatedString? = null,
     trailingContent: (@Composable () -> Unit)? = null,
+    transparentCardBackground: Boolean = false,
+    compactPartition: Boolean = false,
 ) {
     val context = LocalContext.current
     val isLongPressEnabled = com.android.purebilibili.core.ui.LocalVideoCardLongPressEnabled.current
@@ -234,6 +237,7 @@ internal fun HomeStyleSingleColumnVideoCard(
     val moreHaptic = rememberHapticFeedback(com.android.purebilibili.core.ui.AppHapticScene.MENUS)
     HorizontalVideoCardFrame(
         coverAspectRatio = coverAspectRatio,
+        compactPartition = compactPartition,
         modifier = modifier
             .adaptiveCardHoverEffect(shape = cardShape)
             .onGloballyPositioned { coordinates ->
@@ -251,11 +255,13 @@ internal fun HomeStyleSingleColumnVideoCard(
             )
             .then(nativeCardSnapshot.modifier)
             .clip(cardShape)
-            .wallpaperAwareMediaCardBackground(
-                AppSurfaceTokens.videoCardContainer(
-                    glassEnabled = LocalHomeCardDynamicTintEnabled.current || LocalHomeCardFrostedGlassEnabled.current,
-                ),
-                cardShape,
+            .then(
+                if (transparentCardBackground) Modifier else Modifier.wallpaperAwareMediaCardBackground(
+                    AppSurfaceTokens.videoCardContainer(
+                        glassEnabled = LocalHomeCardDynamicTintEnabled.current || LocalHomeCardFrostedGlassEnabled.current,
+                    ),
+                    cardShape,
+                )
             )
             .combinedClickable(
                 onClick = triggerClick,
@@ -299,7 +305,42 @@ internal fun HomeStyleSingleColumnVideoCard(
                 color = AppContentColors.primaryText(),
             )
 
-            UpBadgeName(
+            if (compactPartition) {
+                // 与 PiliPlus 一致：标题占据上方弹性空间，UP 主与播放量等元信息固定在卡片底部。
+                Spacer(Modifier.weight(1f))
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    if (showPublishTime && video.pubdate > 0) {
+                        AppText(
+                            text = FormatUtils.formatPublishTime(video.pubdate) + "  ",
+                            style = contentTypography.author,
+                            color = AppContentColors.secondaryText(),
+                            maxLines = 1,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                    }
+                    UpBadgeName(
+                        name = video.owner.name,
+                        leadingContent = if (com.android.purebilibili.core.ui.LocalUpBadgeVisibility.current.showAvatars && video.owner.face.isNotBlank()) {
+                            {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(context).data(FormatUtils.fixImageUrl(
+                                        video.owner.face
+                                    )).crossfade(false).build(),
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.size(16.dp).clip(CircleShape),
+                                )
+                            }
+                        } else null,
+                        nameStyle = contentTypography.author,
+                        nameColor = AppContentColors.secondaryText(),
+                        showUpBadge = showUpBadge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            } else UpBadgeName(
                 name = video.owner.name,
                 leadingContent = if (
                     com.android.purebilibili.core.ui.LocalUpBadgeVisibility.current.showAvatars &&
@@ -308,7 +349,9 @@ internal fun HomeStyleSingleColumnVideoCard(
                     {
                         AsyncImage(
                             model = ImageRequest.Builder(context)
-                                .data(FormatUtils.fixImageUrl(video.owner.face))
+                                .data(FormatUtils.fixImageUrl(
+                                    video.owner.face
+                                ))
                                 .crossfade(false)
                                 .build(),
                             contentDescription = null,
@@ -358,7 +401,7 @@ internal fun HomeStyleSingleColumnVideoCard(
                 danmakuText = FormatUtils.formatStat(video.stat.danmaku.toLong()),
             )
 
-            if (showPublishTime && video.pubdate > 0) {
+            if (!compactPartition && showPublishTime && video.pubdate > 0) {
                 AppText(
                     text = FormatUtils.formatPublishTime(video.pubdate),
                     style = MaterialTheme.typography.labelSmall,

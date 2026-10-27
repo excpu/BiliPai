@@ -106,7 +106,9 @@ internal fun isRecordedNativeCardSource(
     sourceRoute: String?,
     activeSourceKey: String?,
     recordedSourceKey: String? = CardPositionManager.lastClickedVideoSourceKey,
+    ownsRecordedLayer: Boolean = true,
 ): Boolean {
+    if (!ownsRecordedLayer) return false
     val clicked = recordedSourceKey ?: return false
     // A click updates the pending key before navigation replaces the previous HELD session.
     if (activeSourceKey != clicked) return false
@@ -162,7 +164,6 @@ internal fun Modifier.recordNativeVideoCardLayer(
     bvid: String = "",
     sourceRoute: String?,
     enabled: Boolean = true,
-    landingFeedbackEnabled: Boolean = false,
 ): Modifier {
     if (!enabled) return this
     val bgState = LocalVideoCardTransitionBackgroundState.current
@@ -175,18 +176,15 @@ internal fun Modifier.recordNativeVideoCardLayer(
             bgState.isReturnGestureInProgressProvider() || bgState.isGestureRestoreInProgressProvider()
         }
     }
-    return videoCardLandingFeedback(
-        layer = layer,
-        bvid = bvid,
-        sourceRoute = sourceRoute,
-        enabled = landingFeedbackEnabled,
-    ).drawWithContent {
+    return this.drawWithContent {
         // Read the latch in draw. Waiting for recomposition after a click can otherwise
         // overwrite the frozen first-click card after OPENING has hidden its info band.
         val isSharedMorphSourceCard = isRecordedNativeCardSource(
             bvid = bvid,
             sourceRoute = sourceRoute,
             activeSourceKey = bgState.sourceKeyProvider(),
+            ownsRecordedLayer = CardPositionManager.isNativeVideoCardLayerCurrentOwner(layer) ||
+                CardPositionManager.isNativeCoverOverlayLayerCurrentOwner(layer),
         )
         // Neighbour cards must not subscribe to the transition driver. They still record
         // real content invalidations (images/statistics), rather than freezing stale pixels.
@@ -302,7 +300,6 @@ internal fun rememberNativeVideoCardSnapshotController(
             bvid = bvid,
             sourceRoute = sourceRoute,
             enabled = enabled,
-            landingFeedbackEnabled = true,
         ),
         coverOverlayModifier = Modifier.recordNativeVideoCardLayer(
             layer = coverOverlayLayer,

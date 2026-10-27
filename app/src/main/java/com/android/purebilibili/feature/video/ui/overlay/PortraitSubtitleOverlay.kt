@@ -204,7 +204,9 @@ fun PortraitSubtitleHost(
                 hasSecondaryTrack = availability.secondarySelectable,
                 primaryTrackLikelyAi = success.subtitlePrimaryLikelyAi,
                 secondaryTrackLikelyAi = success.subtitleSecondaryLikelyAi,
-                isMuted = isMuted
+                isMuted = isMuted,
+                primaryTrackLanguage = success.subtitlePrimaryLanguage,
+                secondaryTrackLanguage = success.subtitleSecondaryLanguage
             )
         )
     }

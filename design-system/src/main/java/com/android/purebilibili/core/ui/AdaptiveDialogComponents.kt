@@ -228,6 +228,19 @@ internal fun AdaptiveAlertDialog(
     }
     when (renderer) {
         AppAlertDialogRenderer.LOCAL_DIALOG -> {
+            if (isMiuixNonGlassEnabled() && shape == null) {
+                // 原生窗口负责表面、圆角、边距和动画；自定义材质继续走下方路径。
+                WindowDialog(
+                    show = true,
+                    modifier = modifier,
+                    onDismissRequest = onDismissRequest,
+                    maxWidth = contentLayout.maxWidthDp.dp,
+                    backgroundColor = containerColor ?: top.yukonga.miuix.kmp.layout.DialogDefaults.backgroundColor(),
+                ) {
+                    NativeMiuixAlertDialogBody(icon, title, text, confirmButton, dismissButton)
+                }
+                return
+            }
             val dialogShape = shape ?: AppShapes.resolveContainerShape(
                 level = ContainerLevel.Dialog,
                 uiStyle = uiStyle,
@@ -378,6 +391,68 @@ private fun MiuixAlertDialogBody(
     }
 }
 
+private val LocalNativeMiuixDialogActionRow = androidx.compose.runtime.staticCompositionLocalOf { false }
+
+private val LocalNativeMiuixConfirmAction = androidx.compose.runtime.staticCompositionLocalOf { false }
+
+@Composable
+private fun NativeMiuixAlertDialogBody(
+    icon: @Composable (() -> Unit)?,
+    title: @Composable (() -> Unit)?,
+    text: @Composable (() -> Unit)?,
+    confirmButton: @Composable (() -> Unit)?,
+    dismissButton: @Composable (() -> Unit)?,
+) {
+    val typography = top.yukonga.miuix.kmp.theme.MiuixTheme.textStyles
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        icon?.let {
+            Box(Modifier.padding(bottom = 12.dp), contentAlignment = Alignment.Center) { it() }
+        }
+        title?.let {
+            NativeMiuixDialogTextSlot(
+                style = typography.title4.copy(fontWeight = FontWeight.Medium),
+                color = top.yukonga.miuix.kmp.layout.DialogDefaults.titleColor(),
+                content = it,
+            )
+        }
+        text?.let {
+            NativeMiuixDialogTextSlot(
+                style = typography.body1,
+                color = top.yukonga.miuix.kmp.layout.DialogDefaults.summaryColor(),
+                content = it,
+            )
+        }
+        if (confirmButton != null || dismissButton != null) {
+            androidx.compose.runtime.CompositionLocalProvider(LocalNativeMiuixDialogActionRow provides true) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    dismissButton?.let { action ->
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { action() }
+                    }
+                    confirmButton?.let { action ->
+                        androidx.compose.runtime.CompositionLocalProvider(LocalNativeMiuixConfirmAction provides true) {
+                            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { action() }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NativeMiuixDialogTextSlot(
+    style: androidx.compose.ui.text.TextStyle,
+    color: Color,
+    content: @Composable () -> Unit,
+) {
+    val centeredStyle = style.copy(textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+    Box(Modifier.fillMaxWidth().padding(bottom = 12.dp), contentAlignment = Alignment.Center) {
+        androidx.compose.runtime.CompositionLocalProvider(LocalAppTextStyleOverride provides centeredStyle) {
+            ProvideTextStyle(centeredStyle) { ProvideAppActionContentColor(color, content) }
+        }
+    }
+}
+
 /**
  * A helper for buttons inside the adaptive alert dialog if you need absolute control,
  * basically a wrapper that removes TextButton padding issues if standard TextButton is used.
@@ -390,6 +465,21 @@ internal fun AdaptiveDialogAction(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
+    if (isMiuixNonGlassEnabled()) {
+        val colors = if (LocalNativeMiuixConfirmAction.current) {
+            top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColorsPrimary()
+        } else {
+            top.yukonga.miuix.kmp.basic.ButtonDefaults.buttonColors()
+        }
+        top.yukonga.miuix.kmp.basic.Button(
+            onClick = onClick,
+            modifier = if (LocalNativeMiuixDialogActionRow.current) modifier.fillMaxWidth() else modifier,
+            colors = colors,
+        ) {
+            ProvideAppActionContentColor(top.yukonga.miuix.kmp.theme.LocalContentColor.current, content)
+        }
+        return
+    }
     val layoutPolicy = resolveDialogActionLayoutPolicy()
     Box(
         modifier = modifier

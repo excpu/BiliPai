@@ -44,13 +44,8 @@ import com.android.purebilibili.core.ui.components.rememberAppElasticPressState
 import androidx.compose.animation.core.EaseInCubic
 import androidx.compose.animation.core.EaseOutCubic
 import androidx.compose.ui.graphics.TransformOrigin
-import com.android.purebilibili.core.ui.motion.emphasizedEnterTween
-import com.android.purebilibili.core.ui.motion.emphasizedExitTween
-import com.android.purebilibili.core.ui.motion.iosMorphTween
 import com.android.purebilibili.core.ui.motion.rememberSystemReduceMotion
 import com.android.purebilibili.feature.audio.screen.AUDIO_NOW_PLAYING_PRESENCE_ENTER_SLIDE_DP
-import com.android.purebilibili.feature.audio.screen.LINKED_DOCK_MERGE_DURATION_MILLIS
-import com.android.purebilibili.feature.audio.screen.LINKED_DOCK_SEARCH_DURATION_MILLIS
 import com.android.purebilibili.feature.audio.screen.resolveAudioNowPlayingPresenceAlpha
 import com.android.purebilibili.feature.audio.screen.resolveAudioNowPlayingPresenceAnimationSpec
 import com.android.purebilibili.feature.audio.screen.resolveAudioNowPlayingPresenceEnterSpringSpec
@@ -224,25 +219,23 @@ internal fun LinkedBottomDock(
             keyboardController?.hide()
             updatePhase(resolveLinkedDockPhaseOnSearchDismiss(hasAudio, phaseBeforeSearch))
         }
-        val reduceMotion = rememberSystemReduceMotion()
+        val reduceMotion = rememberSystemReduceMotion() ||
+            !com.android.purebilibili.core.ui.LocalComponentMotionEnabled.current
         val transition = updateTransition(targetState = phase, label = "linkedBottomDock")
-        // 合体与解体使用方向感知曲线：收拢走 emphasized-exit（中段加速的压缩感），
-        // 展开走 emphasized-enter（快起缓收的弹开感），比对称 easeInOut 更有方向性。
+        // 共用弹簧保持合体、解体和中途反向时的速度连续。
         val merge = transition.animateFloat(
             transitionSpec = {
                 if (reduceMotion) {
                     snap()
-                } else if (targetState == LinkedDockPhase.Expanded) {
-                    emphasizedEnterTween(LINKED_DOCK_MERGE_DURATION_MILLIS + 20)
                 } else {
-                    emphasizedExitTween(LINKED_DOCK_MERGE_DURATION_MILLIS)
+                    bottomBarSearchMorphSpring()
                 }
             },
             label = "dockMerge",
         ) { if (it == LinkedDockPhase.Expanded) 0f else 1f }
         val search = transition.animateFloat(
             transitionSpec = {
-                if (reduceMotion) snap() else iosMorphTween(LINKED_DOCK_SEARCH_DURATION_MILLIS)
+                if (reduceMotion) snap() else bottomBarSearchMorphSpring()
             },
             label = "dockSearch",
         ) { if (it == LinkedDockPhase.Search || it == LinkedDockPhase.Compact) 1f else 0f }
@@ -323,10 +316,14 @@ internal fun LinkedBottomDock(
         val nowPlayingSlot = nowPlayingContent
             ?: retainedNowPlayingContent.takeIf { keepSlotComposed }
 
+        val nativeMiuixNavigation = com.android.purebilibili.core.ui.isMiuixNonGlassEnabled() && !hasUiSkinDecoration
         val shape = resolveSharedBottomBarCapsuleShape()
         val contentColor = AppContentColors.primaryText()
         // Only glass accents use the exact picked color; native and neutral actions retain their roles.
         val accentColor = AppContentColors.selectionAccent(glassEnabled)
+        val navigationColor = com.android.purebilibili.core.ui.AppInteractionColors.nativeNavigation(
+            com.android.purebilibili.core.ui.AppNavigationColorRole.BAR,
+        )?.selectedContent ?: accentColor
         BoxWithConstraints(
             modifier = modifier.fillMaxWidth().imePadding().navigationBarsPadding()
                 .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -345,6 +342,7 @@ internal fun LinkedBottomDock(
                 barHeight = resolveBiliPaiBottomBarDockHeight(
                     searchExpanded = false,
                     hasUiSkinDecoration = hasUiSkinDecoration,
+                    nativeMiuixNavigation = nativeMiuixNavigation,
                 ).roundToPx()
                 controlHeight = barHeight
                 gap = 8.dp.roundToPx()
@@ -423,7 +421,7 @@ internal fun LinkedBottomDock(
                                 alpha = if (glassEnabled) {
                                     1f - resolveLinkedDockGlassHandoffProgress(merge.value)
                                 } else 1f - EaseInCubic.transform(exitProgress)
-                                val collapse = EaseOutCubic.transform(merge.value)
+                                val collapse = EaseOutCubic.transform(merge.value.coerceIn(0f, 1f))
                                 scaleX = 1f - 0.10f * collapse
                                 scaleY = 1f - 0.10f * collapse
                                 transformOrigin = TransformOrigin(0f, 0.5f)
@@ -556,7 +554,7 @@ internal fun LinkedBottomDock(
                                 resolveHomeNavigationBarIcon(firstItem, currentItem == firstItem)
                             } else resolveMaterialBottomBarIcon(firstItem, currentItem == firstItem),
                             contentDescription = "$firstLabel，展开底栏",
-                            tint = accentColor,
+                            tint = navigationColor,
                             modifier = if (homeGlassMotion) Modifier.graphicsLayer(homeElasticState.layerBlock) else Modifier,
                         )
                     }
@@ -647,6 +645,11 @@ internal fun LinkedBottomDock(
                 }
                 Box(
                     modifier = Modifier
+                        .graphicsLayer {
+                            // Geometry remains bounded; the spring's overshoot is visible at the edge.
+                            val overshoot = search.value - search.value.coerceIn(0f, 1f)
+                            translationX = overshoot * 24.dp.toPx()
+                        }
                         .offset {
                             val geometry = resolveLinkedDockGeometry(
                                 width = maximumWidth,

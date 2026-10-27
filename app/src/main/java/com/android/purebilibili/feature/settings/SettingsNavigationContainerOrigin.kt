@@ -63,7 +63,9 @@ internal fun SettingsNavigationContainerOrigin(
             .drawWithContent {
                 layer.record { this@drawWithContent.drawContent() }
                 anchor.recorded = true
-                drawLayer(layer)
+                if (sources.sources[target]?.takeIf { it.anchor === anchor }?.returnInFlight?.invoke() != true) {
+                    drawLayer(layer)
+                }
             },
     ) {
         content {

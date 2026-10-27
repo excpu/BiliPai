@@ -183,8 +183,7 @@ internal fun BiliPaiNavDisplayHost(
     val stackSnapshot = backStack.toList()
     val settingsPersistentPanes = settingsHasPersistentPanes()
     val settingsContainerSources = remember { com.android.purebilibili.feature.settings.SettingsContainerSources() }
-    val settingsContainerEnabled = settingsContainerMorphEnabled && !settingsPersistentPanes && !reduceMotion &&
-        predictiveBackAnimationStyle != BiliPaiPredictiveBackAnimationStyle.NONE
+    val settingsContainerEnabled = settingsContainerMorphEnabled && !settingsPersistentPanes && !reduceMotion
     val settingsContainerPageColor = AppSurfaceTokens.groupedListContainer()
     val settingsContainerSnapshot = settingsContainerSources.sources.toMap()
     val availableSettingsContainerTransitions = remember(
@@ -210,6 +209,39 @@ internal fun BiliPaiNavDisplayHost(
     LaunchedEffect(stackSnapshot, settingsContainerSnapshot.keys) {
         // 离场 entry 保留自己的转场对象；目录中清除旧来源，搜索直达不能复用上次点击。
         settingsContainerSources.sources.keys.retainAll(stackSnapshot.toSet())
+    }
+    val liveContainerSources = remember { com.android.purebilibili.feature.settings.SettingsContainerSources() }
+    val liveContainerEnabled = cardTransitionEnabled && !reduceMotion &&
+        com.android.purebilibili.core.ui.LocalComponentMotionEnabled.current
+    val liveContainerSnapshot = liveContainerSources.sources.toMap()
+    val liveContainerPageColor = com.android.purebilibili.feature.live.resolveLiveBiliPaiRoomColorTokens().baseBackgroundColor
+    val availableLiveContainerTransitions = remember(
+        liveContainerSnapshot, liveContainerPageColor, videoSharedTransitionDurationMillis,
+        videoTransitionRealtimeBlurEnabled, isLightBackground, navBlurMotionTierProvider,
+    ) {
+        liveContainerSnapshot.mapValues { (_, source) ->
+            SettingsContainerTransition(
+                source = source,
+                pageColor = liveContainerPageColor,
+                durationMillis = videoSharedTransitionDurationMillis.coerceAtLeast(1),
+                cardBackgroundEffectsEnabled = true,
+                realtimeBlurEnabled = videoTransitionRealtimeBlurEnabled,
+                isLightBackground = isLightBackground,
+                blurMotionTierProvider = navBlurMotionTierProvider,
+            )
+        }
+    }
+    val liveContainerTransitions = if (!liveContainerEnabled) emptyMap() else
+        availableLiveContainerTransitions.filterKeys { target ->
+            target is BiliPaiNavKey.Live && isSettingsContainerBoundary(
+                enabled = true,
+                backStack = stackSnapshot,
+                target = target,
+                owner = liveContainerSnapshot[target]?.owner,
+            )
+        }
+    LaunchedEffect(stackSnapshot, liveContainerSnapshot.keys) {
+        liveContainerSources.sources.keys.retainAll(stackSnapshot.toSet())
     }
     val currentKey = stackSnapshot.lastOrNull()
     val latestOnBack by rememberUpdatedState(onBack)
@@ -327,13 +359,13 @@ internal fun BiliPaiNavDisplayHost(
             }
         }
     }
-    // 卡片开关同时覆盖玻璃与原生视频页。关闭后，默认样式直接使用导航预设，
-    // 不附加卡片进度限制或背景模糊；显式选择的其他全局样式及减弱动效仍然生效。
+    // 卡片形变开启时优先使用专属过渡，缺少来源时使用固定回退；关闭后使用当前页面过渡。
     val videoFallbackTransition = resolveVideoCardFallbackTransition(
         cardTransitionEnabled = cardTransitionEnabled,
         animationStyle = style,
         globalTransition = globalTransition,
-        cardEnabledFallback = predictiveBackExcludedTransition,
+        cardEnabledFallback = if (reduceMotion) globalTransition else
+            top.yukonga.miuix.kmp.nav.transition.NavTransitions.MiuixDefault,
     )
     val observedVideoFallbackTransition = remember(
         videoFallbackTransition,
@@ -485,13 +517,6 @@ internal fun BiliPaiNavDisplayHost(
     ) {
         if (!cardMorphAvailable) return@LaunchedEffect
         fun finishCardReturn() {
-            // Publish before Idle: cards recreated on the landing frame need not have
-            // observed Returning locally. Opening and cancelled gestures cannot publish.
-            videoCardClock.landingFeedback.publish(
-                sourceKey = sourceMetadata.sourceKey,
-                sourceLayout = sourceMetadata.sourceLayout,
-                committedReturn = videoCardClock.phase == VideoCardTransitionBackgroundPhase.RETURNING,
-            )
             videoCardClock.followNavigationDriver(VideoCardTransitionSettleState.Idle)
             videoCardTransitionProgress.clear()
         }
@@ -554,6 +579,9 @@ internal fun BiliPaiNavDisplayHost(
     val transitionMotionTier = if (reduceMotion) MotionTier.Reduced else MotionTier.Normal
     // Card depth blur and generic Miuix return blur have separate user controls.
     val effectiveVideoCardBlurEnabled = videoTransitionRealtimeBlurEnabled
+    // 仅液态玻璃首页使用清晰冻结层；原生路径及播放器来源保持原有绘制方式。
+    val clearHomeSnapshotEnabled = com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled &&
+        !effectiveVideoCardBlurEnabled && sourceMetadata.sourceRoute?.substringBefore('?') == "home"
     val videoCardProgressProvider = remember(
         cardMorphAvailable,
         videoCardClock,
@@ -653,6 +681,7 @@ internal fun BiliPaiNavDisplayHost(
         transitionMotionTier,
         isLightBackground,
         effectiveVideoCardBlurEnabled,
+        clearHomeSnapshotEnabled,
     ) {
         VideoCardTransitionBackgroundState(
             progressProvider = videoCardProgressProvider,
@@ -670,6 +699,7 @@ internal fun BiliPaiNavDisplayHost(
             motionTierProvider = { transitionMotionTier },
             isLightBackgroundProvider = { isLightBackground },
             realtimeBlurEnabledProvider = { effectiveVideoCardBlurEnabled },
+            clearSnapshotEnabledProvider = { clearHomeSnapshotEnabled },
         )
     }
     val videoCardLayoutWidthProvider = remember(videoCardTransitionProgress) {
@@ -815,6 +845,8 @@ internal fun BiliPaiNavDisplayHost(
             .onGloballyPositioned { coordinates ->
                 settingsContainerSources.hostOrigin = coordinates.positionInRoot()
                 settingsContainerSources.hostSize = coordinates.size
+                liveContainerSources.hostOrigin = coordinates.positionInRoot()
+                liveContainerSources.hostSize = coordinates.size
                 videoCardTransitionProgress.gestureFollow.hostOriginInRoot = coordinates.positionInRoot()
                 // System events are in screen pixels; card bounds and layers are host-local.
                 val origin = coordinates.localToScreen(Offset.Zero)
@@ -843,6 +875,7 @@ internal fun BiliPaiNavDisplayHost(
             motionTierProvider = { transitionMotionTier },
             isLightBackgroundProvider = { isLightBackground },
             realtimeBlurEnabledProvider = { effectiveVideoCardBlurEnabled },
+            clearSnapshotEnabledProvider = { clearHomeSnapshotEnabled },
             sourceBoundsProvider = { sourceMetadata.sourceBounds },
             // A detached source has no navigation entry to transform. Apply exactly the same
             // covered-page geometry to this fallback; inner snapshot effects remain unscaled.
@@ -877,7 +910,12 @@ internal fun BiliPaiNavDisplayHost(
                 settingsBackStack = stackSnapshot,
                 settingsPersistentPanes = settingsPersistentPanes,
                 settingsContainerTransitions = settingsContainerTransitions,
+                settingsMorphFallback = if (settingsContainerEnabled) {
+                    top.yukonga.miuix.kmp.nav.transition.NavTransitions.MiuixDefault
+                } else null,
+                liveContainerTransitions = liveContainerTransitions,
                 activeMainHostRoute = activeMainHostRoute,
+                pageTransition = globalTransition,
                 predictiveBackExcludedTransition = predictiveBackExcludedTransition,
                 videoCardTransition = videoCardTransition,
                 fullscreenVideoCardTransition = fullscreenVideoCardTransition,
@@ -886,11 +924,17 @@ internal fun BiliPaiNavDisplayHost(
                 val opaqueVideoChild = remember(key) {
                     shouldUseOpaqueVideoChildBackground(key, stackSnapshot)
                 }
+                // 每个直播 entry 固定表面类型，返回动画或目录清理时不重新绑定播放器。
+                val liveContainerEntry = remember(key) { liveContainerTransitions.containsKey(key) }
                 BiliPaiMiuixNavEntry(
                     interceptPredictiveBack = interceptPredictiveBack,
                     onBack = performBack,
                 ) {
                     CompositionLocalProvider(
+                        com.android.purebilibili.feature.live.LocalLiveCardContainerSources provides
+                            (if (liveContainerEnabled) liveContainerSources else null),
+                        com.android.purebilibili.feature.live.LocalLiveCardContainerOwner provides key,
+                        com.android.purebilibili.feature.live.LocalLiveCardContainerActive provides liveContainerEntry,
                         com.android.purebilibili.feature.settings.LocalSettingsContainerSources provides
                             (if (settingsContainerEnabled) settingsContainerSources else null),
                         com.android.purebilibili.feature.settings.LocalSettingsContainerOwner provides key,

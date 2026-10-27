@@ -1479,7 +1479,9 @@ fun ReplyItemView(
     var showFreeCopyDialog by remember(item.rpid) { mutableStateOf(false) }
     var showReportDialog by remember(item.rpid) { mutableStateOf(false) }
     // [新增] 评论翻译状态
-    val canTranslate = item.replyControl?.translationSwitch == 2
+    val canTranslate = remember(item.replyControl?.translationSwitch, item.content.message, item.oid, item.rpid) {
+        shouldOfferCommentTranslation(item.replyControl?.translationSwitch, item.content.message, item.oid, item.rpid)
+    }
     var translatedMessage by remember(item.rpid) { mutableStateOf<String?>(null) }
     var isTranslating by remember(item.rpid) { mutableStateOf(false) }
     // [新增] 点踩折叠：已点踩的评论正文收起为一行，点击展开；取消点踩自动恢复
@@ -2030,8 +2032,8 @@ fun ReplyItemView(
                             // This preview is already inside the indented body column.
                             .clip(AppShapes.container(ContainerLevel.Chip))
                             .background(appearance.composerHintBackgroundColor)
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         previewReplies.forEachIndexed { index, subReply ->
                             key(subReply.rpid) {
@@ -2133,6 +2135,8 @@ fun ReplyItemView(
                                         ReplyMessageText(
                                             text = subReply.content.message,
                                             fontSize = VideoCommentTypographyTokens.subReply,
+                                            // 预览单独放宽行高，主评论与楼中楼详情保留原有排版。
+                                            lineHeight = VideoCommentTypographyTokens.subReply * 1.6f,
                                             color = appearance.primaryTextColor.copy(alpha = 0.8f),
                                             emoteMap = subEmoteMap,
                                             content = subReply.content,
@@ -2267,6 +2271,7 @@ internal fun ReplyMessageText(
     onVoteClick: ((Long) -> Unit)? = null,
     noteCvidStr: String = "",
     prefix: AnnotatedString? = null,
+    lineHeight: TextUnit = fontSize * 1.5f,
     onPlainTextClick: (() -> Unit)? = null
 ) {
     val videoReference = remember(text) { resolveReplyVideoReference(text) }
@@ -2293,6 +2298,7 @@ internal fun ReplyMessageText(
                 fallbackText = text
             ),
             fontSize = fontSize,
+            lineHeight = lineHeight,
             maxLines = maxLines,
             url = videoReference.navigationUrl,
             onUrlClick = onUrlClick,
@@ -2303,6 +2309,7 @@ internal fun ReplyMessageText(
         RichCommentText(
             text = text,
             fontSize = fontSize,
+            lineHeight = lineHeight,
             color = color,
             emoteMap = emoteMap,
             content = content,
@@ -2328,7 +2335,8 @@ private fun ReplyVideoReferenceText(
     url: String,
     onUrlClick: ((String) -> Unit)?,
     prefix: AnnotatedString? = null,
-    copyText: String = text
+    copyText: String = text,
+    lineHeight: TextUnit = fontSize * 1.5f
 ) {
     val primaryColor = AppContentColors.accent()
     val annotatedString = remember(text, url, prefix, primaryColor) {
@@ -2401,7 +2409,7 @@ private fun ReplyVideoReferenceText(
         inlineContent = inlineContent,
         fontSize = fontSize,
         color = primaryColor,
-        lineHeight = (fontSize.value * 1.5).sp,
+        lineHeight = lineHeight,
         maxLines = maxLines,
         onTextLayout = { textLayoutResult = it },
         modifier = modifier
@@ -2436,6 +2444,7 @@ fun RichCommentText(
     onVoteClick: ((Long) -> Unit)? = null,
     noteCvidStr: String = "",
     prefix: AnnotatedString? = null,
+    lineHeight: TextUnit = fontSize * 1.5f,
     onPlainTextClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -2595,7 +2604,7 @@ fun RichCommentText(
             inlineContent = inlineContent,
             fontSize = fontSize,
             color = color,
-            lineHeight = (fontSize.value * 1.5).sp,
+            lineHeight = lineHeight,
             maxLines = maxLines,
             modifier = textModifier
         )
@@ -2811,6 +2820,7 @@ internal fun ReplyMemberAvatar(
     onClick: (() -> Unit)? = null
 ) {
     val pendantImageUrl = remember(member) { resolveReplyMemberPendantImage(member) }
+    val displayFace = member.avatar
     val hasPendant = !pendantImageUrl.isNullOrBlank()
     val faceFraction = resolveReplyAvatarFaceFraction(hasPendant)
     Box(
@@ -2822,7 +2832,7 @@ internal fun ReplyMemberAvatar(
         // Face first (under), slightly smaller when a frame is present.
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
-                .data(FormatUtils.fixImageUrl(member.avatar))
+                .data(FormatUtils.fixImageUrl(displayFace))
                 //  [防闪烁] crossfade 不能随 lightweightMode 翻转：改请求构造会让
                 //  Coil 视为新请求重新执行，切回评论页瞬间全部头像重载闪一下。
                 //  内存缓存命中本身不播淡入，恒定开启不损失滚动性能。

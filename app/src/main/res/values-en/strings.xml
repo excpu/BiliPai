@@ -328,7 +328,7 @@
     <string name="animation_return_translation_off">Follow a fixed return path; tilt is controlled above</string>
     <string name="animation_transition_blur_summary">Adds depth to transitions; turn off to save power</string>
     <string name="animation_back_title">Page transition animation</string>
-    <string name="animation_back_summary">Animation style shared by page entry and return</string>
+    <string name="animation_back_summary">Applies globally to ordinary pages, reversed on return. Shared cards, settings container morphs and large-screen panes keep their own transitions.</string>
     <string name="animation_settings_container_title">Settings container animation</string>
     <string name="animation_settings_container_summary">Entry and return animation for settings pages</string>
     <string name="animation_settings_container_morph">Container morph</string>
@@ -898,6 +898,9 @@
     <string name="appearance_theme_contrast_issue_item">%1$s %2$.2f:1（目标 %3$.1f:1）</string>
     <string name="appearance_theme_contrast_explain">数值越高，文字和背景的区别越明显。背景图片可能影响实际效果。</string>
     <string name="appearance_theme_contrast_repair">修正可读性</string>
+    <string name="appearance_theme_restore_md3_palette">Restore recommended MD3 colors</string>
+    <string name="appearance_theme_restore_miuix_palette">Restore recommended Miuix colors</string>
+    <string name="appearance_theme_restore_palette_summary">Restore the default light and dark palettes and turn off advanced colors. Keep the current theme color, palette style, and contrast.</string>
     <string name="appearance_theme_contrast_repair_summary">仅调整本模式的主要与次要文字，保留背景和强调色；其余不足的配对继续提示。</string>
     <string name="appearance_theme_contrast_warning">你选的文字色与背景比较接近，预览已自动调整文字，让它更容易看清；仍可保存。</string>
     <string name="appearance_dynamic_color_preview">当前取色预览</string>
@@ -922,4 +925,18 @@
     <string name="home_settings_grid_customization_title">Customize list columns</string>
     <string name="home_settings_grid_share_title">Share columns across pages</string>
     <string name="home_settings_grid_compact_title">Default columns for narrow windows</string>
+    <string name="animation_page_fade">Fade</string>
+    <string name="animation_page_fade_in">Fade in</string>
+    <string name="animation_page_size">Expand vertically</string>
+    <string name="animation_page_shared_axis">Horizontal fade through</string>
+    <string name="animation_page_instant">No page animation</string>
+    <string name="animation_page_right_to_left">Right to left</string>
+    <string name="animation_page_left_to_right">Left to right</string>
+    <string name="animation_page_up_to_down">Top to bottom</string>
+    <string name="animation_page_down_to_up">Bottom to top</string>
+    <string name="animation_page_right_to_left_fade">Right to left with fade</string>
+    <string name="animation_page_left_to_right_fade">Left to right with fade</string>
+    <string name="animation_page_zoom">Zoom with fade</string>
+    <string name="animation_page_circular_reveal">Circular reveal (from center)</string>
+    <string name="animation_page_ios">iOS style (slide and parallax)</string>
 </resources>

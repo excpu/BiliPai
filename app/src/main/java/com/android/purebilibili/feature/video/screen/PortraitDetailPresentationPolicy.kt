@@ -210,11 +210,12 @@ internal fun resolveInlinePortraitPlayerCommentCollapseDurationMillis(
     return tabSwitchAnimationSpec.durationMs
 }
 
-/** Paused comment scrolling hides the media viewport; other contexts keep their compact size. */
+/** 暂停浏览评论时收起画面，横屏视频可保留播放工具栏。 */
 internal fun resolveInlinePlayerCollapsedViewportHeightDp(
     standardCollapsedHeightDp: Float,
     hidePausedPlayerForComments: Boolean,
-): Float = if (hidePausedPlayerForComments) 0f else standardCollapsedHeightDp.coerceAtLeast(0f)
+    retainPlayToolbar: Boolean = false,
+): Float = if (hidePausedPlayerForComments && !retainPlayToolbar) 0f else standardCollapsedHeightDp.coerceAtLeast(0f)
 
 /**
  * Inline portrait detail player size.

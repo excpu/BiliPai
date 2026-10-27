@@ -26,6 +26,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.android.purebilibili.feature.video.ui.gesture.detectPlayerTapGestures
+import com.android.purebilibili.danmaku.engine.DanmakuClickCapture
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -51,7 +52,7 @@ class PlayerTapGesturesUiRegressionTest {
     private var nativeTouches = 0
 
     private fun setPlayerSurface(
-        captureSingleTap: (Offset) -> (() -> Unit)? = { null },
+        captureSingleTap: (Offset) -> DanmakuClickCapture? = { null },
         nativeRenderer: Boolean = false,
         initiallyVisibleControls: Boolean = false,
     ) {
@@ -199,12 +200,16 @@ class PlayerTapGesturesUiRegressionTest {
     @Test
     fun capturedDanmakuTap_opensMenuWithoutTogglingControls() {
         var openedMenus = 0
-        setPlayerSurface(captureSingleTap = { { openedMenus += 1 } })
+        var releasedCaptures = 0
+        setPlayerSurface(captureSingleTap = {
+            DanmakuClickCapture(confirm = { openedMenus += 1 }, release = { releasedCaptures += 1 })
+        })
         rule.onNodeWithTag("player-tap-surface").performTouchInput { click(center) }
         finishTapWindow()
 
         rule.runOnIdle {
             assertEquals(1, openedMenus)
+            assertEquals(0, releasedCaptures)
             assertTrue(taps.isEmpty())
             assertTrue(doubleTaps.isEmpty())
             assertFalse(controlsVisible)
@@ -214,7 +219,10 @@ class PlayerTapGesturesUiRegressionTest {
     @Test
     fun doubleTapOverDanmaku_discardsCapturedMenuAction() {
         var openedMenus = 0
-        setPlayerSurface(captureSingleTap = { { openedMenus += 1 } })
+        var releasedCaptures = 0
+        setPlayerSurface(captureSingleTap = {
+            DanmakuClickCapture(confirm = { openedMenus += 1 }, release = { releasedCaptures += 1 })
+        })
         rule.onNodeWithTag("player-tap-surface").performTouchInput {
             click(center)
             advanceEventTime(viewConfiguration.doubleTapMinTimeMillis + 20L)
@@ -224,6 +232,7 @@ class PlayerTapGesturesUiRegressionTest {
 
         rule.runOnIdle {
             assertEquals(0, openedMenus)
+            assertEquals(1, releasedCaptures)
             assertEquals(1, doubleTaps.size)
             assertTrue(taps.isEmpty())
             assertTrue(paused)

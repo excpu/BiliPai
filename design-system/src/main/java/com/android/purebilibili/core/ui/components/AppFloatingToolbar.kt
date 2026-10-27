@@ -52,15 +52,21 @@ fun AppMaterial3Toolbar(
     }
 }
 
-/** Placement and reserved list space belong to the caller. */
+/** Owns the single horizontal scroll container; callers only supply action buttons and placement. */
 @Composable
 fun AppFloatingToolbar(
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
+    content: @Composable RowScope.() -> Unit,
 ) {
     if (LocalAppUiStyle.current == AppUiStyle.MIUIX) {
-        FloatingToolbar(modifier = modifier, outSidePadding = PaddingValues()) { content() }
+        FloatingToolbar(modifier = modifier, outSidePadding = PaddingValues()) {
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+                content = content,
+            )
+        }
     } else {
-        AppMaterial3Toolbar(modifier = modifier) { content() }
+        AppMaterial3Toolbar(modifier = modifier, content = content)
     }
 }

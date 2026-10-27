@@ -259,8 +259,8 @@ private fun LiveRoomScreen(
         showEmoticonSheet = showEmoticons
         showSendDanmakuSheet = true
     }
-    var reportTarget by remember { mutableStateOf<LiveDanmakuItem?>(null) }
-    var isFullscreen by rememberSaveable { mutableStateOf(false) }
+    var reportTarget by remember(roomId, siteId) { mutableStateOf<LiveDanmakuItem?>(null) }
+    var fullscreenRequested by rememberSaveable { mutableStateOf(false) }
     var isPlaying by remember { mutableStateOf(true) }
     var selectedInteractionTab by rememberSaveable(roomId, siteId) { mutableIntStateOf(0) }
     val chatListState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -280,6 +280,8 @@ private fun LiveRoomScreen(
         .collectAsStateWithLifecycle(initialValue = false)
     val autoExitFullscreenEnabled by SettingsManager.getAutoExitFullscreen(context)
         .collectAsStateWithLifecycle(initialValue = true)
+    val fullscreenGestureReverse by SettingsManager.getFullscreenGestureReverse(context)
+        .collectAsStateWithLifecycle(initialValue = false)
     var didAutoEnterFullscreen by rememberSaveable(roomId, siteId) { mutableStateOf(false) }
     var shutdownAtMillis by remember { mutableStateOf<Long?>(null) }
     val showLivePipButton = remember { shouldShowLivePipButton(android.os.Build.VERSION.SDK_INT) }
@@ -312,6 +314,16 @@ private fun LiveRoomScreen(
     // 直播布局只看当前可用窗口，分屏/自由窗口不会沿用物理平板布局。
     val isTablet = windowSizeClass.isTablet
     val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    val liveRequestedOrientationMode = resolveLiveRequestedOrientationMode(
+        displayContext = displayContext,
+        isFullscreen = fullscreenRequested,
+        isPortraitLive = isPortraitLive,
+    )
+    val isFullscreen = shouldPresentLiveFullscreen(
+        fullscreenRequested = fullscreenRequested,
+        isLandscape = isLandscape,
+        orientationMode = liveRequestedOrientationMode,
+    )
     val liveLayoutMode = resolveLiveRoomLayoutMode(
         isLandscape = isLandscape,
         isTablet = isTablet,
@@ -320,6 +332,11 @@ private fun LiveRoomScreen(
         hasObstructingHinge = hingeAdaptiveInfo.shouldAvoidHinge,
     )
     val playerGesturePolicy = LivePlayerGesturePolicy.Shared
+    var captureLiveDanmakuTap by remember(roomId, siteId) {
+        mutableStateOf<((androidx.compose.ui.geometry.Offset) -> com.android.purebilibili.danmaku.engine.DanmakuClickCapture?)?>(null)
+    }
+    var liveDanmakuInteractionEnabled by remember(roomId, siteId) { mutableStateOf(true) }
+    val liveVisualWorkActive = com.android.purebilibili.core.ui.rememberVisualWorkActive()
     val liveDanmakuSettingsScope = remember(isLandscape) {
         resolveDanmakuSettingsScope(isLandscape = isLandscape)
     }
@@ -393,10 +410,20 @@ private fun LiveRoomScreen(
         roomInfo.onlineRankText, formatLiveDuration(roomInfo.liveStartTime, liveClock))
         .filter { it.isNotBlank() }.joinToString("  ")
 
-    // 强制横屏切换
+    // 先请求目标方向，布局按真实窗口方向提交；竖向直播与窗口内全屏保持各自策略。
     fun toggleFullscreen() {
-        isFullscreen = !isFullscreen
+        val targetFullscreen = !fullscreenRequested
+        activity?.applyPlayerRequestedOrientation(
+            requestedOrientation = resolveLiveRequestedOrientationMode(
+                displayContext = displayContext,
+                isFullscreen = targetFullscreen,
+                isPortraitLive = isPortraitLive,
+            ).toActivityOrientation(),
+            displayContext = displayContext,
+        )
+        fullscreenRequested = targetFullscreen
     }
+    val currentToggleFullscreen by rememberUpdatedState({ toggleFullscreen() })
 
     fun toggleLiveDanmaku() {
         val current = successState?.isDanmakuEnabled ?: liveDanmakuEnabledPreference
@@ -537,7 +564,7 @@ private fun LiveRoomScreen(
     }
 
     // 全屏返回先恢复直播间布局。
-    LocalNavigationBackHandler(enabled = isFullscreen) { toggleFullscreen() }
+    LocalNavigationBackHandler(enabled = fullscreenRequested) { toggleFullscreen() }
 
     DisposableEffect(roomId) {
         miniPlayerManager.resetNavigationFlag()
@@ -625,6 +652,7 @@ private fun LiveRoomScreen(
             hasSharedTransitionScope = sharedTransitionScope != null,
             hasAnimatedVisibilityScope = animatedVisibilityScope != null,
             requiresHdrSurfaceOutput = liveHdrSurfaceRequired,
+            hasContainerTransition = LocalLiveCardContainerActive.current,
         ),
     )
 
@@ -723,7 +751,7 @@ private fun LiveRoomScreen(
                     viewModel.onPlaybackStarted()
                     if (currentAutoEnterFullscreen && !didAutoEnterFullscreen) {
                         didAutoEnterFullscreen = true
-                        if (!isFullscreen) toggleFullscreen()
+                        if (!fullscreenRequested) currentToggleFullscreen()
                     }
                 }
                 CrashReporter.markLivePlaybackStage(if (playing) "playing" else "not_playing")
@@ -750,9 +778,9 @@ private fun LiveRoomScreen(
                     playbackState == Player.STATE_ENDED &&
                     currentAutoExitFullscreen &&
                     !currentIsRoomLive &&
-                    isFullscreen
+                    fullscreenRequested
                 ) {
-                    toggleFullscreen()
+                    currentToggleFullscreen()
                 }
             }
         }
@@ -940,13 +968,6 @@ private fun LiveRoomScreen(
         }
     }
 
-    val liveRequestedOrientationMode = remember(displayContext, isFullscreen, isPortraitLive) {
-        resolveLiveRequestedOrientationMode(
-            displayContext = displayContext,
-            isFullscreen = isFullscreen,
-            isPortraitLive = isPortraitLive,
-        )
-    }
     var previousLiveDisplayRole by remember {
         mutableStateOf(displayContext.foldableDisplayRole)
     }
@@ -965,18 +986,8 @@ private fun LiveRoomScreen(
         previousLiveDisplayRole = displayContext.foldableDisplayRole
     }
     LaunchedEffect(activity, displayContext, liveRequestedOrientationMode) {
-        val requestedOrientation = when (liveRequestedOrientationMode) {
-            LiveRequestedOrientationMode.Unspecified ->
-                ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            LiveRequestedOrientationMode.SensorLandscape ->
-                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-            LiveRequestedOrientationMode.SensorPortrait ->
-                ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-            LiveRequestedOrientationMode.Portrait ->
-                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-        }
         activity?.applyPlayerRequestedOrientation(
-            requestedOrientation = requestedOrientation,
+            requestedOrientation = liveRequestedOrientationMode.toActivityOrientation(),
             displayContext = displayContext,
         )
     }
@@ -1070,10 +1081,24 @@ private fun LiveRoomScreen(
                 )
             val showLiveDanmakuOverlay =
                 liveLayoutMode != LiveRoomLayoutMode.PortraitVerticalOverlay || isFullscreen
+            val liveDanmakuInPip = isPipRequested || activity?.isInPictureInPictureMode == true
             if (liveDanmakuLayerEnabled) {
-                // 竖向直播只切换可见性，保留消息订阅、时间轴与渲染器，避免进入全屏清空弹幕。
+                // 隐藏时保留渲染器并暂停，恢复后跟随直播时间；画中画沿用弹幕显示偏好。
                 LiveDanmakuOverlay(
                     danmakuFlow = viewModel.danmakuFlow,
+                    sessionKey = "$siteId:$roomId",
+                    active = showLiveDanmakuOverlay && (
+                        (liveVisualWorkActive && !miniPlayerManager.isMiniMode) ||
+                            (liveDanmakuInPip && !pipNoDanmaku)
+                        ),
+                    interactionEnabled = liveDanmakuInteractionEnabled && liveVisualWorkActive &&
+                        !liveDanmakuInPip && !miniPlayerManager.isMiniMode,
+                    onCaptureReady = { captureLiveDanmakuTap = it },
+                    onUserClick = onUserClick,
+                    onReport = { item ->
+                        if (canInteractWithRoom) reportTarget = item
+                        else Toast.makeText(context, "请先登录", Toast.LENGTH_SHORT).show()
+                    },
                     isFullscreen = isFullscreen,
                     displayArea = liveDanmakuDisplayArea,
                     danmakuSettings = liveDanmakuSettings,
@@ -1096,6 +1121,10 @@ private fun LiveRoomScreen(
                     isPlaying = exoPlayer.playWhenReady,
                     isFullscreen = isFullscreen,
                     gesturePolicy = playerGesturePolicy,
+                    fullscreenRequested = fullscreenRequested,
+                    fullscreenGestureReverse = fullscreenGestureReverse,
+                    captureDanmakuTap = { captureLiveDanmakuTap?.invoke(it) },
+                    onDanmakuInteractionEnabledChange = { liveDanmakuInteractionEnabled = it },
                     showTopBar = shouldShowLivePlayerControlsTopBar(
                         layoutMode = liveLayoutMode,
                         isFullscreen = isFullscreen
@@ -1107,7 +1136,7 @@ private fun LiveRoomScreen(
                         if (exoPlayer.playWhenReady) exoPlayer.pause() else exoPlayer.play()
                     },
                     onToggleFullscreen = { toggleFullscreen() },
-                    onBack = { if (isFullscreen) toggleFullscreen() else exitLiveRoom() },
+                    onBack = { if (fullscreenRequested) toggleFullscreen() else exitLiveRoom() },
                     // 弹幕开关
                     isDanmakuEnabled = successState?.isDanmakuEnabled ?: true,
                     onToggleDanmaku = { toggleLiveDanmaku() },
@@ -1364,7 +1393,10 @@ private fun LiveRoomScreen(
     LiveRoomLayout(
         mode = liveLayoutMode,
         isFullscreen = isFullscreen,
-        backgroundUrl = roomInfo.background,
+        backgroundUrl = when (liveLayoutMode) {
+            LiveRoomLayoutMode.PortraitPanel, LiveRoomLayoutMode.PortraitVerticalOverlay -> roomInfo.appBackground
+            else -> roomInfo.background
+        },
         hasObstructingHinge = hingeAdaptiveInfo.shouldAvoidHinge,
         modifier = Modifier.fillMaxSize(),
         header = roomAppBar,
@@ -2034,10 +2066,10 @@ private fun LiveDanmakuSettingsDialog(
                         )
                         AppText("按类型屏蔽", style = MaterialTheme.typography.labelLarge)
                         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            androidx.compose.material3.FilterChip(!allowScroll, onToggleAllowScroll, label = { AppText("滚动") })
-                            androidx.compose.material3.FilterChip(!allowTop, onToggleAllowTop, label = { AppText("顶部") })
-                            androidx.compose.material3.FilterChip(!allowBottom, onToggleAllowBottom, label = { AppText("底部") })
-                            androidx.compose.material3.FilterChip(!allowColorful, onToggleAllowColorful, label = { AppText("彩色") })
+                            com.android.purebilibili.core.ui.components.AppFilterChip(!allowScroll, onToggleAllowScroll, label = { AppText("滚动") })
+                            com.android.purebilibili.core.ui.components.AppFilterChip(!allowTop, onToggleAllowTop, label = { AppText("顶部") })
+                            com.android.purebilibili.core.ui.components.AppFilterChip(!allowBottom, onToggleAllowBottom, label = { AppText("底部") })
+                            com.android.purebilibili.core.ui.components.AppFilterChip(!allowColorful, onToggleAllowColorful, label = { AppText("彩色") })
                         }
                     }
                     1 -> LiveDanmakuAdvancedSettings(

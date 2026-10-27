@@ -12,12 +12,13 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -57,12 +58,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.android.purebilibili.R
 import com.android.purebilibili.core.store.LiquidGlassAdvancedPreset
@@ -92,6 +93,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.blur.ProgressiveBlur
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun LiquidGlassAdjustmentPanel(
     persistedProgress: Float,
@@ -394,27 +396,37 @@ internal fun LiquidGlassAdjustmentPanel(
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Medium,
         )
-        Row(
+        // Size actions by their content; narrow windows move the second action to its own row.
+        FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             AppTextButton(
                 onClick = onImportSettings,
                 enabled = !isImportingSettings,
-                modifier = Modifier.weight(1f),
             ) {
                 Icon(com.android.purebilibili.feature.settings.rememberMaterialSymbol(com.android.purebilibili.R.drawable.ms_file_download_24), contentDescription = null)
                 Spacer(modifier = Modifier.width(6.dp))
-                AppText(if (isImportingSettings) "正在读取" else "导入他人设置")
+                AppText(
+                    text = if (isImportingSettings) "正在读取" else "导入他人设置",
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
             AppTextButton(
                 onClick = onShareSettings,
                 enabled = !isImportingSettings,
-                modifier = Modifier.weight(1f),
             ) {
                 Icon(com.android.purebilibili.feature.settings.rememberMaterialSymbol(com.android.purebilibili.R.drawable.ms_share_24), contentDescription = null)
                 Spacer(modifier = Modifier.width(6.dp))
-                AppText("分享我的设置")
+                AppText(
+                    text = "分享我的设置",
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
         AppText(
@@ -862,14 +874,11 @@ private fun LiquidGlassHomeSample(
                     HorizontalPager(
                         state = previewArtworkPagerState,
                         key = { page -> LiquidGlassPreviewArtwork.entries[page].name },
-                        beyondViewportPageCount = 1,
                         modifier = Modifier.fillMaxSize(),
                     ) { page ->
                         Box(modifier = Modifier.fillMaxSize()) {
-                            Image(
-                                painter = painterResource(
-                                    LiquidGlassPreviewArtwork.entries[page].drawableResId
-                                ),
+                            AsyncImage(
+                                model = LiquidGlassPreviewArtwork.entries[page].drawableResId,
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize(),

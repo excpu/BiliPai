@@ -352,7 +352,8 @@ internal sealed interface BiliPaiNavKey : NavKey {
     data class Chat(
         val talkerId: Long,
         val sessionType: Int,
-        val userName: String = ""
+        val userName: String = "",
+        val userFace: String = ""
     ) : BiliPaiNavKey {
         override val routeBase: String = "chat"
     }

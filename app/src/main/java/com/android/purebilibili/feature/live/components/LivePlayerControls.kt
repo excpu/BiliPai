@@ -11,7 +11,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import com.android.purebilibili.core.ui.components.appActionClickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
@@ -23,6 +22,9 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import com.android.purebilibili.feature.video.ui.gesture.detectPlayerTapGestures
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
@@ -59,6 +61,7 @@ import com.android.purebilibili.core.ui.components.AppSurface
 import com.android.purebilibili.feature.live.resolveLiveVisualSpec
 import com.android.purebilibili.feature.live.LiveStatusPalette
 import com.android.purebilibili.feature.live.LivePlayerGesturePolicy
+import com.android.purebilibili.feature.live.shouldToggleLiveFullscreenForDrag
 import com.android.purebilibili.feature.video.ui.gesture.GestureLevelKind
 import com.android.purebilibili.feature.video.ui.gesture.GestureLevelOverlayHost
 import com.android.purebilibili.feature.video.ui.section.VideoGestureMode
@@ -228,14 +231,26 @@ fun LivePlayerControls(
     onCaptureScreenshot: () -> Unit = {},
     // [新增] 点赞连击
     gesturePolicy: LivePlayerGesturePolicy = LivePlayerGesturePolicy.Shared,
+    fullscreenGestureReverse: Boolean = false,
+    captureDanmakuTap: (androidx.compose.ui.geometry.Offset) -> com.android.purebilibili.danmaku.engine.DanmakuClickCapture? = { null },
+    onDanmakuInteractionEnabledChange: (Boolean) -> Unit = {},
     // 玻璃调用方显式开启，横竖屏共用材质；原生路径沿用既有尺寸和背景。
     glassEnabled: Boolean = false,
     onBackdropRequiredChange: (Boolean) -> Unit = {},
+    // 手势按请求意图判定方向，旋转尚未完成时重复上滑不会反向取消全屏。
+    fullscreenRequested: Boolean = isFullscreen,
 ) {
+    var controlsWindowOffset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    val latestCaptureDanmakuTap by rememberUpdatedState(captureDanmakuTap)
     var isControlsVisible by remember { mutableStateOf(true) }
     var menuExpanded by remember { mutableStateOf(false) }
     // 全屏锁屏状态（仅 showLockButton 场景生效）
     var isLocked by rememberSaveable { mutableStateOf(false) }
+    val latestInteractionEnabledChange by rememberUpdatedState(onDanmakuInteractionEnabledChange)
+    DisposableEffect(isLocked) {
+        latestInteractionEnabledChange(!isLocked)
+        onDispose { latestInteractionEnabledChange(false) }
+    }
     val palette = rememberLiveChromePalette()
     val controlVisualSpec = remember { resolveLivePlayerControlVisualSpec() }
 
@@ -267,11 +282,12 @@ fun LivePlayerControls(
     val refreshIcon = rememberAppRefreshIcon()
     var gestureKind by remember { mutableStateOf(GestureLevelKind.Volume) }
     var gesturePercent by remember { mutableFloatStateOf(0f) }
-    // 竖向直播不响应中间区域的全屏手势。
+    // 中部手势按当前全屏状态决定进入或退出。
     var gestureZone by remember { mutableStateOf(LiveGestureZone.None) }
-    var centerDragAccumulator by remember { mutableFloatStateOf(0f) }
     val latestPlayPause by rememberUpdatedState(onPlayPause)
     val latestToggleFullscreen by rememberUpdatedState(onToggleFullscreen)
+    val latestFullscreen by rememberUpdatedState(fullscreenRequested)
+    val latestFullscreenGestureReverse by rememberUpdatedState(fullscreenGestureReverse)
     val latestOnScale by rememberUpdatedState(onScale)
     // 锁定/解锁、双击播放与手势切全屏的状态切换反馈；按钮点击由 LivePlayerIconButton 统一触发。
     val stateHaptic = rememberHapticFeedback(com.android.purebilibili.core.ui.AppHapticScene.PLAYER_GESTURES)
@@ -289,6 +305,7 @@ fun LivePlayerControls(
         modifier = modifier
             .fillMaxSize()
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+            .onGloballyPositioned { controlsWindowOffset = it.positionInWindow() }
             // 锁定时移除全部手势（单击/双击/亮度/音量拖拽）
             .then(
                 if (isLocked) {
@@ -308,7 +325,9 @@ fun LivePlayerControls(
                             }
                         }
                         .pointerInput(gesturePolicy.doubleTapPlayback) {
-                            detectTapGestures(
+                            detectPlayerTapGestures(
+                                doubleTapSlopPx = 100.dp.toPx(),
+                                captureSingleTap = { latestCaptureDanmakuTap(it + controlsWindowOffset) },
                                 onTap = { isControlsVisible = !isControlsVisible },
                                 onDoubleTap = { if (gesturePolicy.doubleTapPlayback) {
                                     stateHaptic(HapticType.LIGHT)
@@ -323,6 +342,8 @@ fun LivePlayerControls(
                             // 使用 Float 累积变化量，解决"不跟手"问题
                             var volumeAccumulator = 0f
                             var brightnessAccumulator = 0f
+                            var centerDragAccumulator = 0f
+                            var centerDragResolved = false
 
                             var maxVolume = 0
 
@@ -336,6 +357,7 @@ fun LivePlayerControls(
                                         else -> LiveGestureZone.None
                                     }
                                     centerDragAccumulator = 0f
+                                    centerDragResolved = false
                                     when (gestureZone) {
                                         LiveGestureZone.Brightness -> {
                                             // 左侧：亮度
@@ -366,13 +388,6 @@ fun LivePlayerControls(
                                         gestureZone == LiveGestureZone.Volume
                                 },
                                 onDragEnd = {
-                                    // 中间区域：上下滑动超过阈值则切换全屏
-                                    if (gestureZone == LiveGestureZone.FullscreenToggle &&
-                                        kotlin.math.abs(centerDragAccumulator) > screenHeight * 0.15f
-                                    ) {
-                                        stateHaptic(HapticType.MEDIUM)
-                                        latestToggleFullscreen()
-                                    }
                                     isGestureVisible = false
                                     gestureZone = LiveGestureZone.None
                                 },
@@ -425,6 +440,20 @@ fun LivePlayerControls(
                                         }
                                         LiveGestureZone.FullscreenToggle -> {
                                             centerDragAccumulator += dragAmount
+                                            val threshold = 2.5.dp.toPx()
+                                            if (!centerDragResolved && kotlin.math.abs(centerDragAccumulator) > threshold) {
+                                                centerDragResolved = true
+                                                if (shouldToggleLiveFullscreenForDrag(
+                                                        dragY = centerDragAccumulator,
+                                                        threshold = threshold,
+                                                        isFullscreen = latestFullscreen,
+                                                        reverse = latestFullscreenGestureReverse,
+                                                    )
+                                                ) {
+                                                    stateHaptic(HapticType.MEDIUM)
+                                                    latestToggleFullscreen()
+                                                }
+                                            }
                                         }
                                         LiveGestureZone.None -> {}
                                     }
@@ -434,10 +463,10 @@ fun LivePlayerControls(
                 }
             )
     ) {
-        // 与普通视频共用同一 Host：亮度贴左边缘，音量贴右边缘。
+        // 亮度、音量与普通视频共用同一反馈入口；全屏使用完整玻璃轨道，内嵌播放使用紧凑尺寸。
         GestureLevelOverlayHost(
             visible = isGestureVisible,
-            compact = true,
+            compact = if (glass) !isFullscreen else true,
             mode = if (gestureKind == GestureLevelKind.Brightness) {
                 VideoGestureMode.Brightness
             } else {
@@ -446,6 +475,12 @@ fun LivePlayerControls(
             percent = gesturePercent,
             glassBackdrop = com.android.purebilibili.feature.video.ui.overlay.LocalPlayerPageBackdrop.current
                 .takeIf { glass },
+            glassEnabled = glass,
+            // 44dp 提示与顶部 34dp 玻璃按钮共用中心线（顶部间距 13dp）。
+            glassTopInset = if (isFullscreen) 8.dp else 16.dp,
+            glassApplyTopSystemInsets = applyTopSystemBarPadding,
+            glassTopSystemInsets = WindowInsets.statusBars,
+            glassContentColorOverride = Color.White,
         )
 
         // 横竖屏共用按钮顺序；短窗口仅把放不下的文字工具收进同一菜单。

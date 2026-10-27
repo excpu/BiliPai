@@ -7,6 +7,13 @@ import kotlin.test.assertTrue
 
 class VideoCardNativeSnapshotPolicyTest {
     @Test
+    fun duplicateVideoOnlyHidesTheCapturedCard() {
+        val key = "search:BVsame"
+        assertTrue(isRecordedNativeCardSource("BVsame", "search", key, key, ownsRecordedLayer = true))
+        assertFalse(isRecordedNativeCardSource("BVsame", "search", key, key, ownsRecordedLayer = false))
+    }
+
+    @Test
     fun repeatedRelatedClickDoesNotBorrowTheParentHeldTransition() {
         val relatedKey = "video:BVrelated"
         val parentKey = "home:BVparent"

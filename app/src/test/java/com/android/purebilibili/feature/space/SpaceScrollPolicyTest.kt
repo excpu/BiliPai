@@ -32,27 +32,4 @@ class SpaceScrollPolicyTest {
         assertEquals(0.5f, resolveSpaceHeaderClosingFraction(84f, 168f))
     }
 
-    @Test
-    fun `floating summary follows distance and reverses continuously without snapping`() {
-        val state = SpaceFloatingSummaryState().apply { heightPx = 48f }
-        state.scrollBy(-300f)
-        assertEquals(0f, state.exposedHeightPx)
-        state.scrollBy(18f)
-        assertEquals(18f, state.exposedHeightPx)
-        state.scrollBy(-7f)
-        assertEquals(11f, state.exposedHeightPx)
-        state.scrollBy(300f)
-        assertEquals(48f, state.exposedHeightPx)
-        state.scrollBy(-12f)
-        assertEquals(36f, state.exposedHeightPx)
-        state.reset()
-        assertEquals(0f, state.exposedHeightPx)
-    }
-
-    @Test
-    fun `floating summary remains hidden until measured`() {
-        val state = SpaceFloatingSummaryState()
-        state.scrollBy(100f)
-        assertEquals(0f, state.exposedHeightPx)
-    }
 }

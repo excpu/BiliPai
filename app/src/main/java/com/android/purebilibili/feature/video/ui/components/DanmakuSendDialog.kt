@@ -448,13 +448,22 @@ private fun DanmakuSendDialogContent(
                 .fillMaxWidth()
                 .height(48.dp),
             enabled = visible && text.isNotBlank() && !isSending,
+            // 玻璃面板的主操作读取语义主题色，禁用态保持中性；原生按钮继续使用各自默认色板。
+            colors = if (com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled) {
+                androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = AppContentColors.accent(),
+                    contentColor = AppContentColors.onAccent(),
+                    disabledContainerColor = AppContentColors.primaryText().copy(alpha = 0.12f),
+                    disabledContentColor = AppContentColors.primaryText().copy(alpha = 0.38f),
+                )
+            } else null,
             shape = AppShapes.container(ContainerLevel.Card)
         ) {
             if (isSending) {
                 AppCircularProgressIndicator(
                     modifier = Modifier.size(20.dp),
                     strokeWidth = 2.dp,
-                    color = AppContentColors.onAccent()
+                    color = androidx.compose.material3.LocalContentColor.current
                 )
             } else {
                 AppText(

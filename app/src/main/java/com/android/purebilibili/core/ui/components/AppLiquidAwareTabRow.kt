@@ -248,13 +248,11 @@ fun <T> AppLiquidAwareTabRow(
                 geometryMode = FloatingBottomBarGeometryMode.Segmented,
             )
             val indicatorOverflow = indicatorCaptureInsets.verticalDp.dp
-            val indicatorHorizontalOverflow = indicatorCaptureInsets.horizontalDp.dp
             val scrollState = rememberScrollState()
             val density = LocalDensity.current
             BoxWithConstraints(
                 modifier = Modifier.liquidDockViewport(
                     verticalOverflow = indicatorOverflow,
-                    horizontalOverflow = indicatorHorizontalOverflow,
                 ),
                 contentAlignment = Alignment.CenterStart,
             ) {
@@ -291,7 +289,6 @@ fun <T> AppLiquidAwareTabRow(
                     },
                     modifier = Modifier.liquidDockViewport(
                         verticalOverflow = indicatorOverflow,
-                        horizontalOverflow = indicatorHorizontalOverflow,
                     ),
                     scrollState = scrollState,
                     enabled = enabled,

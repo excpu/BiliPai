@@ -330,7 +330,7 @@
     <string name="animation_return_translation_off">画面沿固定路线返回；倾斜由上方控制</string>
     <string name="animation_transition_blur_summary">转场更有层次感；关闭可省电</string>
     <string name="animation_back_title">页面切换动画</string>
-    <string name="animation_back_summary">页面进入与返回共用的动画样式</string>
+    <string name="animation_back_summary">普通页面全局生效，返回反向播放；卡片共享元素、设置容器形变与大屏分栏保留专属过渡</string>
     <string name="animation_settings_container_title">设置容器动画</string>
     <string name="animation_settings_container_summary">设置页入口的进入与返回动画</string>
     <string name="animation_settings_container_morph">容器形变</string>
@@ -899,6 +899,9 @@
     <string name="appearance_theme_contrast_issue_item">%1$s %2$.2f:1（目标 %3$.1f:1）</string>
     <string name="appearance_theme_contrast_explain">数值越高，文字和背景的区别越明显。背景图片可能影响实际效果。</string>
     <string name="appearance_theme_contrast_repair">修正可读性</string>
+    <string name="appearance_theme_restore_md3_palette">恢复 MD3 推荐配色</string>
+    <string name="appearance_theme_restore_miuix_palette">恢复 Miuix 推荐配色</string>
+    <string name="appearance_theme_restore_palette_summary">同时恢复浅色和深色默认色板，关闭高级配色；保留当前主题色、色彩风格和对比度。</string>
     <string name="appearance_theme_contrast_repair_summary">仅调整本模式的主要与次要文字，保留背景和强调色；其余不足的配对继续提示。</string>
     <string name="appearance_theme_contrast_warning">你选的文字色与背景比较接近，预览已自动调整文字，让它更容易看清；仍可保存。</string>
     <string name="appearance_dynamic_color_preview">当前取色预览</string>
@@ -923,4 +926,18 @@
     <string name="home_settings_grid_customization_title">自定义列表列数</string>
     <string name="home_settings_grid_share_title">跨页面共用列数</string>
     <string name="home_settings_grid_compact_title">窄屏默认列数</string>
+    <string name="animation_page_fade">淡入淡出</string>
+    <string name="animation_page_fade_in">淡入</string>
+    <string name="animation_page_size">上下展开</string>
+    <string name="animation_page_shared_axis">横向淡入切换</string>
+    <string name="animation_page_instant">无页面动画</string>
+    <string name="animation_page_right_to_left">从右向左</string>
+    <string name="animation_page_left_to_right">从左向右</string>
+    <string name="animation_page_up_to_down">从上向下</string>
+    <string name="animation_page_down_to_up">从下向上</string>
+    <string name="animation_page_right_to_left_fade">从右向左并淡入</string>
+    <string name="animation_page_left_to_right_fade">从左向右并淡入</string>
+    <string name="animation_page_zoom">缩放淡入</string>
+    <string name="animation_page_circular_reveal">圆形揭示（中心展开）</string>
+    <string name="animation_page_ios">iOS 风格（侧滑与视差）</string>
 </resources>

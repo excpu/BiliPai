@@ -32,6 +32,7 @@ import com.android.purebilibili.data.model.response.ReplyVote
 import com.android.purebilibili.data.model.response.ReplyVoteCard
 import com.android.purebilibili.data.model.response.ReplyVoteCardOption
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 
@@ -215,7 +216,7 @@ object CommentGrpcRepository {
         oid: Long,
         rpid: Long
     ): Result<String?> = withContext(Dispatchers.IO) {
-        runCatching {
+        try {
             val request = ProtoWire.message(
                 ProtoWire.int64(1, type),
                 ProtoWire.int64(2, oid),
@@ -225,7 +226,11 @@ object CommentGrpcRepository {
                 path = PATH_TRANSLATE_REPLY,
                 message = request
             )
-            parseTranslateReplyResp(response, rpid)
+            Result.success(parseTranslateReplyResp(response, rpid))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 

@@ -1,5 +1,7 @@
 package com.android.purebilibili.feature.download
 
+import com.android.purebilibili.core.ui.components.AppTextButton as TextButton
+
 import com.android.purebilibili.core.util.rememberHapticFeedback
 import com.android.purebilibili.core.util.HapticType
 
@@ -185,7 +187,7 @@ fun DownloadListScreen(
                         }
                     }
                     if (!selectionMode && (hasActive || hasResumable)) {
-                        androidx.compose.material3.TextButton(onClick = {
+                        TextButton(onClick = {
                             actionScope.launch {
                                 if (hasActive) {
                                     taskList.filter(::shouldPauseAllInclude).forEach {
@@ -471,7 +473,7 @@ fun DownloadListScreen(
                 )
             },
             confirmButton = {
-                androidx.compose.material3.TextButton(
+                TextButton(
                     onClick = {
                         if (deletingTaskId != null) return@TextButton
                         deletingTaskId = taskToDelete.id
@@ -487,7 +489,7 @@ fun DownloadListScreen(
                 }
             },
             dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { pendingDeleteTask = null }, modifier = Modifier.appElasticPress()) {
+                TextButton(onClick = { pendingDeleteTask = null }, modifier = Modifier.appElasticPress()) {
                     AppText("取消")
                 }
             }

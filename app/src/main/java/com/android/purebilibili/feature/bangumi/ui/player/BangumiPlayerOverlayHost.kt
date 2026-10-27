@@ -325,14 +325,30 @@ internal fun BangumiPlayerOverlayHost(
             subtitleControlCallbacks = features.subtitle.callbacks,
             onAspectRatioChange = onAspectRatioChange,
             onShare = {
-                pendingContentShare = com.android.purebilibili.feature.share.buildBangumiContentSharePayload(
-                    epId = epId,
-                    title = resolveBangumiOverlayShareTitle(title = title, subtitle = subtitle),
-                    cover = coverUrl,
-                    seasonType = features.shareSeasonType,
-                    positionMs = player.currentPosition.coerceAtLeast(0L),
-                    aid = aid,
-                )
+                if (epId <= 0L) {
+                    onShowMessage("当前剧集暂时无法分享")
+                } else if (features.shareSeasonType == 10) {
+                    val shareTitle = resolveBangumiOverlayShareTitle(title = title, subtitle = subtitle)
+                    try {
+                        context.startActivity(android.content.Intent.createChooser(
+                            android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(android.content.Intent.EXTRA_TEXT, "$shareTitle\nhttps://www.bilibili.com/cheese/play/ep$epId")
+                            }, "分享课程"
+                        ))
+                    } catch (_: Exception) {
+                        onShowMessage("暂时无法打开分享面板")
+                    }
+                } else {
+                    pendingContentShare = com.android.purebilibili.feature.share.buildBangumiContentSharePayload(
+                        epId = epId,
+                        title = resolveBangumiOverlayShareTitle(title = title, subtitle = subtitle),
+                        cover = coverUrl,
+                        seasonType = features.shareSeasonType,
+                        positionMs = player.currentPosition.coerceAtLeast(0L),
+                        aid = aid,
+                    )
+                }
             },
             onReloadVideo = onReloadVideo,
             onAnime4kToggle = onAnime4kToggle,

@@ -78,7 +78,7 @@ internal val settingsStaticDescriptionIndex: Map<String, String> = mapOf(
     "navigation.hide_top_tabs" to "首页不显示推荐、热门等分类标签",
     "navigation.is_bottom_bar_floating" to "开启后底栏与屏幕边缘留出间距；关闭后贴近底部显示",
     "navigation.keep_home_top_search" to "开启时顶部与底栏搜索同时显示；关闭时隐藏首页顶部搜索条",
-    "navigation.bottom_bar_scroll_compact_enabled" to "无播放条时，悬浮底栏同向下滑累计 24dp 收为当前入口圆钮，上滑累计 24dp 或点击展开；有听视频播放条时保留原联动",
+    "navigation.bottom_bar_scroll_compact_enabled" to "浏览时收起底栏，上滑或点击展开；有播放条时保持联动",
     "navigation.linked_dock_merge_on_scroll_enabled" to "向下浏览时，搜索按钮与底栏合并",
     "navigation.list_scoped_search_enabled" to "收藏、历史和稍后再看改用底栏搜索当前页",
     "navigation.navigation_icon_cross_scale_enabled" to "切换底栏时，图标短暂放大再恢复",

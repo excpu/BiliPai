@@ -8,7 +8,6 @@ import com.android.purebilibili.core.ui.components.appActionWithFeedback
 import com.android.purebilibili.core.ui.components.wallpaperMediaCardSurface
 import com.android.purebilibili.core.ui.AppContentColors
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.drawscope.clipRect
 import com.android.purebilibili.navigation.animatePagerSelection
@@ -2300,7 +2299,7 @@ fun CommonListScreen(
                     modifier = Modifier.align(Alignment.BottomCenter)
                         .padding(start = 12.dp, end = 12.dp, bottom = bottomOverlayPadding + 12.dp),
                 ) {
-                    Row(Modifier.horizontalScroll(rememberScrollState())) { batchActions() }
+                    batchActions()
                 }
             }
 

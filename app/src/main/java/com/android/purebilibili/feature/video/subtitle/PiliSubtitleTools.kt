@@ -1,5 +1,9 @@
 package com.android.purebilibili.feature.video.subtitle
 
+import com.android.purebilibili.core.ui.components.AppTextButton as TextButton
+import com.android.purebilibili.core.ui.components.AppSlider as Slider
+import com.android.purebilibili.core.ui.AppAlertDialog as AlertDialog
+
 import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -106,10 +110,14 @@ fun rememberPiliSubtitleTools(
             if (initializationSelectionSerial == nativeSelectionSerial) {
                 session.acquiredSecondaryTrackKey = secondary?.trackKey
                 session.acquiredDisplayMode = resolveSubtitleDisplayModeByAutoPreference(
-                    preference, primary != null, secondary != null,
-                    primary?.let(::isLikelyAiSubtitleTrack) ?: false,
-                    secondary?.let(::isLikelyAiSubtitleTrack) ?: false,
+                    preference = preference,
+                    hasPrimaryTrack = primary != null,
+                    hasSecondaryTrack = secondary != null,
+                    primaryTrackLikelyAi = primary?.let(::isLikelyAiSubtitleTrack) ?: false,
+                    secondaryTrackLikelyAi = secondary?.let(::isLikelyAiSubtitleTrack) ?: false,
                     isMuted = player?.volume == 0f,
+                    primaryTrackLanguage = primary?.lan,
+                    secondaryTrackLanguage = secondary?.lan,
                 )
             }
             if (session.selectedTrackKey == null) session.selectedTrackKey = primary?.trackKey

@@ -1,6 +1,10 @@
 // 文件路径: feature/video/ui/components/VideoSettingsPanel.kt
 package com.android.purebilibili.feature.video.ui.components
 
+import com.android.purebilibili.core.ui.components.AppTextButton as TextButton
+import com.android.purebilibili.core.ui.components.AppSlider as Slider
+import com.android.purebilibili.core.ui.AppAlertDialog as AlertDialog
+
 import com.android.purebilibili.core.store.ChapterDisplayMode
 import com.android.purebilibili.feature.settings.playbackSettingTitle
 import com.android.purebilibili.core.ui.AppContentColors

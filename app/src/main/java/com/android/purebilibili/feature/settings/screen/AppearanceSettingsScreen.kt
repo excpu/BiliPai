@@ -908,6 +908,35 @@ fun AppearanceSettingsContent(
                                     )
                                 }
 
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
+                                    com.android.purebilibili.core.ui.components.AppTextButton(
+                                        onClick = {
+                                            roleColorTarget = null
+                                            scope.launch {
+                                                // 清除两种明暗模式的手动覆盖，让当前主题重新提供完整默认色板。
+                                                SettingsManager.setThemeRoleOverrides(context, ThemeRoleOverrides())
+                                            }
+                                        },
+                                        enabled = storedThemeRoleOverrides != ThemeRoleOverrides(),
+                                    ) {
+                                        AppText(stringResource(
+                                            if (palettePreviewConfiguration.uiStyle == AppUiStyle.MIUIX) {
+                                                R.string.appearance_theme_restore_miuix_palette
+                                            } else {
+                                                R.string.appearance_theme_restore_md3_palette
+                                            }
+                                        ))
+                                    }
+                                    AppText(
+                                        text = stringResource(R.string.appearance_theme_restore_palette_summary),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = AppContentColors.secondaryText(),
+                                    )
+                                }
+
                                 AnimatedVisibility(
                                     visible = themeRoleOverrides.enabled,
                                     enter = expandVertically() + fadeIn(),

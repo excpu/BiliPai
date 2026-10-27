@@ -411,17 +411,17 @@ fun DanmakuSettingsPanel(
                         )
                         AppText("按类型屏蔽")
                         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            androidx.compose.material3.FilterChip(!allowScroll, { onAllowScrollChange(!allowScroll) }, label = { AppText("滚动") })
-                            androidx.compose.material3.FilterChip(!allowTop, { onAllowTopChange(!allowTop) }, label = { AppText("顶部") })
-                            androidx.compose.material3.FilterChip(!allowBottom, { onAllowBottomChange(!allowBottom) }, label = { AppText("底部") })
-                            androidx.compose.material3.FilterChip(!allowColorful, { onAllowColorfulChange(!allowColorful) }, label = { AppText("彩色") })
-                            androidx.compose.material3.FilterChip(!allowSpecial, { onAllowSpecialChange(!allowSpecial) }, label = { AppText("高级") })
+                            com.android.purebilibili.core.ui.components.AppFilterChip(!allowScroll, { onAllowScrollChange(!allowScroll) }, label = { AppText("滚动") })
+                            com.android.purebilibili.core.ui.components.AppFilterChip(!allowTop, { onAllowTopChange(!allowTop) }, label = { AppText("顶部") })
+                            com.android.purebilibili.core.ui.components.AppFilterChip(!allowBottom, { onAllowBottomChange(!allowBottom) }, label = { AppText("底部") })
+                            com.android.purebilibili.core.ui.components.AppFilterChip(!allowColorful, { onAllowColorfulChange(!allowColorful) }, label = { AppText("彩色") })
+                            com.android.purebilibili.core.ui.components.AppFilterChip(!allowSpecial, { onAllowSpecialChange(!allowSpecial) }, label = { AppText("高级") })
                         }
                         AppText("其他")
                         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            androidx.compose.material3.FilterChip(massiveMode, { onMassiveModeChange(!massiveMode) }, label = { AppText("海量弹幕") })
-                            androidx.compose.material3.FilterChip(staticDanmakuToScroll, { onStaticDanmakuToScrollChange(!staticDanmakuToScroll) }, label = { AppText("固定转滚动") })
-                            androidx.compose.material3.FilterChip(scrollFixedVelocity, { onScrollFixedVelocityChange(!scrollFixedVelocity) }, label = { AppText("滚动弹幕固定速度") })
+                            com.android.purebilibili.core.ui.components.AppFilterChip(massiveMode, { onMassiveModeChange(!massiveMode) }, label = { AppText("海量弹幕") })
+                            com.android.purebilibili.core.ui.components.AppFilterChip(staticDanmakuToScroll, { onStaticDanmakuToScrollChange(!staticDanmakuToScroll) }, label = { AppText("固定转滚动") })
+                            com.android.purebilibili.core.ui.components.AppFilterChip(scrollFixedVelocity, { onScrollFixedVelocityChange(!scrollFixedVelocity) }, label = { AppText("滚动弹幕固定速度") })
                         }
                         DanmakuSliderItem("显示区域", displayArea, 0.1f..1f, displayValue = { "${(it * 100).roundToInt()}%" }, onValueChange = onDisplayAreaChange, colors = panelColors, resetValue = 0.5f, steps = 8, onValuePreview = onSliderPreview?.let { preview -> { next -> preview(DanmakuSliderParameter.DISPLAY_AREA, next) } })
                         DanmakuSliderItem("不透明度", opacity, 0f..1f, displayValue = { "${(it * 100).roundToInt()}%" }, onValueChange = onOpacityChange, colors = panelColors, resetValue = 1f, onValuePreview = onSliderPreview?.let { preview -> { next -> preview(DanmakuSliderParameter.OPACITY, next) } })
@@ -499,7 +499,7 @@ fun DanmakuSettingsPanel(
                             DanmakuSettingsSectionTitle("竖屏弹幕显示区域")
                             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 PortraitDanmakuDisplayAreaMode.entries.forEach { mode ->
-                                    androidx.compose.material3.FilterChip(
+                                    com.android.purebilibili.core.ui.components.AppFilterChip(
                                         selected = portraitDisplayAreaMode == mode,
                                         onClick = { onPortraitDisplayAreaModeChange(mode) },
                                         label = { AppText(mode.label) },

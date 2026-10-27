@@ -42,6 +42,8 @@ import com.android.purebilibili.core.ui.components.AppTextButton
 import com.android.purebilibili.core.ui.components.AppText
 import androidx.compose.runtime.*
 import com.android.purebilibili.core.ui.components.LocalPageImageLoadingAllowed
+import com.android.purebilibili.core.ui.components.PageAwareAsyncImage
+import com.android.purebilibili.core.ui.rememberVisualWorkActive
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -83,7 +85,6 @@ import com.android.purebilibili.feature.home.components.cards.StoryVideoCard
 import com.android.purebilibili.feature.common.ListLoadError
 
 import androidx.compose.ui.Alignment
-import coil3.compose.AsyncImage
 import kotlinx.coroutines.yield
 import kotlinx.coroutines.launch
 
@@ -465,6 +466,9 @@ internal fun HomeCategoryPageContent(
     }
     val coverLoadingActive = isActive || visibleDuringNavigation
     val pageImageWorkAllowed = LocalPageImageLoadingAllowed.current && isActive
+    val visualWorkActive = rememberVisualWorkActive()
+    val reduceMotion = com.android.purebilibili.core.ui.LocalSystemReduceMotion.current
+    val componentMotionEnabled = com.android.purebilibili.core.ui.LocalComponentMotionEnabled.current
     val auxiliaryWorkAllowed = rememberHomeCardAuxiliaryWorkAllowed(
         pageActive = pageImageWorkAllowed,
         isScrolling = gridState.isScrollInProgress || pageScrollInProgress?.value == true,
@@ -731,70 +735,80 @@ internal fun HomeCategoryPageContent(
                         contentType = "home_hero_carousel",
                         span = StaggeredGridItemSpan.FullLine
                     ) {
-                        if (LocalConfiguration.current.screenWidthDp >= HOME_HERO_CAROUSEL_WIDE_BREAKPOINT_DP.toInt()) {
-                            // 折叠屏/平板展开态:全幅沉浸式 hero(与 TV 首页同一视觉语言)
-                            HomeHeroCarouselImmersive(
-                                videos = carouselVideos,
-                                horizontalEscapeDp = contentPadding.calculateLeftPadding(LocalLayoutDirection.current),
-                                onVideoClick = { video ->
-                                    onVideoClick(
-                                        HomeVideoClickRequest(
-                                            bvid = video.bvid,
-                                            dynamicId = video.dynamicId,
-                                            episodeId = video.episodeId,
-                                            cid = video.cid,
-                                            coverUrl = video.pic,
-                                            isVerticalVideo = video.isVertical,
-                                            source = HomeVideoClickSource.GRID,
-                                            sourceRoute = sourceRoute
+                        val heroVisible = "home_hero_carousel" in visibleLazyItemKeys.value
+                        val heroWorkAllowed = pageImageWorkAllowed && heroVisible && visualWorkActive
+                        val heroMotionAllowed = heroWorkAllowed && componentMotionEnabled && !reduceMotion
+                        CompositionLocalProvider(LocalPageImageLoadingAllowed provides heroWorkAllowed) {
+                            if (LocalConfiguration.current.screenWidthDp >= HOME_HERO_CAROUSEL_WIDE_BREAKPOINT_DP.toInt()) {
+                                // 折叠屏/平板展开态:全幅沉浸式 hero(与 TV 首页同一视觉语言)
+                                HomeHeroCarouselImmersive(
+                                    videos = carouselVideos,
+                                    autoAdvanceAllowed = heroMotionAllowed,
+                                    horizontalEscapeDp = contentPadding.calculateLeftPadding(LocalLayoutDirection.current),
+                                    onVideoClick = { video ->
+                                        onVideoClick(
+                                            HomeVideoClickRequest(
+                                                bvid = video.bvid,
+                                                dynamicId = video.dynamicId,
+                                                episodeId = video.episodeId,
+                                                cid = video.cid,
+                                                coverUrl = video.pic,
+                                                isVerticalVideo = video.isVertical,
+                                                source = HomeVideoClickSource.GRID,
+                                                sourceRoute = sourceRoute
+                                            )
                                         )
-                                    )
-                                },
-                            )
-                        } else {
-                            HomeHeroCarousel(
-                                videos = carouselVideos,
-                                autoplayEnabled = homeHeroCarouselAutoplayEnabled,
-                                onGestureActiveChange = onHeroCarouselGestureActiveChange,
-                                dissolvingVideos = dissolvingVideos,
-                                onDissolveComplete = onDissolveComplete,
-                                onLongPress = longPressCallback,
-                                onVideoClick = { video ->
-                                    onVideoClick(
-                                        HomeVideoClickRequest(
-                                            bvid = video.bvid,
-                                            dynamicId = video.dynamicId,
-                                            episodeId = video.episodeId,
-                                            cid = video.cid,
-                                            coverUrl = video.pic,
-                                            isVerticalVideo = video.isVertical,
-                                            source = HomeVideoClickSource.GRID,
-                                            sourceRoute = sourceRoute
+                                    },
+                                )
+                            } else {
+                                HomeHeroCarousel(
+                                    videos = carouselVideos,
+                                    autoplayEnabled = homeHeroCarouselAutoplayEnabled && heroMotionAllowed,
+                                    onGestureActiveChange = onHeroCarouselGestureActiveChange,
+                                    dissolvingVideos = dissolvingVideos,
+                                    onDissolveComplete = onDissolveComplete,
+                                    onLongPress = longPressCallback,
+                                    onVideoClick = { video ->
+                                        onVideoClick(
+                                            HomeVideoClickRequest(
+                                                bvid = video.bvid,
+                                                dynamicId = video.dynamicId,
+                                                episodeId = video.episodeId,
+                                                cid = video.cid,
+                                                coverUrl = video.pic,
+                                                isVerticalVideo = video.isVertical,
+                                                source = HomeVideoClickSource.GRID,
+                                                sourceRoute = sourceRoute
+                                            )
                                         )
-                                    )
-                                },
-                                onGetPreviewUrl = onGetPreviewUrl
-                            )
+                                    },
+                                    onGetPreviewUrl = onGetPreviewUrl
+                                )
+                            }
                         }
                     }
                 }
                 if (todayWatchEnabled) {
-                    item(span = StaggeredGridItemSpan.FullLine) {
-                        TodayWatchPlanCard(
-                            selectedMode = todayWatchMode,
-                            plan = todayWatchPlan,
-                            isLoading = todayWatchLoading,
-                            error = todayWatchError,
-                            collapsed = todayWatchCollapsed,
-                            cardConfig = todayWatchCardConfig,
-                            showUpBadges = showUpBadges,
-                            showUpAvatars = showUpAvatars,
-                            onModeChange = onTodayWatchModeChange,
-                            onCollapsedChange = onTodayWatchCollapsedChange,
-                            onRefresh = onTodayWatchRefresh,
-                            onUpClick = onTodayWatchUpClick,
-                            onVideoClick = onTodayWatchVideoClick
-                        )
+                    item(key = "home_today_watch", span = StaggeredGridItemSpan.FullLine) {
+                        val imageWorkAllowed = pageImageWorkAllowed && visualWorkActive &&
+                            "home_today_watch" in visibleLazyItemKeys.value
+                        CompositionLocalProvider(LocalPageImageLoadingAllowed provides imageWorkAllowed) {
+                            TodayWatchPlanCard(
+                                selectedMode = todayWatchMode,
+                                plan = todayWatchPlan,
+                                isLoading = todayWatchLoading,
+                                error = todayWatchError,
+                                collapsed = todayWatchCollapsed,
+                                cardConfig = todayWatchCardConfig,
+                                showUpBadges = showUpBadges,
+                                showUpAvatars = showUpAvatars,
+                                onModeChange = onTodayWatchModeChange,
+                                onCollapsedChange = onTodayWatchCollapsedChange,
+                                onRefresh = onTodayWatchRefresh,
+                                onUpClick = onTodayWatchUpClick,
+                                onVideoClick = onTodayWatchVideoClick
+                            )
+                        }
                     }
                 }
             }
@@ -1344,7 +1358,7 @@ private fun TodayWatchPlanCard(
                                     color = AppContentColors.accent()
                                 )
                                 if (showUpAvatars && video.owner.face.isNotBlank()) {
-                                    AsyncImage(
+                                    PageAwareAsyncImage(
                                         model = video.owner.face,
                                         contentDescription = video.owner.name,
                                         contentScale = ContentScale.Crop,

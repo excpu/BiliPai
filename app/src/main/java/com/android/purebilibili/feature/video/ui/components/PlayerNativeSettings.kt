@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -174,6 +175,24 @@ internal fun PlayerSettingsPopupRow(
     onSelected: (Int) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    // 玻璃设置面板内展开选项，不再为内部行创建第二层玻璃弹窗。
+    if (LocalPlayerGlassSettingsSurface.current) {
+        Column(Modifier.fillMaxWidth()) {
+            PlayerSettingsRow(title, current) { expanded = !expanded }
+            if (expanded) {
+                options.forEachIndexed { index, label ->
+                    PlayerSettingsSelectionRow(
+                        title = label,
+                        selected = label == current,
+                        enabled = enabledOptions.getOrElse(index) { true },
+                        allowSelectedClick = true,
+                        onClick = { expanded = false; if (label != current) onSelected(index) },
+                    )
+                }
+            }
+        }
+        return
+    }
     com.android.purebilibili.core.ui.components.AppGlassMenuAnchor(onOpen = { expanded = true }) {
         PlayerSettingsRow(title, current) { expanded = true }
         com.android.purebilibili.core.ui.components.AppDropdownMenu(
@@ -201,13 +220,18 @@ internal fun PlayerSettingsSelectionRow(
     selected: Boolean,
     enabled: Boolean = true,
     subtitle: String? = null,
+    allowSelectedClick: Boolean = false,
     onClick: () -> Unit,
 ) {
     ListItem(
         headlineContent = { Text(title, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.38f)) },
         supportingContent = if (subtitle != null) ({ Text(subtitle, fontSize = 12.sp) }) else null,
         trailingContent = { if (selected) Icon(Icons.Outlined.Done, null, tint = MaterialTheme.colorScheme.primary) },
-        modifier = Modifier.fillMaxWidth().appActionClickable(enabled = enabled) { if (!selected) onClick() },
-        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.fillMaxWidth().appActionClickable(enabled = enabled) { if (!selected || allowSelectedClick) onClick() },
+        // 玻璃容器接管时透出父容器；其他场景保留原生列表底色。
+        colors = ListItemDefaults.colors(
+            containerColor = if (LocalPlayerGlassSettingsSurface.current) Color.Transparent
+            else MaterialTheme.colorScheme.surface,
+        ),
     )
 }

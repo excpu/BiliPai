@@ -15,7 +15,7 @@ private val settingsDynamicDescriptionIndex = mapOf(
     "playback.video_codec_preference" to "兼容设备最多，其他编码无法播放时优先尝试；画质与流量更平衡，多数新设备推荐；更节省流量，但需要较新的设备支持",
     "playback.video_second_codec_preference" to "兼容设备最多，其他编码无法播放时优先尝试；画质与流量更平衡，多数新设备推荐；更节省流量，但需要较新的设备支持",
     "playback.data_saver_mode" to SettingsManager.DataSaverMode.entries.joinToString("；") { it.description },
-    "playback.subtitle_auto_preference" to "默认关闭字幕；自动开启可用字幕；仅自动启用非 AI 字幕；静音时可自动启用 AI 字幕",
+    "playback.subtitle_auto_preference" to "默认关闭字幕；自动开启可用字幕；仅自动启用非 AI 字幕；静音时可自动启用 AI 字幕；只开启中文字幕（含 AI 中文），没有中文字幕时不开启",
     "playback.danmaku_cloud_sync_enabled" to listOf(true, false).joinToString("；") {
         com.android.purebilibili.feature.video.danmaku.resolveDanmakuCloudSyncToggleSubtitle(it)
     },

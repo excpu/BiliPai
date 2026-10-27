@@ -41,6 +41,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
 import com.android.purebilibili.core.ui.components.LocalPageImageLoadingAllowed
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -559,6 +560,7 @@ fun SidebarItem(
     isLive: Boolean,
     onClick: () -> Unit
 ) {
+    val nativeNavigation = com.android.purebilibili.core.ui.AppInteractionColors.nativeNavigation()
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
@@ -571,7 +573,7 @@ fun SidebarItem(
                 .size(AppSpacingTokens.DoubleExtraLarge + AppSpacingTokens.Small)
                 .clip(CircleShape)
                 .background(
-                    if (isSelected) MaterialTheme.colorScheme.primaryContainer
+                    if (isSelected) nativeNavigation?.selectedContainer ?: MaterialTheme.colorScheme.primaryContainer
                     else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 ),
             contentAlignment = Alignment.Center
@@ -580,7 +582,7 @@ fun SidebarItem(
                 text = icon,
                 fontSize = MaterialTheme.typography.labelMedium.fontSize,
                 fontWeight = FontWeight.Bold,
-                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else AppContentColors.secondaryText()
+                color = if (isSelected) nativeNavigation?.selectedContent ?: MaterialTheme.colorScheme.onPrimaryContainer else AppContentColors.secondaryText()
             )
         }
 
@@ -591,7 +593,7 @@ fun SidebarItem(
                 fontSize = MaterialTheme.typography.labelSmall.fontSize,
                 // The label sits outside the selected icon container, so it uses the
                 // accent role rather than the container's paired content role.
-                color = if (isSelected) AppContentColors.accent() else AppContentColors.secondaryText(),
+                color = if (isSelected) nativeNavigation?.selectedContent ?: AppContentColors.accent() else AppContentColors.secondaryText(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -649,7 +651,9 @@ fun SidebarUserItem(
     val glassMenuAvailable = com.android.purebilibili.core.ui.components.appGlassMenuAvailable()
     val displayName = if (user.isHidden) "${user.name}(隐)" else user.name
     val isAllShortcut = isDynamicUpPanelAllShortcut(user.uid)
-    val accentColor = AppContentColors.selectionAccent(LocalAppThemeConfig.current.liquidGlassEnabled)
+    val navigationColors = com.android.purebilibili.core.ui.AppInteractionColors.nativeNavigation()
+    val accentColor = navigationColors?.selectedContent
+        ?: AppContentColors.selectionAccent(LocalAppThemeConfig.current.liquidGlassEnabled)
     val haptic = rememberHapticFeedback(com.android.purebilibili.core.ui.AppHapticScene.NAVIGATION)
 
     com.android.purebilibili.core.ui.components.AppGlassMenuAnchor(onOpen = { showMenu = true }, enabled = allowManageMenu) {
@@ -680,7 +684,7 @@ fun SidebarUserItem(
                         .then(
                             when {
                                 isAllShortcut && isSelected -> Modifier.background(
-                                    accentColor.copy(alpha = 0.12f),
+                                    navigationColors?.selectedContainer ?: accentColor.copy(alpha = 0.12f),
                                     CircleShape
                                 )
                                 isSelected -> Modifier.border(AppSpacingTokens.Micro / 2, accentColor, CircleShape)

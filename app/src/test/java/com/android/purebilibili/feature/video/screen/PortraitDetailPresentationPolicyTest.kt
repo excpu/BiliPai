@@ -231,6 +231,14 @@ class PortraitDetailPresentationPolicyTest {
     @Test
     fun pausedCommentViewport_hidesMediaWithoutChangingOtherCompactSizes() {
         assertEquals(
+            56f,
+            resolveInlinePlayerCollapsedViewportHeightDp(
+                standardCollapsedHeightDp = 56f,
+                hidePausedPlayerForComments = true,
+                retainPlayToolbar = true,
+            )
+        )
+        assertEquals(
             0f,
             resolveInlinePlayerCollapsedViewportHeightDp(
                 standardCollapsedHeightDp = 231.75f,

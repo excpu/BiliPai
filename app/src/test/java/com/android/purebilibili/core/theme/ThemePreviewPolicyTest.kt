@@ -79,7 +79,7 @@ class ThemePreviewPolicyTest {
                     edited, resolveLiquidControlAccentColor(
                         Md3ColorSource.CUSTOM, seed, edited.primary, effective.enabled,
                         if (dark) effective.dark.controlAccentHex else effective.light.controlAccentHex,
-                    ), glass, Md3ColorSource.CUSTOM,
+                    ), glass && uiStyle != AppUiStyle.MIUIX, Md3ColorSource.CUSTOM,
                 )
                 val expected = resolveAppThemeEndpointPalette(
                     configured, uiStyle, Md3ColorSource.CUSTOM, dark, amoledDarkTheme = true,
@@ -123,7 +123,11 @@ class ThemePreviewPolicyTest {
                 assertEquals(parseMd3CustomColorHex(roles.backgroundHex), edited.material.background)
                 assertEquals(parseMd3CustomColorHex(roles.primaryTextHex), edited.material.onSurface)
                 assertEquals(parseMd3CustomColorHex(roles.secondaryTextHex), edited.material.onSurfaceVariant)
-                assertEquals(parseMd3CustomColorHex(roles.controlAccentHex), edited.material.primary)
+                val base = createBiliPaiStyleColorScheme(
+                    seed, dark, amoled, PaletteStyle.TonalSpot, ColorSpec.SpecVersion.SPEC_2025,
+                    uiStyle = AppUiStyle.MIUIX,
+                )
+                assertEquals(applyThemeRoleOverrides(base, edits, dark).primary, edited.material.primary)
                 assertEquals(edited.material.background, edited.miuix.surface)
                 assertEquals(edited.material.onSurface, edited.miuix.onSurface)
                 assertEquals(edited.material.onSurfaceVariant, edited.miuix.onSurfaceVariantSummary)
@@ -143,6 +147,31 @@ class ThemePreviewPolicyTest {
                 val extended = preview(configuration, SeedPaletteStyle.CandyPop)
                 val extendedWithoutEdits = preview(disabled, SeedPaletteStyle.CandyPop)
                 assertEquals(createMiuixMaterialBridge(extendedWithoutEdits.material), createMiuixMaterialBridge(extended.material))
+            }
+        }
+    }
+
+    @Test
+    fun miuixContentColorsStayTheSameWhenGlassChanges() {
+        for (dark in listOf(false, true)) for (amoled in listOf(false, true)) {
+            for (source in Md3ColorSource.entries) for (style in listOf(SeedPaletteStyle.Standard, SeedPaletteStyle.CandyPop)) {
+                for (roles in listOf(ThemeRoleOverrides(), overrides)) {
+                    val config = ThemePreviewConfiguration(
+                        uiStyle = AppUiStyle.MIUIX, source = source,
+                        amoledDarkTheme = amoled, roleOverrides = roles,
+                    )
+                    fun palette(glass: Boolean) = resolveThemePreviewPalette(
+                        seed, dark, PaletteStyle.TonalSpot, ColorSpec.SpecVersion.SPEC_2025,
+                        Contrast.Default, style, config.copy(liquidGlassEnabled = glass),
+                    )
+                    val native = palette(false)
+                    val glass = palette(true)
+                    assertEquals(createMiuixMaterialBridge(native.material), createMiuixMaterialBridge(glass.material))
+                    assertEquals(native.miuix.surface, glass.miuix.surface)
+                    assertEquals(native.miuix.surfaceContainer, glass.miuix.surfaceContainer)
+                    assertEquals(native.miuix.onSurfaceVariantSummary, glass.miuix.onSurfaceVariantSummary)
+                    assertEquals(native.miuix.primary, glass.miuix.primary)
+                }
             }
         }
     }

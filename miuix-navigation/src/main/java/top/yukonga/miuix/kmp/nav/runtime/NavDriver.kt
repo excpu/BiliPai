@@ -127,7 +127,7 @@ internal fun NavSettleSpec.toAnimationSpec(): AnimationSpec<Float> = when (this)
     is NavSettleSpec.Spring -> androidx.compose.animation.core.spring(
         dampingRatio = dampingRatio,
         stiffness = stiffness,
-        visibilityThreshold = NavDriverSpec.VISIBILITY_THRESHOLD,
+        visibilityThreshold = visibilityThreshold,
     )
 
     is NavSettleSpec.Tween -> tween(durationMillis = durationMillis, easing = easing)

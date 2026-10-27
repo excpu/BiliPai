@@ -2719,14 +2719,16 @@ class DynamicViewModel(application: Application) : AndroidViewModel(application)
                     }
                     response.data?.dynamic_id_str.orEmpty()
                 }
-                onResult(true, "发布成功")
-                refresh(selectedTab = _selectedTab.value)
-                if (createdId.isBlank()) return@launchAccount
+                onResult(true, if (draft.publishAtSeconds != null) "定时发布已创建" else "发布成功")
+                if (draft.publishAtSeconds == null) refresh(selectedTab = _selectedTab.value)
+                if (createdId.isBlank() || draft.private || draft.publishAtSeconds != null) return@launchAccount
                 try {
                     delay(DYNAMIC_CREATE_ANTIFRAUD_DELAY_MS)
                     val verify = NetworkModule.dynamicApi.getDynamicDetail(id = createdId)
                     if (verify.code != 0 || verify.data?.item == null) {
-                        onResult(true, "发布成功，但动态可能暂未生效（可在网页端确认）")
+                        context?.let {
+                            android.widget.Toast.makeText(it, "动态可能暂未生效（可在网页端确认）", android.widget.Toast.LENGTH_LONG).show()
+                        }
                     }
                 } catch (e: CancellationException) {
                     throw e

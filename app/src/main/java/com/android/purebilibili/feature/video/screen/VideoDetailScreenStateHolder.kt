@@ -2158,6 +2158,7 @@ internal fun VideoDetailScreenStateHolder(
         fallbackResumePositionMs = resumePositionMsFromRoute,
         startPaused = isPortraitFullscreen && !useSharedPortraitPlayer,
         entryTransitionFinished = entryPlaybackReady,
+        relatedPublicationAllowed = entryTransitionFinished,
         playbackSessionActive = playbackSessionActiveForMorph,
     )
     LaunchedEffect(isFullscreenMode) {
@@ -3795,15 +3796,17 @@ internal fun VideoDetailScreenStateHolder(
                         },
                     )
                 } else {
-                    continuousPlayerContent(
-                        ContinuousPlayerHostLayout(
-                            modifier = Modifier.fillMaxSize(),
-                            viewportWidth = configuration.screenWidthDp.dp,
-                            alpha = continuousPlayerUnitState,
-                            scale = continuousPlayerUnitState,
-                            isFullscreen = true,
+                    BoxWithConstraints(Modifier.fillMaxSize()) {
+                        continuousPlayerContent(
+                            ContinuousPlayerHostLayout(
+                                modifier = Modifier.fillMaxSize(),
+                                viewportWidth = maxWidth,
+                                alpha = continuousPlayerUnitState,
+                                scale = continuousPlayerUnitState,
+                                isFullscreen = true,
+                            )
                         )
-                    )
+                    }
                 }
                 val success = uiState as? VideoPlaybackUiState.Success
                 if (canShowLandscapeComments && landscapeCommentPanelVisible && success != null) {
@@ -4229,12 +4232,14 @@ internal fun VideoDetailScreenStateHolder(
                         }
                         val standardCollapsedViewportHeight = when {
                             useOfficialInlinePortraitDetailExperience -> collapsedPortraitInlineSpec.heightDp.dp
-                            portraitPlayerCollapseMode != PortraitPlayerCollapseMode.OFF -> 56.dp
+                            portraitPlayerCollapseMode != PortraitPlayerCollapseMode.OFF ||
+                                (hidePausedPlayerForComments && !isVerticalVideo) -> 56.dp
                             else -> 0.dp
                         }
                         val collapsedViewportHeight = resolveInlinePlayerCollapsedViewportHeightDp(
                             standardCollapsedHeightDp = standardCollapsedViewportHeight.value,
                             hidePausedPlayerForComments = hidePausedPlayerForComments,
+                            retainPlayToolbar = !isVerticalVideo,
                         ).dp
                         // 两种竖屏内联体验共用同一套位移语义：手势范围始终等于
                         // “展开高度 - 当前折叠终点”，高度才能只由共享位移推导且保持连续。
@@ -5865,7 +5870,13 @@ internal fun VideoDetailScreenStateHolder(
     // 导致视频被拉伸；因此窗口内全屏仍使用正常布局，由播放器按视频比例适配窗口。
     val rootCardTransition = com.android.purebilibili.core.ui.transition
         .LocalMiuixVideoCardTransitionState.current
-    androidx.compose.runtime.CompositionLocalProvider(LocalPlaybackResumeFeedback provides playbackEventState) {
+    val relatedVideoCardLayout = remember(homeSettings.homeFeedCardStyle) {
+        com.android.purebilibili.feature.home.resolveHomeFeedCardLayout(homeSettings.homeFeedCardStyle)
+    }
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalPlaybackResumeFeedback provides playbackEventState,
+        com.android.purebilibili.feature.video.ui.components.LocalRelatedVideoCardLayout provides relatedVideoCardLayout,
+    ) {
     VideoDetailScreenContent(
         transitionState = transitionState,
         routeSheetMotion = routeSheetMotion,

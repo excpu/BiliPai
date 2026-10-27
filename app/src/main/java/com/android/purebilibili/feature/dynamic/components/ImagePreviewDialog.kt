@@ -2319,6 +2319,7 @@ private fun ImagePreviewCommentActionButton(
  */
 internal fun normalizeImageUrl(rawSrc: String): String {
     val trimmed = rawSrc.trim()
+    if (trimmed.startsWith("file://") || trimmed.startsWith("content://")) return trimmed
     var result = when {
         trimmed.startsWith("https://") -> trimmed
         trimmed.startsWith("http://") -> trimmed.replace("http://", "https://")
@@ -2338,6 +2339,7 @@ internal fun normalizeImageUrl(rawSrc: String): String {
 /** Stable cache identity shared by a source thumbnail and its preview placeholder. */
 internal fun resolveImagePreviewPlaceholderCacheKey(rawSrc: String): String? {
     val trimmed = rawSrc.trim()
+    if (trimmed.startsWith("file://") || trimmed.startsWith("content://")) return trimmed
     val normalized = when {
         trimmed.startsWith("https://") -> trimmed
         trimmed.startsWith("http://") -> trimmed.replace("http://", "https://")
@@ -2371,7 +2373,17 @@ private fun resolveImageShareExtension(mimeType: String): String = when (mimeTyp
 suspend fun shareImageFromPreview(context: Context, imageUrl: String, publicContent: Boolean = false): Boolean {
     val normalizedUrl = normalizeImageUrl(imageUrl)
     if (normalizedUrl.isEmpty()) return false
-    val mimeType = resolveImageShareMimeType(normalizedUrl)
+    val mimeType = withContext(Dispatchers.IO) {
+        if (normalizedUrl.startsWith("file://") || normalizedUrl.startsWith("content://")) {
+            val uri = android.net.Uri.parse(normalizedUrl)
+            val options = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            val providerMime = try {
+                context.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, options) }
+                context.contentResolver.getType(uri)
+            } catch (_: Exception) { null }
+            options.outMimeType ?: providerMime ?: "image/jpeg"
+        } else resolveImageShareMimeType(normalizedUrl)
+    }
     val sharedFile = withContext(Dispatchers.IO) {
         createImagePreviewShareFile(context, normalizedUrl, mimeType, publicContent)
     } ?: return false
@@ -2416,6 +2428,11 @@ private fun createImagePreviewShareFile(
         cleanupImagePreviewShareCache(cacheDir)
         val extension = resolveImageShareExtension(mimeType)
         val outputFile = File(cacheDir, "BiliPai_${System.currentTimeMillis()}.$extension")
+        if (imageUrl.startsWith("file://") || imageUrl.startsWith("content://")) {
+            val input = context.contentResolver.openInputStream(android.net.Uri.parse(imageUrl)) ?: return null
+            input.use { source -> outputFile.outputStream().use { source.copyTo(it) } }
+            return outputFile
+        }
         if (publicContent) {
             com.android.purebilibili.core.plugin.feed.downloadPublicContentToFile(imageUrl, outputFile)
             return outputFile

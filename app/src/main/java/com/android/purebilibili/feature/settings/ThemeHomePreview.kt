@@ -162,13 +162,16 @@ private fun ThemePreviewCard(coverVariant: Int, modifier: Modifier = Modifier) {
     }
 }
 
-/** 底栏：卡片容器色底面，选中项用强调色胶囊 + 主色图标文字，各主题下都清晰可见。 */
+/** 非玻璃 Miuix 预览与实际原生底栏共用选中语义，其余材质保留已有小样。 */
 @Composable
 private fun ThemePreviewBottomBar(modifier: Modifier = Modifier) {
     val nativeMiuix = isMiuixNonGlassEnabled()
-    val selectedContainer = AppSurfaceTokens.selectionContainer()
-    val selectedContent = AppSurfaceTokens.primary()
-    val idleContent = AppContentColors.secondaryText()
+    val navigationColors = com.android.purebilibili.core.ui.AppInteractionColors.nativeNavigation(
+        com.android.purebilibili.core.ui.AppNavigationColorRole.BAR,
+    )
+    val selectedContainer = navigationColors?.selectedContainer ?: AppSurfaceTokens.selectionContainer()
+    val selectedContent = navigationColors?.selectedContent ?: AppSurfaceTokens.primary()
+    val idleContent = navigationColors?.unselectedContent ?: AppContentColors.secondaryText()
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -197,7 +200,8 @@ private fun ThemePreviewBottomBar(modifier: Modifier = Modifier) {
                     contentAlignment = Alignment.Center,
                 ) {
                     AppIcon(
-                        imageVector = resolveMaterialBottomBarIcon(item, selected),
+                        imageVector = if (nativeMiuix) com.android.purebilibili.feature.home.components.resolveHomeNavigationBarIcon(item, selected)
+                            else resolveMaterialBottomBarIcon(item, selected),
                         contentDescription = null,
                         tint = if (selected) selectedContent else idleContent,
                         modifier = Modifier.size(18.dp),

@@ -54,29 +54,36 @@ class HomeScrollCoordinatorTest {
     }
 
     @Test
-    fun homeRecommendationHeader_preservesCategoriesForLegacyBothMode() {
-        assertEquals(
-            HomeHeaderCollapseMode.SEARCH_ONLY,
-            resolveHomeRecommendationHeaderCollapseMode(
-                homeHeaderCollapseMode = HomeHeaderCollapseMode.BOTH
-            )
-        )
+    fun homeRecommendationHeader_preservesSelectedCollapseScope() {
+        for (mode in HomeHeaderCollapseMode.entries) {
+            assertEquals(mode, resolveHomeRecommendationHeaderCollapseMode(mode))
+        }
     }
 
     @Test
-    fun homeRecommendationHeader_keepsSearchOnlyAndNormalizesLegacyTabsMode() {
-        assertEquals(
-            HomeHeaderCollapseMode.SEARCH_ONLY,
-            resolveHomeRecommendationHeaderCollapseMode(
-                homeHeaderCollapseMode = HomeHeaderCollapseMode.SEARCH_ONLY
-            )
-        )
-        assertEquals(
-            HomeHeaderCollapseMode.SEARCH_ONLY,
-            resolveHomeRecommendationHeaderCollapseMode(
-                homeHeaderCollapseMode = HomeHeaderCollapseMode.TABS_ONLY
-            )
-        )
+    fun topOnlyHeader_waitsForActualTopAcrossMaterialsAndHideTypes() {
+        for (glass in listOf(false, true)) {
+            for (hideType in HomeBarHideType.entries) {
+                for (listAtTop in listOf(false, true)) {
+                    val result = reduceHomePreScroll(
+                        currentHeaderOffsetPx = -120f,
+                        deltaY = 36f,
+                        minHeaderOffsetPx = -120f,
+                        canRevealHeader = true,
+                        listAtTop = listAtTop,
+                        collapseMode = CommonListHeaderCollapseMode.SHOW_AT_TOP_ONLY,
+                        isHeaderCollapseEnabled = true,
+                        isBottomBarAutoHideEnabled = false,
+                        useSideNavigation = false,
+                        liquidGlassEnabled = glass,
+                        currentGlobalScrollOffset = 0f,
+                        hideType = hideType,
+                        headerConsumedY = if (listAtTop) 36f else 0f,
+                    )
+                    assertEquals(if (listAtTop) -84f else -120f, result.headerOffsetPx)
+                }
+            }
+        }
     }
 
     @Test

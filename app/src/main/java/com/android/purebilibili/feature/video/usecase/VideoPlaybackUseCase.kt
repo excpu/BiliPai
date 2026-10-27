@@ -598,20 +598,24 @@ class VideoPlaybackUseCase(
                         if (defaultQuality > 0) defaultQuality else playData.quality
                     }
                     
-                    val isHevcSupported = com.android.purebilibili.core.util.MediaUtils.isHevcSupported()
-                    val isAv1Supported = isAv1SupportedOverride
-                        ?: com.android.purebilibili.core.util.MediaUtils.isAv1Supported()
-
-                    val selection = resolvePlaybackSelection(
-                        playUrlData = playData,
-                        targetQuality = targetQn,
-                        audioQualityPreference = audioQualityPreference,
-                        playbackSpeed = playbackSpeedOverride ?: exoPlayer?.playbackParameters?.speed ?: 1.0f,
-                        videoCodecPreference = videoCodecPreference,
-                        videoSecondCodecPreference = videoSecondCodecPreference,
-                        isHevcSupported = isHevcSupported,
-                        isAv1Supported = isAv1Supported
-                    )
+                    val selectionSpeed = playbackSpeedOverride ?: exoPlayer?.playbackParameters?.speed ?: 1.0f
+                    val allowPremiumApiOnlyQualities = !VideoRepository.isAppApiCoolingDown()
+                    val selection = withContext(Dispatchers.Default) {
+                        resolvePlaybackSelection(
+                            playUrlData = playData,
+                            targetQuality = targetQn,
+                            audioQualityPreference = audioQualityPreference,
+                            playbackSpeed = selectionSpeed,
+                            videoCodecPreference = videoCodecPreference,
+                            videoSecondCodecPreference = videoSecondCodecPreference,
+                            isHevcSupported = com.android.purebilibili.core.util.MediaUtils.isHevcSupported(),
+                            isAv1Supported = isAv1SupportedOverride
+                                ?: com.android.purebilibili.core.util.MediaUtils.isAv1Supported(),
+                            isDolbyAudioSupported = com.android.purebilibili.core.util.MediaUtils.isDolbyAtmosAudioSupported(),
+                            isDolbyAudioSoftwareDecoded = com.android.purebilibili.core.util.MediaUtils.isDolbySoftwareAudioDecoderRequired(),
+                            allowPremiumApiOnlyQualities = allowPremiumApiOnlyQualities,
+                        )
+                    }
 
                     if (selection == null) {
                         PlaybackCooldownManager.recordFailure(bvid, "播放地址为空")
@@ -633,7 +637,6 @@ class VideoPlaybackUseCase(
                     val apiQualities = playData.advertisedVideoQualityIds()
                     val dashVideoIds = playData.playableVideoQualityIds()
 
-                    val allowPremiumApiOnlyQualities = !VideoRepository.isAppApiCoolingDown()
                     val qualityMergeResult = mergeQualityOptions(
                         apiQualities = apiQualities,
                         dashVideoIds = dashVideoIds,
@@ -1112,7 +1115,8 @@ class VideoPlaybackUseCase(
         isDolbyAudioSupported: Boolean =
             com.android.purebilibili.core.util.MediaUtils.isDolbyAtmosAudioSupported(),
         isDolbyAudioSoftwareDecoded: Boolean =
-            com.android.purebilibili.core.util.MediaUtils.isDolbySoftwareAudioDecoderRequired()
+            com.android.purebilibili.core.util.MediaUtils.isDolbySoftwareAudioDecoderRequired(),
+        allowPremiumApiOnlyQualities: Boolean = !VideoRepository.isAppApiCoolingDown(),
     ): PlaybackSelectionResult? {
         val dashVideo = playUrlData.dash?.getBestVideo(
             targetQuality,
@@ -1137,7 +1141,7 @@ class VideoPlaybackUseCase(
         val qualitySelectionState = buildQualitySelectionState(
             apiQualities = playUrlData.advertisedVideoQualityIds(),
             dashVideoIds = playUrlData.playableVideoQualityIds(),
-            allowPremiumApiOnlyQualities = !VideoRepository.isAppApiCoolingDown()
+            allowPremiumApiOnlyQualities = allowPremiumApiOnlyQualities
         )
         val adaptiveDashSource = buildAdaptiveDashPlaybackSource(
             durationMs = playUrlData.timelength,

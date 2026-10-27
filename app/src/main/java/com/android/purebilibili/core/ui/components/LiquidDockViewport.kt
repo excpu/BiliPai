@@ -59,13 +59,14 @@ internal fun Modifier.clipLiquidDockScrollContent(
  * Keep the visible dock viewport rounded for every chrome mode.
  *
  * A long liquid rail is wider than the viewport that hosts it. Its shared renderer draws a
- * fixed capsule behind the moving content. Expand its drawing clip for indicator bloom
- * in both axes while retaining the original scroll layout and pointer viewport.
+ * fixed capsule behind the moving content. Expand its drawing clip vertically for indicator
+ * bloom while retaining the original scroll layout and pointer viewport. Horizontally the
+ * clip stays on the shell silhouette: a scrolling indicator must be cut by the dock's rounded
+ * ends instead of blooming past them, so only the vertical press/velocity margins are kept.
  */
 @Composable
 internal fun Modifier.liquidDockViewport(
     verticalOverflow: Dp = Dp.Unspecified,
-    horizontalOverflow: Dp = Dp.Unspecified,
     // 仅由需要弹性拖拽的入口显式启用；其他原生视口保留既有圆角边界。
     allowNativeOverflow: Boolean = false,
 ): Modifier {
@@ -94,25 +95,14 @@ internal fun Modifier.liquidDockViewport(
                 geometryMode = FloatingBottomBarGeometryMode.Segmented,
             ).verticalDp.dp.toPx()
         }
-        val horizontalOverflowPx = if (horizontalOverflow.isSpecified) {
-            horizontalOverflow.toPx().coerceAtLeast(0f)
-        } else {
-            val shellHeight = size.height.toDp()
-            resolveFloatingDockCaptureInsets(
-                shellHeightDp = shellHeight.value,
-                requestedIndicatorHeightDp = shellHeight.value,
-                indicatorWidthDp = minOf(size.width.toDp().value, shellHeight.value * 1.8f),
-                geometryMode = FloatingBottomBarGeometryMode.Segmented,
-            ).horizontalDp.dp.toPx()
-        }
         val outline = shape.createOutline(
-            Size(size.width + horizontalOverflowPx * 2f, size.height + overflowPx * 2f),
+            Size(size.width, size.height + overflowPx * 2f),
             layoutDirection,
             this,
         )
         val path = Path().apply {
             addOutline(outline)
-            translate(Offset(-horizontalOverflowPx, -overflowPx))
+            translate(Offset(0f, -overflowPx))
         }
         onDrawWithContent {
             clipPath(path) { this@onDrawWithContent.drawContent() }

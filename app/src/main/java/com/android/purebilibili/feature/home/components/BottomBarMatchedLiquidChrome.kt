@@ -331,14 +331,16 @@ internal fun BottomBarMatchedReusableLiquidDock(
     )
     val reuseAllowed = LocalAppThemeConfig.current.liquidGlassEnabled
     if (!reuseEnabled || !reuseAllowed || !liquidGlassEffectsEnabled) {
+        val fallbackElasticFeedbackEnabled = elasticFeedbackEnabled &&
+            !com.android.purebilibili.core.ui.isMiuixNonGlassEnabled()
         Box(modifier = modifier.appElasticPress(
-            enabled = elasticFeedbackEnabled,
+            enabled = fallbackElasticFeedbackEnabled,
             state = elasticState,
             allowConsumedDrag = allowConsumedDrag,
         )) {
             CompositionLocalProvider(
                 com.android.purebilibili.core.ui.components.LocalElasticPressEnabled provides
-                    (!elasticFeedbackEnabled && com.android.purebilibili.core.ui.components.LocalElasticPressEnabled.current),
+                    (!fallbackElasticFeedbackEnabled && com.android.purebilibili.core.ui.components.LocalElasticPressEnabled.current),
             ) {
                 content(false)
             }
@@ -480,8 +482,6 @@ internal fun BoxScope.BottomBarMatchedLiquidIndicator(
     dragScaleTarget: Float = BOTTOM_BAR_INDICATOR_DRAG_SCALE_TARGET,
     bottomBarMotionSpec: BottomBarMotionSpec,
     isDarkTheme: Boolean,
-    indicatorSettleReboundTransform: BottomBarClickPulseTransform =
-        BottomBarClickPulseTransform(scaleX = 1f),
     orientation: BottomBarLiquidOrientation = BottomBarLiquidOrientation.HORIZONTAL,
     indicatorAlignment: Alignment = Alignment.CenterStart,
     interactionModifier: Modifier = Modifier,

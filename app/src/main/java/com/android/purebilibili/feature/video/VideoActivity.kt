@@ -277,6 +277,13 @@ class VideoActivity : ComponentActivity() {
                     resumePositionMsFromRoute = nearbyVideo?.positionMs ?: 0L,
                     coverUrl = nearbyVideo?.cover.orEmpty(),
                     onBack = { onBackPressedDispatcher.onBackPressed() },
+                    onHomeClick = {
+                        startActivity(android.content.Intent(this@VideoActivity, com.android.purebilibili.MainActivity::class.java).apply {
+                            addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                            putExtra(com.android.purebilibili.EXTRA_PENDING_NAVIGATION_ROUTE, com.android.purebilibili.navigation.ScreenRoutes.Home.route)
+                        })
+                        finish()
+                    },
                     onNavigateToAudioMode = {
                         viewModel.setAudioMode(true)
                     },

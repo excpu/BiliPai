@@ -52,7 +52,7 @@ internal fun resolveThemePreviewPalette(
         .let { if (configuration.syncControlAccentToSeed) syncThemeRoleControlAccent(it, formatMd3CustomColorHex(seed)) else it }
     val configured = resolveConfiguredMaterialScheme(
         base, overrides, darkTheme, style, spec, contrast, seedStyle,
-        configuration.source, seed, configuration.liquidGlassEnabled,
+        configuration.source, seed, configuration.liquidGlassEnabled, configuration.uiStyle,
     )
     return resolveAppThemeEndpointPalette(
         configured, configuration.uiStyle, configuration.source, darkTheme,

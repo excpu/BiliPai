@@ -812,6 +812,8 @@ fun DynamicDetailScreen(
                         isEditing = true,
                         submitting = submitting,
                         errorMessage = errorMessage,
+                        replyOid = action.replyOid,
+                        replyType = action.replyType,
                         onDismiss = { editingAction = null },
                         onSubmit = { draft ->
                             submitting = true

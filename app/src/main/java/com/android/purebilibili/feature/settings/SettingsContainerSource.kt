@@ -29,6 +29,9 @@ internal class SettingsContainerAnchor {
     }
 }
 
+/** 圆形等主容器之外、仍需随来源一起移动的局部内容。 */
+internal data class SettingsContainerCompanion(val layer: GraphicsLayer, val bounds: Rect)
+
 internal class SettingsContainerSource(
     val anchor: SettingsContainerAnchor,
     var layer: GraphicsLayer,
@@ -40,15 +43,36 @@ internal class SettingsContainerSource(
     val topRadius: Float,
     val bottomRadius: Float,
 ) {
-    fun isUsable(size: IntSize): Boolean {
+    var companions: List<SettingsContainerCompanion> = emptyList()
+    var returnInFlight: () -> Boolean = { false }
+
+    fun isUsable(size: IntSize, expectedSourceScale: Float = 1f): Boolean {
         val liveBounds = anchor.boundsInRoot?.translate(-originInRoot) ?: return false
         return anchor.coordinates?.isAttached == true && anchor.recorded && size == hostSize &&
             bounds.width > 1f && bounds.height > 1f &&
-            kotlin.math.abs(liveBounds.left - bounds.left) < 1f &&
-            kotlin.math.abs(liveBounds.top - bounds.top) < 1f &&
-            kotlin.math.abs(liveBounds.width - bounds.width) < 1f &&
-            kotlin.math.abs(liveBounds.height - bounds.height) < 1f
+            matchesSettingsContainerSourceBounds(liveBounds, bounds, hostSize, expectedSourceScale)
     }
+}
+
+/** 图层景深可能更新全局坐标，也可能只更新绘制；两种合法坐标都不能误判为列表滚动。 */
+internal fun matchesSettingsContainerSourceBounds(
+    liveBounds: Rect,
+    capturedBounds: Rect,
+    hostSize: IntSize,
+    expectedSourceScale: Float,
+): Boolean {
+    fun matches(expected: Rect): Boolean =
+        kotlin.math.abs(liveBounds.left - expected.left) < 1f &&
+            kotlin.math.abs(liveBounds.top - expected.top) < 1f &&
+            kotlin.math.abs(liveBounds.width - expected.width) < 1f &&
+            kotlin.math.abs(liveBounds.height - expected.height) < 1f
+    if (matches(capturedBounds)) return true
+    if (!expectedSourceScale.isFinite() || expectedSourceScale <= 0f) return false
+    val center = Offset(hostSize.width / 2f, hostSize.height / 2f)
+    return matches(Rect(
+        center + (capturedBounds.topLeft - center) * expectedSourceScale,
+        center + (capturedBounds.bottomRight - center) * expectedSourceScale,
+    ))
 }
 
 internal class SettingsContainerSources {

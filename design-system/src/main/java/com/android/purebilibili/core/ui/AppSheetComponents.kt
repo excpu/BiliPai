@@ -209,7 +209,7 @@ internal fun bottomSheetContentExitTransition(
  * handler 会挂在底层 Activity/路由 dispatcher，侧滑无法关闭弹层（点 scrim 仍可关）。
  */
 @Composable
-private fun ModalSheetNavigationHost(
+fun AppModalSheetNavigationHost(
     dismissOnBackPress: Boolean,
     onDismissRequest: () -> Unit,
     content: @Composable (Modifier) -> Unit,
@@ -304,7 +304,8 @@ fun AppModalBottomSheet(
     }
     val centered = (presentationOverride ?: layoutSpec.presentation) == AppModalPresentation.CenteredDialog
     val resolvedColor = if (containerColor == MaterialTheme.colorScheme.surface) {
-        if (miuix) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surfaceContainerLow
+        if (isMiuixNonGlassEnabled()) top.yukonga.miuix.kmp.layout.BottomSheetDefaults.backgroundColor()
+        else if (miuix) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surfaceContainerLow
     } else containerColor
     // 仅背景模糊已获调用方启用的玻璃面板透出下层；原生拖动与清晰背景策略保持原样。
     val glassWindowMaterial = LocalAppThemeConfig.current.liquidGlassEnabled && blurBehind &&
@@ -326,7 +327,7 @@ fun AppModalBottomSheet(
             ),
         ) {
             AppPopupWindowHost(enableWindowMaterial = LocalAppThemeConfig.current.liquidGlassEnabled) {
-                ModalSheetNavigationHost(dismissOnBackPress, onDismissRequest) { backModifier ->
+                AppModalSheetNavigationHost(dismissOnBackPress, onDismissRequest) { backModifier ->
                     val panel: @Composable () -> Unit = {
                         BoxWithConstraints {
                             AppPopupSurface(
@@ -444,7 +445,7 @@ fun AppModalBottomSheet(
         ) {
             ModalWindowBlurBehindEffect(enabled = blurBehind)
             AppPopupWindowHost(enableWindowMaterial = blurBehind) {
-                ModalSheetNavigationHost(dismissOnBackPress, onDismissRequest) { backModifier ->
+                AppModalSheetNavigationHost(dismissOnBackPress, onDismissRequest) { backModifier ->
                     val surface: @Composable () -> Unit = {
                         BoxWithConstraints {
                             val surfaceModifier = modifier.then(backModifier).widthIn(max = layoutSpec.maxWidthDp.dp)

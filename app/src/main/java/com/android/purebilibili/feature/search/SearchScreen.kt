@@ -171,6 +171,7 @@ import kotlin.math.roundToInt
 import com.android.purebilibili.core.database.entity.SearchHistory
 import com.android.purebilibili.core.ui.LocalGlobalWallpaperBackdropVisible
 import com.android.purebilibili.core.ui.videoCardTitleMaxLines
+import com.android.purebilibili.feature.home.components.cards.HorizontalVideoCardFrame
 import com.android.purebilibili.core.ui.videoCardTitleOverflow
 import com.android.purebilibili.core.ui.skeleton.ContentMediaListSkeleton
 import com.android.purebilibili.core.ui.skeleton.ContentVideoGridSkeleton
@@ -5166,83 +5167,76 @@ internal fun ArticleSearchResultCard(
     val transitionKey = rememberSaveable(item.id) {
         "${searchArticleContainerKey(item.id)}:${java.util.UUID.randomUUID()}"
     }
-    val useMiuixPresentation = LocalAppUiStyle.current == AppUiStyle.MIUIX
     SearchResultCardSurface(
         appearance = appearance,
         onClick = { onTransitionClick?.invoke(transitionKey) ?: onClick() },
         modifier = Modifier.searchResultContainerBounds(transitionKey),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    if (useMiuixPresentation) AppSpacingTokens.Medium else 14.dp
-                ),
-            horizontalArrangement = Arrangement.spacedBy(AppSpacingTokens.Medium),
-            verticalAlignment = Alignment.Top
-        ) {
-            if (item.imageUrls.isNotEmpty()) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(FormatUtils.buildSizedImageUrl(item.imageUrls.first(), width = 360, height = 240))
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(width = 112.dp, height = 74.dp)
-                        .clip(AppShapes.container(ContainerLevel.Field))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
+        val metaLine = buildString {
+            val publishTime = FormatUtils.formatPublishTime(item.pubTime)
+            if (publishTime.isNotBlank()) append(publishTime)
+            if (item.categoryName.isNotBlank()) {
+                if (isNotEmpty()) append(" · ")
+                append(item.categoryName)
+            }
+        }
+        val info: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit = {
+            SearchResultText(
+                text = item.title,
+                role = SearchResultTextRole.TITLE,
+                fontWeight = FontWeight.SemiBold,
+                color = AppContentColors.primaryText(),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (item.imageUrls.isEmpty() && item.description.isNotBlank()) {
+                SearchResultText(
+                    text = item.description,
+                    role = SearchResultTextRole.BODY,
+                    color = AppContentColors.secondaryText(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(AppSpacingTokens.Small)
-            ) {
+            if (metaLine.isNotBlank()) {
                 SearchResultText(
-                    text = item.title,
-                    role = SearchResultTextRole.TITLE,
-                    fontWeight = FontWeight.SemiBold,
-                    color = AppContentColors.primaryText(),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                if (item.description.isNotBlank()) {
-                    SearchResultText(
-                        text = item.description,
-                        role = SearchResultTextRole.BODY,
-                        color = AppContentColors.secondaryText(),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                val metaLine = buildString {
-                    val publishTime = FormatUtils.formatPublishTime(item.pubTime)
-                    if (publishTime.isNotBlank()) {
-                        append(publishTime)
-                    }
-                    if (item.categoryName.isNotBlank()) {
-                        if (isNotEmpty()) append(" · ")
-                        append(item.categoryName)
-                    }
-                }
-                if (metaLine.isNotBlank()) {
-                    SearchResultText(
-                        text = metaLine,
-                        role = SearchResultTextRole.METADATA,
-                        color = AppContentColors.secondaryText()
-                    )
-                }
-
-                SearchResultText(
-                    text = "${FormatUtils.formatStat(item.view.toLong())}浏览 · ${FormatUtils.formatStat(item.reply.toLong())}评论 · ${FormatUtils.formatStat(item.like.toLong())}点赞",
+                    text = metaLine,
                     role = SearchResultTextRole.METADATA,
-                    color = AppContentColors.secondaryText()
+                    color = AppContentColors.secondaryText(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
+            SearchResultText(
+                text = "${FormatUtils.formatStat(item.view.toLong())}浏览 · ${FormatUtils.formatStat(item.reply.toLong())}评论 · ${FormatUtils.formatStat(item.like.toLong())}点赞",
+                role = SearchResultTextRole.METADATA,
+                color = AppContentColors.secondaryText(),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (item.imageUrls.isNotEmpty()) {
+            HorizontalVideoCardFrame(
+                modifier = Modifier.fillMaxWidth(),
+                coverContent = {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(FormatUtils.buildSizedImageUrl(item.imageUrls.first(), width = 480, height = 320))
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                },
+                infoContent = info,
+            )
+        } else {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                content = info,
+            )
         }
     }
 }

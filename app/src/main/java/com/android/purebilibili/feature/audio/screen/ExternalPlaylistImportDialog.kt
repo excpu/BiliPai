@@ -24,21 +24,21 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
+import com.android.purebilibili.core.ui.components.AppButton as Button
+import com.android.purebilibili.core.ui.components.AppCard as Card
+import com.android.purebilibili.core.ui.components.AppCardDefaults as CardDefaults
+import com.android.purebilibili.core.ui.components.AppCheckbox as Checkbox
+import com.android.purebilibili.core.ui.components.AppCircularProgressIndicator as CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
+import com.android.purebilibili.core.ui.components.AppIcon as Icon
+import com.android.purebilibili.core.ui.components.AppIconButton as IconButton
+import com.android.purebilibili.core.ui.components.AppLinearProgressIndicator as LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.android.purebilibili.core.ui.components.AppOutlinedButton as OutlinedButton
+import com.android.purebilibili.core.ui.components.AppOutlinedTextField as OutlinedTextField
+import com.android.purebilibili.core.ui.components.AppSurface as Surface
+import com.android.purebilibili.core.ui.components.AppText as Text
+import com.android.purebilibili.core.ui.components.AppTextButton as TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -85,7 +85,7 @@ import java.util.UUID
 
 /**
  * Import an external playlist, match its tracks to Bilibili videos, and save the local playlist.
- * The dialog and its controls use Compose Material 3; the result list is lazy for large playlists.
+ * The dialog controls follow the active app theme; the result list is lazy for large playlists.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -573,8 +573,10 @@ fun ExternalPlaylistImportDialog(
                                             }
                                         }
                                     },
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.62f),
+                                    colors = CardDefaults.colors(
+                                        containerColor = if (com.android.purebilibili.core.ui.isMiuixNonGlassEnabled()) {
+                                            com.android.purebilibili.core.ui.AppSurfaceTokens.cardContainer()
+                                        } else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.62f),
                                     ),
                                 ) {
                                     Row(
@@ -681,8 +683,10 @@ fun ExternalPlaylistImportDialog(
                                                 }
                                                 dismissEditing()
                                             },
-                                            colors = CardDefaults.cardColors(
-                                                containerColor = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.7f),
+                                            colors = CardDefaults.colors(
+                                                containerColor = if (com.android.purebilibili.core.ui.isMiuixNonGlassEnabled()) {
+                                                    com.android.purebilibili.core.ui.AppSurfaceTokens.cardContainer()
+                                                } else MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.7f),
                                             ),
                                         ) {
                                             Row(

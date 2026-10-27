@@ -198,14 +198,14 @@ internal fun resolveTopTabDockEndInsetDp(
  * 宽之外各留 14dp 内边距，50% 圆角呈扁圆。
  */
 /**
- * 顶部胶囊指示器与底栏共用同一枚扁圆（50% 圆角）形状：液态玻璃、Miuix 非
- * 玻璃、MD3 dock 胶囊全部一致，仅皮肤平铺与 MD3 原生下划线走各自路径。
+ * 非玻璃分类使用原生标签圆角，玻璃与 MD3 dock 保留各自的胶囊轮廓。
  */
 internal fun resolveTopTabIndicatorShape(
     showIcon: Boolean,
     showText: Boolean,
     isMiuixNonGlass: Boolean = false,
-): Shape = resolveSharedBottomBarCapsuleShape()
+): Shape = if (isMiuixNonGlass) androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+    else resolveSharedBottomBarCapsuleShape()
 
 /**
  * Resolves the vertical center offset (in Dp) of the MD3 native underline indicator
@@ -854,10 +854,11 @@ fun FluidHomeTopBar(
                             .clip(CircleShape)
                             .border(AppSpacingTokens.Micro / 2, MaterialTheme.colorScheme.surfaceVariant, CircleShape)
                     ) {
-                        if (user.isLogin && user.face.isNotEmpty()) {
+                        val displayFace = user.face
+                        if (user.isLogin && displayFace.isNotEmpty()) {
                             AsyncImage(
                                 model = ImageRequest.Builder(LocalContext.current)
-                                    .data(FormatUtils.fixImageUrl(user.face))
+                                    .data(FormatUtils.fixImageUrl(displayFace))
                                     .size(128, 128)
                                     .crossfade(true).build(),
                                 contentDescription = null,
@@ -2901,7 +2902,7 @@ private fun LightweightTopTabItem(
     )
     val selectedColor = when {
         skinPlainStyle -> skinPlainContentColor ?: colorScheme.onSurface
-        com.android.purebilibili.core.ui.isMiuixNonGlassEnabled() -> AppContentColors.accent()
+        com.android.purebilibili.core.ui.isMiuixNonGlassEnabled() -> top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme.onBackground
         uiStyle == AppUiStyle.MIUIX -> colorScheme.onSurface
         presentation == AppTopTabPresentation.MOVING_CAPSULE ->
             resolveIosTopTabSelectedContentColor(colorScheme, uiStyle)
@@ -2931,7 +2932,7 @@ private fun LightweightTopTabItem(
         com.android.purebilibili.core.ui.isMiuixNonGlassEnabled() &&
             presentation == AppTopTabPresentation.MOVING_CAPSULE &&
             colorMode == TopTabLiquidColorMode.NORMAL ->
-            AppSurfaceTokens.selectionContainer().let { selectionColor ->
+            top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme.surfaceContainer.let { selectionColor ->
                 selectionColor.copy(alpha = selectionColor.alpha * selectionFraction.coerceIn(0f, 1f))
             }
         presentation == AppTopTabPresentation.MOVING_CAPSULE && colorMode == TopTabLiquidColorMode.NORMAL ->

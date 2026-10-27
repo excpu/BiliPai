@@ -88,6 +88,9 @@ class VideoSharedTransitionPolicyTest {
         assertEquals(1f, resolveVideoHeroLandingScale(0f, true))
         assertEquals(1f, resolveVideoHeroLandingScale(1f, true))
         assertEquals(0f, VideoHeroMotionTokens.LANDING_COMPRESSION)
+        assertEquals(0.99f, resolveVideoHeroLandingScale(-0.01f, true), 0.0001f)
+        assertEquals(0.988f, resolveVideoHeroLandingScale(-0.2f, true), 0.0001f)
+        assertEquals(1f, resolveVideoHeroLandingScale(-0.01f, false))
     }
 
     @Test

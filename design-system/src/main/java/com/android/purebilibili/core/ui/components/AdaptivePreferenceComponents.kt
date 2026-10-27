@@ -263,7 +263,7 @@ internal fun resolveAdaptiveGroupContainerColor(
 fun adaptivePreferenceGroupContainerColor(): Color = resolveAdaptiveGroupContainerColor(
     uiStyle = LocalAppUiStyle.current,
     colorScheme = MaterialTheme.colorScheme,
-    globalWallpaperVisible = LocalGlobalWallpaperBackdropVisible.current && !isMiuixNonGlassEnabled(),
+    globalWallpaperVisible = LocalGlobalWallpaperBackdropVisible.current && LocalAppUiStyle.current != AppUiStyle.MIUIX,
 )
 
 internal fun resolveAdaptiveSearchBarContainerColor(
@@ -1617,6 +1617,7 @@ fun AdaptiveTextFieldRenderer(
     minLines: Int = 1,
     maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
     isError: Boolean = false,
+    keyboardOptions: androidx.compose.foundation.text.KeyboardOptions = androidx.compose.foundation.text.KeyboardOptions.Default,
     supportingText: @Composable (() -> Unit)? = null,
 ) {
     val uiStyle = LocalAppUiStyle.current
@@ -1628,6 +1629,7 @@ fun AdaptiveTextFieldRenderer(
                 modifier = Modifier.fillMaxWidth(),
                 label = label ?: placeholder.orEmpty(),
                 useLabelAsPlaceholder = label == null,
+                keyboardOptions = keyboardOptions,
                 singleLine = singleLine,
                 minLines = minLines,
                 maxLines = maxLines,
@@ -1649,6 +1651,7 @@ fun AdaptiveTextFieldRenderer(
         modifier = modifier.fillMaxWidth(),
         label = label?.let { { Text(it) } },
         placeholder = placeholder?.let { { Text(it) } },
+        keyboardOptions = keyboardOptions,
         singleLine = singleLine,
         minLines = minLines,
         maxLines = maxLines,

@@ -873,7 +873,8 @@ enum class HomeHeaderCollapseMode(
     SEARCH_ONLY(0, "仅搜索", "浏览下方内容时只收起搜索框", true, false),
     TABS_ONLY(1, "仅标签", "浏览下方内容时只收起分类栏", false, true),
     BOTH(2, "都收起", "浏览下方内容时，搜索框和分类栏都收起", true, true),
-    OFF(3, "始终显示", "搜索框和分类栏始终显示", false, false);
+    OFF(3, "始终显示", "搜索框和分类栏始终显示", false, false),
+    SHOW_AT_TOP_ONLY(4, "仅回顶显示", "浏览下方内容时收起搜索框和分类栏，仅回到列表顶部时恢复", true, true);
 
     val hasAnyCollapse: Boolean
         get() = collapseSearch || collapseTabs
@@ -4513,7 +4514,7 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
         }
     }
     
-    // 首页顶栏保存收起范围；当前首页把旧收起模式解释为仅搜索，分类栏保留且允许反向拖动恢复。
+    // 首页顶栏保存收起范围及仅回顶恢复策略，保留旧模式数值。
     fun getHomeHeaderCollapseMode(context: Context): Flow<HomeHeaderCollapseMode> =
         context.settingsDataStore.data.map { preferences ->
             preferences[KEY_HOME_HEADER_COLLAPSE_MODE]
@@ -8052,7 +8053,7 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
     }
 
     fun getShowProfileEditButton(context: Context): Flow<Boolean> = context.settingsDataStore.data
-        .map { preferences -> preferences[KEY_SHOW_PROFILE_EDIT_BUTTON] ?: false }
+        .map { preferences -> preferences[KEY_SHOW_PROFILE_EDIT_BUTTON] ?: true }
 
     suspend fun setShowProfileEditButton(context: Context, enabled: Boolean) {
         context.settingsDataStore.edit { preferences ->

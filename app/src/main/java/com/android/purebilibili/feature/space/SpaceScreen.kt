@@ -21,6 +21,8 @@ import coil3.request.crossfade
 import com.android.purebilibili.core.ui.components.AppHorizontalDivider
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import com.android.purebilibili.core.ui.common.contentTabPagerGestures
 import com.android.purebilibili.core.ui.common.rememberContentTabPager
 import com.android.purebilibili.core.ui.common.stationaryPagerHeader
@@ -76,15 +78,9 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.scrollable
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberOverscrollEffect
 import androidx.compose.foundation.shape.CircleShape
@@ -149,6 +145,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
@@ -1328,6 +1325,8 @@ private fun SpaceContent(
         .getHomeSettings(context)
         .collectAsStateWithLifecycle(initialValue = com.android.purebilibili.core.store.HomeSettings())
     val selectedMainTab = state.tabShellState.selectedTab
+    // 各标签页各自持有头部，但轮播页码属于同一个用户空间。
+    var sharedBannerPage by remember(state.userInfo.mid) { mutableStateOf(0) }
     val contentDensity = LocalDensity.current
     val displayedMainTabs = resolveSpaceDisplayedMainTabs(
         tabs = state.mainTabs,
@@ -1482,7 +1481,7 @@ private fun SpaceContent(
             0
         } else if (pinContentTabs) {
             2 + (if (state.isSearchMode) 1 else 0) +
-                (if (state.videos.isNotEmpty() || state.totalVideos > 0) 1 else 0)
+                (if (state.isSearchMode && (state.videos.isNotEmpty() || state.totalVideos > 0)) 1 else 0)
         } else {
             1 +
                 (if (shouldShowSpaceSearchEntry(currentSearchScope, state.isSearchMode)) 1 else 0) +
@@ -1642,25 +1641,6 @@ private fun SpaceContent(
         var pinchPillDismissJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
         val haptic = com.android.purebilibili.core.ui.rememberAppHapticFeedback(com.android.purebilibili.core.ui.AppHapticScene.ADJUSTMENT)
         val coroutineScope = rememberCoroutineScope()
-        val floatingSummary = remember(gridState, state.selectedContributionTabId, pinContentTabs) {
-            SpaceFloatingSummaryState()
-        }
-        val summaryScrollConnection = remember(gridState, floatingSummary, pinContentTabs) {
-            object : NestedScrollConnection {
-                override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                    if (pinContentTabs) {
-                        if (gridState.firstVisibleItemIndex > 1) floatingSummary.scrollBy(consumed.y)
-                        else floatingSummary.reset()
-                    }
-                    return Offset.Zero
-                }
-            }
-        }
-        LaunchedEffect(gridState, floatingSummary, pinContentTabs) {
-            if (pinContentTabs) snapshotFlow { gridState.firstVisibleItemIndex <= 1 }.collect { atStart ->
-                if (atStart) floatingSummary.reset()
-            }
-        }
         val spaceOverscrollEffect = rememberOverscrollEffect()
         val effectivePreferredColumns = gridColumnPreference.columns
         val gridColumns = if (selectedMainTab == SpaceMainTab.DYNAMIC) {
@@ -1701,7 +1681,6 @@ private fun SpaceContent(
             overscrollEffect = if (pinContentTabs) null else spaceOverscrollEffect,
             modifier = Modifier
                 .fillMaxSize()
-                .nestedScroll(summaryScrollConnection)
                 .homeFeedPinchZoom(
                     enabled = selectedMainTab != SpaceMainTab.DYNAMIC && homeSettings.gridColumnPinchEnabled,
                     currentColumns = gridColumns,
@@ -1780,6 +1759,10 @@ private fun SpaceContent(
                     chromeTopInset = chromeTopInset,
                     outerPadding = outerPaddingDp,
                     useExpandedLayout = adaptiveLayoutSpec.useExpandedHeader,
+                    bannerPage = sharedBannerPage,
+                    onBannerPageChange = { sharedBannerPage = it },
+                    bannerPageActive = isPageActive,
+                    contentPageMoving = pagerState.isScrollInProgress,
                 )
                 }
             }
@@ -1788,43 +1771,55 @@ private fun SpaceContent(
                 // 同一个标签 item 随资料上移后停在工具栏下；保留整页视口供头图绘制，
                 // 只在布局阶段补偿 stickyHeader 的顶部位置，不改变原生/玻璃组件尺寸。
                 stickyHeader(key = "space_tabs") {
-                    SpaceContentTabs(
-                        state = state,
-                        onMainTabSelected = onMainTabSelected,
-                        onMainTabReselected = {
-                            if (gridState.firstVisibleItemIndex > 0) {
-                                coroutineScope.launch { gridState.animateScrollToItem(1) }
-                            }
-                        },
-                        onContributionTabSelected = { id ->
-                            if (id != state.selectedContributionTabId) {
-                                val target = contributionGridStateFor(id)
-                                if (gridState.firstVisibleItemIndex == 0) {
-                                    target.requestScrollToItem(0, gridState.firstVisibleItemScrollOffset)
-                                } else if (target.firstVisibleItemIndex == 0) {
-                                    target.requestScrollToItem(1)
-                                }
-                            }
-                            onContributionTabSelected(id)
-                        },
-                        pagerState = pagerState,
-                        page = page,
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .zIndex(1f)
                             .offset {
                                 val info = gridState.layoutInfo
                                 val tabs = info.visibleItemsInfo.firstOrNull { it.key == "space_tabs" }
-                                androidx.compose.ui.unit.IntOffset(
-                                    0,
-                                    resolveSpaceTabsPinOffsetPx(
-                                        tabsOffsetPx = tabs?.offset?.y ?: 0,
-                                        beforeContentPaddingPx = info.beforeContentPadding,
-                                        chromeBottomPx = chromeTopInset.roundToPx(),
-                                    ),
-                                )
+                                androidx.compose.ui.unit.IntOffset(0, resolveSpaceTabsPinOffsetPx(
+                                    tabsOffsetPx = tabs?.offset?.y ?: 0,
+                                    beforeContentPaddingPx = info.beforeContentPadding,
+                                    chromeBottomPx = chromeTopInset.roundToPx(),
+                                ))
                             }
                             .background(MaterialTheme.colorScheme.surface),
-                    )
+                    ) {
+                        SpaceContentTabs(
+                            state = state,
+                            onMainTabSelected = onMainTabSelected,
+                            onMainTabReselected = {
+                                if (gridState.firstVisibleItemIndex > 0) {
+                                    coroutineScope.launch { gridState.animateScrollToItem(1) }
+                                }
+                            },
+                            onContributionTabSelected = { id ->
+                                if (id != state.selectedContributionTabId) {
+                                    val target = contributionGridStateFor(id)
+                                    if (gridState.firstVisibleItemIndex == 0) {
+                                        target.requestScrollToItem(0, gridState.firstVisibleItemScrollOffset)
+                                    } else if (target.firstVisibleItemIndex == 0) {
+                                        target.requestScrollToItem(1)
+                                    }
+                                }
+                                onContributionTabSelected(id)
+                            },
+                            pagerState = pagerState,
+                            page = page,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        if (selectedMainTab == SpaceMainTab.CONTRIBUTION &&
+                            selectedContributionTab.subTab in setOf(SpaceSubTab.VIDEO, SpaceSubTab.CHARGING_VIDEO) &&
+                            !state.isSearchMode && (state.videos.isNotEmpty() || state.totalVideos > 0)
+                        ) {
+                            SpaceContributionVideoSummaryBar(
+                                totalCount = state.totalVideos.takeIf { it > 0 } ?: state.videos.size,
+                                currentOrder = state.sortOrder,
+                                onSelectSortOrder = onSelectSortOrder,
+                            )
+                        }
+                    }
                 }
             } else item(key = "space_tabs", span = { GridItemSpan(maxLineSpan) }) {
                 SpaceContentTabs(
@@ -2277,7 +2272,7 @@ private fun SpaceContent(
             SpaceMainTab.CONTRIBUTION -> {
                 when (selectedContributionTab.subTab) {
                     SpaceSubTab.VIDEO, SpaceSubTab.CHARGING_VIDEO -> {
-                        if (state.videos.isNotEmpty() || state.totalVideos > 0) {
+                        if ((!pinContentTabs || state.isSearchMode) && (state.videos.isNotEmpty() || state.totalVideos > 0)) {
                             item(key = "space_video_summary_bar", span = { GridItemSpan(maxLineSpan) }) {
                                 SpaceContributionVideoSummaryBar(
                                     totalCount = state.totalVideos.takeIf { it > 0 } ?: state.videos.size,
@@ -2905,8 +2900,10 @@ private fun SpaceContent(
             selectedContributionTab.subTab in setOf(SpaceSubTab.VIDEO, SpaceSubTab.CHARGING_VIDEO)
         val isContributionSummaryScrolledAway by remember(gridState) {
             derivedStateOf {
-                gridState.firstVisibleItemIndex > 2 ||
-                    (gridState.firstVisibleItemIndex == 2 && gridState.firstVisibleItemScrollOffset > 0)
+                val info = gridState.layoutInfo
+                val summary = info.visibleItemsInfo.firstOrNull { it.key == "space_video_summary_bar" }
+                if (summary != null) summary.offset.y <= 0
+                else gridState.firstVisibleItemIndex > 2
             }
         }
         if (!pinContentTabs && isContributionVideoTab && !state.isSearchMode &&
@@ -2914,8 +2911,8 @@ private fun SpaceContent(
         ) {
             AnimatedVisibility(
                 visible = isContributionSummaryScrolledAway,
-                enter = fadeIn(tween(140)) + slideInVertically(tween(180)) { -it / 2 },
-                exit = fadeOut(tween(140)),
+                enter = EnterTransition.None,
+                exit = ExitTransition.None,
                 modifier = Modifier.align(Alignment.TopCenter),
             ) {
                 Box(
@@ -2935,49 +2932,6 @@ private fun SpaceContent(
                         onSelectSortOrder = onSelectSortOrder,
                     )
                 }
-            }
-        }
-
-        if (pinContentTabs && isContributionVideoTab && !state.isSearchMode &&
-            (state.videos.isNotEmpty() || state.totalVideos > 0)
-        ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .fillMaxWidth()
-                    .offset {
-                        val info = gridState.layoutInfo
-                        val tabs = info.visibleItemsInfo.firstOrNull { it.key == "space_tabs" }
-                        androidx.compose.ui.unit.IntOffset(
-                            0, chromeTopInset.roundToPx() + (tabs?.size?.height ?: 0),
-                        )
-                    }
-                    .clipToBounds()
-                    .layout { measurable, constraints ->
-                        val child = measurable.measure(constraints.copy(minHeight = 0))
-                        floatingSummary.heightPx = child.height.toFloat()
-                        val info = gridState.layoutInfo
-                        val summary = info.visibleItemsInfo.firstOrNull { it.key == "space_video_summary_bar" }
-                        val tabs = info.visibleItemsInfo.firstOrNull { it.key == "space_tabs" }
-                        val summaryAboveTabs = summary == null ||
-                            summary.offset.y + summary.size.height <= (tabs?.size?.height ?: 0)
-                        val visibleHeight = if (summaryAboveTabs && gridState.firstVisibleItemIndex > 1) {
-                            floatingSummary.exposedHeightPx.toInt().coerceIn(0, child.height)
-                        } else 0
-                        layout(child.width, visibleHeight) {
-                            child.placeRelative(0, visibleHeight - child.height)
-                        }
-                    }
-                    .background(MaterialTheme.colorScheme.surface)
-                    .nestedScroll(summaryScrollConnection)
-                    .scrollable(gridState, Orientation.Vertical, reverseDirection = true),
-            ) {
-                SpaceContributionVideoSummaryBar(
-                    modifier = Modifier.padding(horizontal = outerPaddingDp),
-                    totalCount = state.totalVideos.takeIf { it > 0 } ?: state.videos.size,
-                    currentOrder = state.sortOrder,
-                    onSelectSortOrder = onSelectSortOrder,
-                )
             }
         }
 
@@ -3023,6 +2977,10 @@ private fun SpaceHeader(
     outerPadding: Dp = 16.dp,
     useExpandedLayout: Boolean = false,
     collapseAsUnit: Boolean = false,
+    bannerPage: Int = 0,
+    onBannerPageChange: (Int) -> Unit = {},
+    bannerPageActive: Boolean = true,
+    contentPageMoving: Boolean = false,
 ) {
     val context = LocalContext.current
     val isDarkTheme = com.android.purebilibili.core.ui.isAppInDarkTheme()
@@ -3035,7 +2993,8 @@ private fun SpaceHeader(
     // banner 组件上报的当前实际显示 URL（装扮头图可能不是 topPhoto），
     // 点击预览时优先用它，保证预览与所见一致。
     var currentBannerUrl by remember { mutableStateOf<String?>(null) }
-    val avatarPreviewEnabled = userInfo.face.isNotBlank()
+    val displayAvatar = userInfo.face
+    val avatarPreviewEnabled = displayAvatar.isNotBlank()
     val isOwner = userInfo.mid > 0L &&
         userInfo.mid == com.android.purebilibili.core.store.TokenManager.midCache
     val windowSizeClass = com.android.purebilibili.core.util.LocalWindowSizeClass.current
@@ -3072,11 +3031,16 @@ private fun SpaceHeader(
         )
     }
     val colorScheme = MaterialTheme.colorScheme
-    val followButtonColors = resolveSpaceFollowButtonColors(
-        isFollowed = userInfo.isFollowed,
-        colorScheme = colorScheme,
+    val nativeFollowColors = com.android.purebilibili.core.ui.AppInteractionColors.nativeFollow(
+        isFollowing = userInfo.isFollowed,
         isOwner = isOwner,
     )
+    val followButtonColors = nativeFollowColors?.let { SpaceSelectionChipColors(it.container, it.content) }
+        ?: resolveSpaceFollowButtonColors(
+            isFollowed = userInfo.isFollowed,
+            colorScheme = colorScheme,
+            isOwner = isOwner,
+        )
 
     // PiliPlus 风格头部结构：
     // - 窄屏 hero 按 1125:396 全宽展示；桌面/横屏窗口把高度钳到约 135dp，与 PiliPlus kHeaderHeight 对齐
@@ -3203,6 +3167,10 @@ private fun SpaceHeader(
                             onCurrentBannerUrlChange = { currentBannerUrl = it },
                             skinBackgroundPaths = skinSpaceBackgroundPaths,
                             isDarkTheme = isDarkTheme,
+                            sharedPage = bannerPage,
+                            onPageChange = onBannerPageChange,
+                            pageActive = bannerPageActive,
+                            contentPageMoving = contentPageMoving,
                             modifier = Modifier.fillMaxSize()
                         )
 
@@ -3257,8 +3225,8 @@ private fun SpaceHeader(
                 ) {
                     AsyncImage(
                         model = ImageRequest.Builder(context)
-                            .data(FormatUtils.buildSizedImageUrl(userInfo.face, width = 320, height = 320))
-                            .memoryCacheKey(resolveImagePreviewPlaceholderCacheKey(userInfo.face) ?: userInfo.face)
+                            .data(if (displayAvatar.startsWith("file://") || displayAvatar.startsWith("content://")) displayAvatar else FormatUtils.buildSizedImageUrl(displayAvatar, width = 320, height = 320))
+                            .memoryCacheKey(resolveImagePreviewPlaceholderCacheKey(displayAvatar) ?: displayAvatar)
                             .crossfade(false)
                             .build(),
                         contentDescription = null,
@@ -3714,6 +3682,7 @@ private fun SpaceMainTabRow(
     isScrollInProgressProvider: () -> Boolean,
 ) {
     val liquidGlassEnabled = LocalAppThemeConfig.current.liquidGlassEnabled
+    val miuixNonGlass = com.android.purebilibili.core.ui.isMiuixNonGlassEnabled()
     val spec = remember(tabs, selectedTab) {
         resolveSpaceMainTabChromeSpec(tabs = tabs, selectedTab = selectedTab)
     }
@@ -3732,11 +3701,11 @@ private fun SpaceMainTabRow(
             onSelectionChange = onSelect,
             indicatorPositionProvider = indicatorPositionProvider,
             isScrollInProgressProvider = isScrollInProgressProvider,
-            // Give the glass rail modest breathing room without returning to full-page slots.
-            // Native alignment, minimum width and typography keep their original defaults.
-            centerContent = liquidGlassEnabled,
+            // 玻璃保留独立间距；非玻璃 Miuix 主导航放得下时均匀居中，
+            // 空间不足时仍按完整文字宽度滚动。
+            centerContent = liquidGlassEnabled || miuixNonGlass,
+            forceEqualWidth = miuixNonGlass,
             minTabWidth = if (liquidGlassEnabled) 64.dp else androidx.compose.ui.unit.Dp.Unspecified,
-            labelFontSize = if (liquidGlassEnabled) 15.sp else androidx.compose.ui.unit.TextUnit.Unspecified,
             scrollable = spec.scrollable,
             dragSelectionEnabled = spec.dragSelectionEnabled,
             tapPressRefractionEnabled = true,
@@ -5563,12 +5532,39 @@ private fun SpaceHeaderMetricDivider() {
 }
 
 @Composable
+private fun rememberSpaceBannerPager(
+    pageCount: Int,
+    sharedPage: Int,
+    pageActive: Boolean,
+    onPageChange: (Int) -> Unit,
+): PagerState {
+    val safePage = sharedPage.coerceIn(0, pageCount - 1)
+    val pager = rememberPagerState(initialPage = safePage) { pageCount }
+    val latestOnPageChange = androidx.compose.runtime.rememberUpdatedState(onPageChange)
+    LaunchedEffect(pager, safePage, pageActive) {
+        if (!pageActive && pager.currentPage != safePage) pager.scrollToPage(safePage)
+    }
+    LaunchedEffect(pager, pageActive) {
+        if (!pageActive) return@LaunchedEffect
+        var first = true
+        snapshotFlow { pager.currentPage }.collect { page ->
+            if (first) first = false else latestOnPageChange.value(page)
+        }
+    }
+    return pager
+}
+
+@Composable
 private fun SpaceHeaderBanner(
     topImages: List<com.android.purebilibili.data.model.response.SpaceTopImageItem>,
     fallbackTopPhotoUrl: String,
     onCurrentBannerUrlChange: (String?) -> Unit = {},
     skinBackgroundPaths: List<String> = emptyList(),
     isDarkTheme: Boolean,
+    sharedPage: Int,
+    onPageChange: (Int) -> Unit,
+    pageActive: Boolean,
+    contentPageMoving: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -5576,7 +5572,7 @@ private fun SpaceHeaderBanner(
     val bannerColorFilter = resolveSpaceBannerColorFilter(isLight = !isDarkTheme)
     if (skinBackgroundPaths.isNotEmpty()) {
         LaunchedEffect(skinBackgroundPaths) { onCurrentBannerUrlChange(null) }
-        val pagerState = rememberPagerState { skinBackgroundPaths.size }
+        val pagerState = rememberSpaceBannerPager(skinBackgroundPaths.size, sharedPage, pageActive, onPageChange)
         Box(modifier = modifier) {
             HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
                 AsyncImage(
@@ -5603,21 +5599,27 @@ private fun SpaceHeaderBanner(
             }
         }
     } else if (topImages.size > 1) {
-        val pagerState = rememberPagerState { topImages.size }
+        val pagerState = rememberSpaceBannerPager(topImages.size, sharedPage, pageActive, onPageChange)
         LaunchedEffect(pagerState.currentPage, topImages) {
             onCurrentBannerUrlChange(topImages.getOrNull(pagerState.currentPage)?.header)
         }
         // 多张头图自动轮播：用户拖动期间暂停，松手后重新计时
         val bannerDragging by pagerState.interactionSource.collectIsDraggedAsState()
-        LaunchedEffect(pagerState, bannerDragging, topImages.size) {
-            if (bannerDragging) return@LaunchedEffect
+        val animationGate = com.android.purebilibili.core.ui.rememberDecorativeAnimationGate()
+        LaunchedEffect(pagerState, contentPageMoving) {
+            if (contentPageMoving && pageActive) {
+                pagerState.scrollToPage(sharedPage.coerceIn(0, topImages.lastIndex))
+            }
+        }
+        LaunchedEffect(pagerState, bannerDragging, topImages.size, pageActive, contentPageMoving, animationGate.active) {
+            if (bannerDragging || !pageActive || contentPageMoving || !animationGate.active) return@LaunchedEffect
             while (true) {
                 delay(SPACE_BANNER_AUTO_ROTATE_INTERVAL_MS)
                 val nextPage = (pagerState.currentPage + 1) % topImages.size
                 pagerState.animateScrollToPage(nextPage)
             }
         }
-        Box(modifier = modifier) {
+        Box(modifier = modifier.then(animationGate.modifier)) {
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier.fillMaxSize()

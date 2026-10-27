@@ -829,7 +829,9 @@ fun DynamicCardV2(
                                             onManageAction(
                                                 DynamicManageAction.Edit(
                                                     dynamicId = item.id_str,
-                                                    initialDraft = resolveDynamicEditDraft(item)
+                                                    initialDraft = resolveDynamicEditDraft(item),
+                                                    replyOid = resolveDynamicReplySubjectOid(item),
+                                                    replyType = resolveDynamicReplySubjectType(item),
                                                 )
                                             )
                                         },

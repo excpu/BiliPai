@@ -732,11 +732,13 @@ fun DynamicInlineCommentHeader(
 ) {
     val sortModes = remember { listOf(CommentSortMode.HOT, CommentSortMode.NEWEST) }
     val sortModeLabels = remember(sortModes) { sortModes.map { it.label } }
-    Row(
+    FlowRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = AppSpacingTokens.Large, vertical = AppSpacingTokens.Medium),
-        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalArrangement = Arrangement.spacedBy(AppSpacingTokens.Small),
+        itemVerticalAlignment = Alignment.CenterVertically,
     ) {
         Column {
             AppText(
@@ -755,25 +757,17 @@ fun DynamicInlineCommentHeader(
                 )
             }
         }
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            contentAlignment = Alignment.CenterEnd,
-        ) {
-            DynamicCommentSortControl(
-                items = sortModeLabels,
-                selectedIndex = sortModes.indexOf(sortMode).coerceAtLeast(0),
-                onSelected = { index ->
-                    sortModes.getOrNull(index)?.let(onSortModeChange)
-                },
-                modifier = Modifier.align(Alignment.CenterEnd),
-                // Null deliberately selects the shared control's mounted local source. Do not
-                // manufacture an unrecorded Backdrop here or sample the LazyColumn containing
-                // this header, which would be invalid/recursive on Xiaomi's native renderer.
-                miuixBackdrop = miuixBackdrop,
-            )
-        }
+        DynamicCommentSortControl(
+            items = sortModeLabels,
+            selectedIndex = sortModes.indexOf(sortMode).coerceAtLeast(0),
+            onSelected = { index ->
+                sortModes.getOrNull(index)?.let(onSortModeChange)
+            },
+            // Null deliberately selects the shared control's mounted local source. Do not
+            // manufacture an unrecorded Backdrop here or sample the LazyColumn containing
+            // this header, which would be invalid/recursive on Xiaomi's native renderer.
+            miuixBackdrop = miuixBackdrop,
+        )
     }
     AppHorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 }

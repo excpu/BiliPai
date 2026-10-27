@@ -350,12 +350,13 @@ private fun VideoCardOwnerMetadata(
         leadingContent = if (showUpAvatar && video.owner.face.isNotEmpty()) {
             {
                 val avatarContext = LocalContext.current
-                val avatarRequest = remember(avatarContext, video.owner.face) {
+                val face = video.owner.face
+                val avatarRequest = remember(avatarContext, face) {
                     ImageRequest.Builder(avatarContext)
-                        .data(FormatUtils.fixImageUrl(video.owner.face))
+                        .data(FormatUtils.fixImageUrl(face))
                         .crossfade(100)
                         .size(32, 32)
-                        .memoryCacheKey("avatar_${video.owner.face.hashCode()}")
+                        .memoryCacheKey("avatar_${face.hashCode()}")
                         .build()
                 }
                 PageAwareAsyncImage(
@@ -1348,7 +1349,6 @@ internal fun ElegantVideoCard(
                     bvid = video.bvid,
                     sourceRoute = effectiveSharedElementSourceRoute,
                     enabled = effectiveTransitionEnabled,
-                    landingFeedbackEnabled = true,
                 ),
         ) {
             val cardShellBaseColor = if (useCardEffectSurface) {

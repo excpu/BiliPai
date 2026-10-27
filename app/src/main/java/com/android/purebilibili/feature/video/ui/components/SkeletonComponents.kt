@@ -12,7 +12,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -23,14 +22,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.android.purebilibili.core.store.HomeFeedCardStyle
-import com.android.purebilibili.core.store.SettingsManager
 import com.android.purebilibili.feature.home.components.cards.HorizontalVideoCardFrame
-import com.android.purebilibili.feature.home.resolveHomeFeedCardLayout
 import com.android.purebilibili.core.ui.AppSurfaceTokens
 import com.android.purebilibili.core.ui.AppShapes
 import com.android.purebilibili.core.ui.ContainerLevel
@@ -40,6 +34,7 @@ import com.android.purebilibili.core.ui.ContainerLevel
  */
 
 private val LocalVideoSkeletonPulse = staticCompositionLocalOf<androidx.compose.runtime.State<Float>?> { null }
+private val LocalVideoSkeletonAnimationAllowed = staticCompositionLocalOf { true }
 
 // 基础 Shimmer 容器
 @Composable
@@ -48,12 +43,16 @@ fun ShimmerContainer(
     animated: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val pulse = if (animated) {
+    val animationAllowed = animated && LocalVideoSkeletonAnimationAllowed.current
+    val pulse = if (animationAllowed) {
         LocalVideoSkeletonPulse.current ?: rememberVideoSkeletonPulse()
     } else {
         androidx.compose.runtime.rememberUpdatedState(Float.NaN)
     }
-    CompositionLocalProvider(LocalVideoSkeletonPulse provides pulse) {
+    CompositionLocalProvider(
+        LocalVideoSkeletonPulse provides pulse,
+        LocalVideoSkeletonAnimationAllowed provides animationAllowed,
+    ) {
         Box(modifier = modifier) {
             content()
         }
@@ -104,7 +103,7 @@ fun VideoDetailSkeleton(animated: Boolean = true) {
                 VideoDetailActionButtonsSkeleton()
             }
             VideoDetailRelatedHeaderSkeleton()
-            repeat(2) {
+            repeat(RELATED_VIDEO_SKELETON_ROW_COUNT) {
                 RelatedVideoGridRowSkeleton()
             }
         }
@@ -140,7 +139,7 @@ internal fun VideoDetailSecondaryPaneSkeleton(
                     VideoDetailTitleInfoSkeleton()
                     VideoDetailActionButtonsSkeleton()
                 }
-            } else items(6) {
+            } else items(if (showComments) 6 else RELATED_VIDEO_SKELETON_ROW_COUNT) {
                 if (showComments) {
                     com.android.purebilibili.core.ui.skeleton.CommentListItemSkeleton()
                 } else {
@@ -286,13 +285,7 @@ private fun VideoDetailRelatedHeaderSkeleton() {
 
 @Composable
 private fun RelatedVideoGridRowSkeleton() {
-    val context = LocalContext.current
-    val homeFeedCardStyle by SettingsManager
-        .getHomeFeedCardStyle(context)
-        .collectAsStateWithLifecycle(initialValue = HomeFeedCardStyle.BILIPAI)
-    val cardLayout = remember(homeFeedCardStyle) {
-        resolveHomeFeedCardLayout(homeFeedCardStyle)
-    }
+    val cardLayout = rememberRelatedVideoCardLayout()
     RelatedVideoGridRowSkeleton(cardLayout = cardLayout)
 }
 
@@ -300,22 +293,41 @@ private fun RelatedVideoGridRowSkeleton() {
 @Composable
 internal fun RelatedVideoGridRowSkeleton(
     cardLayout: HomeFeedCardLayout,
-    title: String? = null,
     modifier: Modifier = Modifier,
+    cardPresentation: RelatedVideoCardLayout? = null,
 ) {
-    ShimmerContainer(modifier = modifier) {
+    val animationGate = com.android.purebilibili.core.ui.rememberDecorativeAnimationGate()
+    val pulse = rememberRelatedSkeletonSweepState(
+        animationGate.active && LocalVideoSkeletonAnimationAllowed.current,
+    )
+    CompositionLocalProvider(LocalVideoSkeletonPulse provides pulse) {
         BoxWithConstraints(
-            modifier = Modifier
+            modifier = modifier
                 .fillMaxWidth()
+                .then(animationGate.modifier)
                 .clearAndSetSemantics { }
                 .padding(horizontal = cardLayout.outerPaddingDp.dp, vertical = 2.dp),
         ) {
             RelatedVideoItemSkeleton(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
                 coverAspectRatio = cardLayout.coverAspectRatio,
-                stacked = resolveRelatedVideoCardLayout(maxWidth.value.toInt()) == RelatedVideoCardLayout.STACKED,
-                title = title,
+                stacked = (cardPresentation ?: resolveRelatedVideoCardLayout(maxWidth.value.toInt())) == RelatedVideoCardLayout.STACKED,
             )
+        }
+    }
+}
+
+/** 可见行共用帧时间作为扫光相位，移出视口后停止逐帧工作。 */
+@Composable
+private fun rememberRelatedSkeletonSweepState(active: Boolean): androidx.compose.runtime.State<Float> {
+    val enabled = com.android.purebilibili.core.ui.skeleton.rememberSkeletonBreathingEnabled()
+    if (!active || !enabled) return androidx.compose.runtime.rememberUpdatedState(Float.NaN)
+    return androidx.compose.runtime.produceState(initialValue = Float.NaN) {
+        while (true) {
+            androidx.compose.animation.core.withInfiniteAnimationFrameNanos { frameTime ->
+                val phase = (frameTime % 1_500_000_000L).toFloat() / 1_500_000_000f
+                value = -1.5f + phase * 3f
+            }
         }
     }
 }
@@ -326,7 +338,6 @@ private fun RelatedVideoItemSkeleton(
     modifier: Modifier = Modifier,
     coverAspectRatio: Float = com.android.purebilibili.core.ui.videoCardCoverAspectRatio(),
     stacked: Boolean = false,
-    title: String? = null,
 ) {
     HorizontalVideoCardFrame(
         coverAspectRatio = coverAspectRatio,
@@ -344,7 +355,7 @@ private fun RelatedVideoItemSkeleton(
         infoContent = {
             val typography = com.android.purebilibili.feature.home.components.cards.horizontalVideoCardTypography()
             RelatedSkeletonText(
-                text = title ?: "推荐视频标题占位\n第二行标题占位",
+                text = "推荐视频标题占位\n第二行标题占位",
                 style = typography.title,
                 maxLines = videoCardTitleMaxLines(),
                 modifier = Modifier.fillMaxWidth(),

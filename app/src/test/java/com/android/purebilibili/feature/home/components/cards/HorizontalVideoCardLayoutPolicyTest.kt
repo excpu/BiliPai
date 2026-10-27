@@ -41,7 +41,7 @@ class HorizontalVideoCardLayoutPolicyTest {
         assertTrue(cardSource.contains("HorizontalVideoCardFrame("))
         assertTrue(cardSource.contains("HorizontalVideoStatRow("))
         assertTrue(frameSource.contains("HORIZONTAL_VIDEO_CARD_COVER_ASPECT_RATIO"))
-        assertTrue(frameSource.contains(".heightIn(min = resolvedMinimumHeight)"))
+        assertTrue(frameSource.contains("maxOf(minHeight, coverHeight, info.height)"))
         assertFalse(frameSource.contains(".height(resolvedMinimumHeight)"))
     }
 

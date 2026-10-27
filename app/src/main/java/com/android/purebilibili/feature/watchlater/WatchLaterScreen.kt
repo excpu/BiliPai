@@ -7,8 +7,6 @@ import com.android.purebilibili.feature.home.gridColumnPinchEnabled
 import com.android.purebilibili.core.ui.components.VideoStatusBadges
 import com.android.purebilibili.core.ui.AppContentColors
 
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
 import com.android.purebilibili.core.ui.components.AppFloatingToolbar
 import android.os.Build
 import com.android.purebilibili.core.ui.components.videoListItemModifier
@@ -1473,7 +1471,7 @@ fun WatchLaterScreen(
                     modifier = Modifier.align(Alignment.BottomCenter)
                         .padding(start = 12.dp, end = 12.dp, bottom = bottomOverlayPadding + 12.dp),
                 ) {
-                    Row(Modifier.horizontalScroll(rememberScrollState())) { batchActions() }
+                    batchActions()
                 }
             }
 

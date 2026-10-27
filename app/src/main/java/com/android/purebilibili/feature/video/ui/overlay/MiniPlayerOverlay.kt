@@ -50,7 +50,11 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -74,6 +78,16 @@ import com.android.purebilibili.core.ui.components.AppIconButton
 import com.android.purebilibili.core.ui.components.AppSurface
 import com.android.purebilibili.feature.video.usecase.seekPlayerFromUserAction
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import com.android.purebilibili.core.ui.findHostActivity
+import com.android.purebilibili.core.ui.rememberVisualWorkActive
+import com.android.purebilibili.core.ui.animation.gl.ThanosEffectView
+import com.android.purebilibili.core.ui.animation.gl.isThanosEffectSupported
+import com.android.purebilibili.feature.audio.screen.captureAudioNowPlayingWindowSnapshot
+import com.android.purebilibili.feature.video.util.captureVideoScreenshot
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import com.android.purebilibili.core.ui.AppShapes
@@ -145,6 +159,8 @@ private fun MiniPlayerSessionOverlay(
     val density = LocalDensity.current
     val playerChromeProfile = rememberAppPlayerChromeProfile()
     val reduceMotion = rememberSystemReduceMotion()
+    val visualWorkActive = rememberVisualWorkActive()
+    val context = LocalContext.current
     val layoutPolicy = remember(configuration.screenWidthDp) {
         resolveMiniPlayerOverlayLayoutPolicy(
             widthDp = configuration.screenWidthDp
@@ -323,10 +339,128 @@ private fun MiniPlayerSessionOverlay(
         onDispose { observedPlayer?.removeListener(listener) }
     }
 
+    val sessionId = miniPlayerManager.miniPlayerSessionId
+    val dismissScope = rememberCoroutineScope()
+    val cardCoordinates = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    val playerViewRef = remember { arrayOfNulls<PlayerView>(1) }
+    var dismissing by remember { mutableStateOf(false) }
+    var contentHidden by remember { mutableStateOf(false) }
+    var dismissJob by remember { mutableStateOf<Job?>(null) }
+    var particleView by remember { mutableStateOf<ThanosEffectView?>(null) }
+
+    fun finishDismiss() {
+        if (!dismissing) return
+        dismissJob?.cancel()
+        dismissJob = null
+        particleView?.dispose()
+        particleView = null
+        if (miniPlayerManager.miniPlayerSessionId == sessionId && miniPlayerManager.isMiniMode) {
+            // Closing has its own particle handoff; avoid a second sliding exit.
+            miniPlayerManager.exitMiniMode(animate = false)
+            miniPlayerManager.dismiss()
+        }
+    }
+
+    fun dismissMiniPlayer() {
+        if (dismissing) return
+        dismissing = true
+        moreExpanded = false
+        showControls = false
+        player?.pause()
+        val window = context.findHostActivity()?.window
+        if (reduceMotion || !visualWorkActive || suppressContentForPip || window == null ||
+            !isThanosEffectSupported(context)
+        ) {
+            finishDismiss()
+            return
+        }
+        dismissJob = dismissScope.launch {
+            try {
+                withFrameNanos { }
+                val bounds = cardCoordinates[0]?.takeIf { it.isAttached }?.boundsInWindow()
+                val view = playerViewRef[0]
+                val videoSurface = view?.videoSurfaceView
+                if (bounds == null || bounds.isEmpty || view == null || videoSurface == null ||
+                    videoSurface.width <= 0 || videoSurface.height <= 0
+                ) {
+                    finishDismiss()
+                    return@launch
+                }
+                val snapshot = withTimeoutOrNull(500L) {
+                    captureAudioNowPlayingWindowSnapshot(
+                        window, bounds, with(density) { shellVisual.cardCornerRadiusDp.dp.toPx() },
+                    )
+                }
+                if (snapshot == null) { finishDismiss(); return@launch }
+                val bitmap = snapshot.bitmap
+                var transferred = false
+                try {
+                    // SurfaceView is a separate layer; copy the actual player frame into the
+                    // window snapshot so both surface types dissolve with the visible video.
+                    val frame = withTimeoutOrNull(500L) {
+                        captureVideoScreenshot(view, videoSurface.width, videoSurface.height)
+                    }
+                    if (frame == null) { finishDismiss(); return@launch }
+                    try {
+                        val location = IntArray(2)
+                        videoSurface.getLocationInWindow(location)
+                        val left = (location[0] - snapshot.windowBounds.left).toFloat()
+                        val top = (location[1] - snapshot.windowBounds.top).toFloat()
+                        val radius = with(density) { shellVisual.cardCornerRadiusDp.dp.toPx() }
+                        val path = android.graphics.Path().apply {
+                            addRoundRect(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat(), radius, radius, android.graphics.Path.Direction.CW)
+                        }
+                        android.graphics.Canvas(bitmap).apply {
+                            clipPath(path)
+                            drawBitmap(frame, null, android.graphics.RectF(left, top, left + videoSurface.width, top + videoSurface.height),
+                                android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG))
+                        }
+                    } finally { frame.recycle() }
+                    if (!dismissing || miniPlayerManager.miniPlayerSessionId != sessionId || !visualWorkActive) return@launch
+                    particleView = ThanosEffectView.attach(
+                        window = window,
+                        bitmap = bitmap,
+                        windowBounds = android.graphics.RectF(snapshot.windowBounds),
+                        onFirstFrame = {
+                            contentHidden = true
+                            playerViewRef[0]?.visibility = android.view.View.INVISIBLE
+                        },
+                        onComplete = { finishDismiss() },
+                    )
+                    transferred = particleView != null
+                    if (!transferred) { finishDismiss(); return@launch }
+                    delay(5_000L)
+                    finishDismiss()
+                } finally {
+                    if (!transferred && !bitmap.isRecycled) bitmap.recycle()
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Logger.w(TAG, "Mini player dissolve failed: ${error.message}")
+                finishDismiss()
+            }
+        }
+    }
+
+    LaunchedEffect(dismissing, visualWorkActive, suppressContentForPip, reduceMotion) {
+        if (dismissing && (!visualWorkActive || suppressContentForPip || reduceMotion)) finishDismiss()
+    }
+    DisposableEffect(sessionId) {
+        onDispose {
+            dismissJob?.cancel()
+            particleView?.dispose()
+            if (dismissing && miniPlayerManager.miniPlayerSessionId == sessionId && miniPlayerManager.isMiniMode) {
+                miniPlayerManager.exitMiniMode(animate = false)
+                miniPlayerManager.dismiss()
+            }
+        }
+    }
+
 
     val shouldPollProgress = shouldPollMiniPlayerProgress(
         playerExists = player != null,
-        hostLifecycleStarted = hostLifecycleStarted,
+        hostLifecycleStarted = hostLifecycleStarted && visualWorkActive && !suppressContentForPip && !dismissing && !isStashed,
         isMiniMode = miniPlayerManager.isMiniMode,
         isActive = miniPlayerManager.isActive,
         isLiveMode = miniPlayerManager.isLiveMode  // 📺 直播不轮询进度
@@ -347,10 +481,6 @@ private fun MiniPlayerSessionOverlay(
     }
 
     // Any gesture/menu change cancels the old timer. Restart only after interaction ends.
-    val showGestureHint by produceState(true) {
-        delay(1_800L)
-        value = false
-    }
     val interactionBusy = isDraggingPosition || isDraggingProgress || isResizing || moreExpanded
     LaunchedEffect(showControls, lastInteractionTime, interactionBusy, isStashed, hostLifecycleStarted) {
         if (showControls && !interactionBusy && !isStashed && hostLifecycleStarted) {
@@ -667,12 +797,13 @@ private fun MiniPlayerSessionOverlay(
                     .offset { IntOffset(animatedOffsetX.roundToInt(), animatedOffsetY.roundToInt()) }
                     .width(miniPlayerWidth)
                     .height(miniPlayerHeight)
+                    .onGloballyPositioned { cardCoordinates[0] = it }
                     .graphicsLayer {
                         val progress = stashProgress.value
                         transformOrigin = TransformOrigin(0f, 0f)
                         scaleX = 1f + (layoutPolicy.stashedWidthDp / miniPlayerWidthDpEffective - 1f) * progress
                         scaleY = 1f + (layoutPolicy.stashedHeightDp / miniPlayerHeightDp - 1f) * progress
-                        alpha = (1f - progress * 1.6f).coerceIn(0f, 1f)
+                        alpha = if (contentHidden) 0f else (1f - progress * 1.6f).coerceIn(0f, 1f)
                     }
                     .shadow(
                         shellVisual.cardShadowDp.dp,
@@ -686,8 +817,8 @@ private fun MiniPlayerSessionOverlay(
                             Modifier
                         },
                     )
-                    .pointerInput(resizeBounds, isStashed) {
-                        if (isStashed) return@pointerInput
+                    .pointerInput(resizeBounds, isStashed, dismissing) {
+                        if (isStashed || dismissing) return@pointerInput
                         awaitEachGesture {
                             var isPinching = false
                             try {
@@ -733,19 +864,23 @@ private fun MiniPlayerSessionOverlay(
                     AndroidView(
                         factory = { ctx ->
                             com.android.purebilibili.feature.video.ui.components.createVideoPlayerView(ctx, useTextureSurface).apply {
+                                playerViewRef[0] = this
                                 this.player = exoPlayer
                                 useController = false
                                 setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
                             }
                         },
                         update = { view -> view.player = exoPlayer },
-                        onRelease = { view -> view.player = null },
+                        onRelease = { view ->
+                            if (playerViewRef[0] === view) playerViewRef[0] = null
+                            view.player = null
+                        },
                         modifier = Modifier
                             .fillMaxSize()
                             .clip(RoundedCornerShape(shellVisual.cardCornerRadiusDp.dp))
                             //  视频区域：左右滑动调节进度（直播模式禁用）
-                            .pointerInput(miniPlayerManager.isLiveMode, miniPlayerWidthPx, duration, isSeekable, touchSlopPx, isStashed) {
-                                if (isStashed) return@pointerInput
+                            .pointerInput(miniPlayerManager.isLiveMode, miniPlayerWidthPx, duration, isSeekable, touchSlopPx, isStashed, dismissing) {
+                                if (isStashed || dismissing) return@pointerInput
                                 detectDragGestures(
                                     onDragStart = {
                                         contentDragIntent = MiniPlayerContentDragIntent.UNDECIDED
@@ -837,8 +972,8 @@ private fun MiniPlayerSessionOverlay(
                                     }
                                 )
                             }
-                            .pointerInput(isStashed) {
-                                if (isStashed) return@pointerInput
+                            .pointerInput(isStashed, dismissing) {
+                                if (isStashed || dismissing) return@pointerInput
                                 detectTapGestures(
                                     onTap = {
                                         showControls = !showControls
@@ -863,8 +998,8 @@ private fun MiniPlayerSessionOverlay(
                         .fillMaxWidth()
                         .height(headerHeight)
                         .align(Alignment.TopCenter)
-                        .pointerInput(isStashed) {
-                            if (isStashed) return@pointerInput
+                        .pointerInput(isStashed, dismissing) {
+                            if (isStashed || dismissing) return@pointerInput
                             detectDragGestures(
                                 onDragStart = {
                                     latestBeginPositionDrag()
@@ -904,7 +1039,7 @@ private fun MiniPlayerSessionOverlay(
                         ) {
                             if (miniPlayerWidthDpEffective >= 200f) {
                                 AppText(
-                                    text = if (miniPlayerManager.isLiveMode) "直播 · ${miniPlayerManager.currentTitle}" else miniPlayerManager.currentTitle,
+                                    text = miniPlayerManager.currentTitle,
                                     color = Color.White,
                                     fontSize = layoutPolicy.titleFontSp.sp,
                                     maxLines = 1,
@@ -912,11 +1047,6 @@ private fun MiniPlayerSessionOverlay(
                                     modifier = Modifier.weight(1f).padding(start = 4.dp),
                                 )
                             } else Spacer(Modifier.weight(1f))
-                            if (miniPlayerWidthDpEffective >= 240f) {
-                                AppIconButton(onClick = onExpandClick, modifier = Modifier.size(48.dp)) {
-                                    AppIcon(Icons.Outlined.OpenInNew, "返回播放详情", tint = Color.White, modifier = Modifier.size(20.dp))
-                                }
-                            }
                             com.android.purebilibili.core.ui.components.AppGlassMenuAnchor(onOpen = { moreExpanded = true }) {
                                 AppIconButton(onClick = { moreExpanded = true }, modifier = Modifier.size(48.dp)) {
                                     AppIcon(Icons.Outlined.MoreVert, "小窗更多操作", tint = Color.White, modifier = Modifier.size(20.dp))
@@ -944,13 +1074,13 @@ private fun MiniPlayerSessionOverlay(
                                     if (miniPlayerWidthDpEffective < 112f) {
                                         AppDropdownMenuItem(text = { AppText("关闭小窗") }, onClick = {
                                             moreExpanded = false
-                                            miniPlayerManager.dismiss()
+                                            dismissMiniPlayer()
                                         })
                                     }
                                 }
                             }
                             if (miniPlayerWidthDpEffective >= 112f) {
-                                AppIconButton(onClick = { miniPlayerManager.dismiss() }, modifier = Modifier.size(48.dp)) {
+                                AppIconButton(onClick = { dismissMiniPlayer() }, modifier = Modifier.size(48.dp)) {
                                     AppIcon(clearIcon, "关闭小窗", tint = Color.White, modifier = Modifier.size(20.dp))
                                 }
                             }
@@ -981,7 +1111,7 @@ private fun MiniPlayerSessionOverlay(
                         },
                         modifier = Modifier.align(Alignment.Center).size(48.dp),
                         shape = CircleShape,
-                        color = if (isBuffering) Color.Transparent else accentColor.copy(alpha = 0.9f)
+                        color = if (isBuffering) Color.Transparent else Color.Black.copy(alpha = 0.55f)
                     ) {
                         AppIcon(
                             imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
@@ -1014,18 +1144,6 @@ private fun MiniPlayerSessionOverlay(
                                 )
                             )
                         }
-                    } else if (chrome.showDragHint && showGestureHint && miniPlayerWidthDpEffective >= 200f) {
-                        AppText(
-                            text = if (miniPlayerManager.isLiveMode) "拖动移动 · 双击返回 · 双指缩放" else "横滑调进度 · 双击返回 · 双指缩放",
-                            color = Color.White.copy(alpha = 0.7f),
-                            fontSize = layoutPolicy.dragHintFontSp.sp,
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(start = 8.dp, end = 48.dp, bottom = layoutPolicy.dragHintBottomPaddingDp.dp)
-                                .widthIn(max = (miniPlayerWidthDpEffective - 56f).coerceAtLeast(1f).dp),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
                     }
 
                 }
@@ -1051,7 +1169,7 @@ private fun MiniPlayerSessionOverlay(
                 )
                 }
 
-                if (chrome.showResizeHandle && miniPlayerWidthDpEffective >= 180f && (showGestureHint || isResizing)) {
+                if (chrome.showResizeHandle && miniPlayerWidthDpEffective >= 180f && !dismissing) {
                     AppSurface(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)

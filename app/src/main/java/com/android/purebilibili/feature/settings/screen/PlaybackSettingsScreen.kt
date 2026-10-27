@@ -1461,6 +1461,7 @@ private fun PlaybackInteractionSettingsSection(
         SubtitleAutoPreference.ON -> "自动开启可用字幕"
         SubtitleAutoPreference.WITHOUT_AI -> "仅自动启用非 AI 字幕"
         SubtitleAutoPreference.AUTO -> "静音时可自动启用 AI 字幕"
+        SubtitleAutoPreference.CHINESE_ONLY -> "只开启中文字幕，含 AI 中文；没有中文字幕时不开启"
     }
 
     AppPreferenceGroup {
@@ -1641,7 +1642,8 @@ SettingsItemAnchor("playback.subtitle_auto_preference") {
                     AppSegmentOption(SubtitleAutoPreference.OFF, "关闭"),
                     AppSegmentOption(SubtitleAutoPreference.ON, "开启"),
                     AppSegmentOption(SubtitleAutoPreference.WITHOUT_AI, "非 AI"),
-                    AppSegmentOption(SubtitleAutoPreference.AUTO, "自动")
+                    AppSegmentOption(SubtitleAutoPreference.AUTO, "自动"),
+                    AppSegmentOption(SubtitleAutoPreference.CHINESE_ONLY, "仅中文")
                 ),
                 selectedValue = subtitleAutoPreference,
                 onSelectionChange = { preference ->

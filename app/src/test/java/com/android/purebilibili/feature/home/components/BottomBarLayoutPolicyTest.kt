@@ -284,6 +284,12 @@ class BottomBarLayoutPolicyTest {
     fun `bilipai expanded home dock copies search circle size`() {
         assertEquals(56.dp, resolveBiliPaiBottomBarSearchCircleSize())
         // The ordinary dock and adjacent search circle share a compact resting height.
+        for (searchExpanded in listOf(false, true)) {
+            assertEquals(
+                64.dp,
+                resolveBiliPaiBottomBarDockHeight(searchExpanded, nativeMiuixNavigation = true),
+            )
+        }
         assertEquals(56.dp, resolveBiliPaiBottomBarDockHeight(searchExpanded = false))
         assertEquals(
             64.dp,

@@ -27,8 +27,7 @@ internal object VideoHeroMotionTokens {
     const val RETURN_MIN_MS = 220
     const val GEOMETRY_MIN_RATIO = 0.78f
     const val GEOMETRY_MAX_RATIO = 1.22f
-    // Must stay 0: a flying-layer pulse undershoots the frozen card and the stationary
-    // list card then pops in at full size (cover / info scale-jump on land).
+    // 旧的额外落位脉冲保持关闭；回弹只读取导航弹簧越过终点的实际位移。
     const val LANDING_COMPRESSION = 0f
     // 开合共用半径网格，避免中断或反向时仅因 phase 改变而跳档。
     const val OPEN_BLUR_QUANTUM_PX = 2f
@@ -111,13 +110,9 @@ internal fun resolveVideoSharedTransitionGeometryRatio(
         .coerceIn(VideoHeroMotionTokens.GEOMETRY_MIN_RATIO, VideoHeroMotionTokens.GEOMETRY_MAX_RATIO)
 }
 
-/** Identity at every depth. A non-1 value would undershoot the frozen card on land. */
-internal fun resolveVideoHeroLandingScale(depth: Float, autoReturning: Boolean): Float {
-    if (!autoReturning || VideoHeroMotionTokens.LANDING_COMPRESSION <= 0f) return 1f
-    val u = ((1f - depth.coerceIn(0f, 1f) - 0.82f) / 0.18f).coerceIn(0f, 1f)
-    val pulse = 16f * u * u * (1f - u) * (1f - u)
-    return 1f - VideoHeroMotionTokens.LANDING_COMPRESSION * pulse
-}
+/** 只显示官方导航弹簧越过落点的微小收敛，常规飞行与手势阶段维持原尺寸。 */
+internal fun resolveVideoHeroLandingScale(depth: Float, autoReturning: Boolean): Float =
+    if (autoReturning && depth.isFinite()) 1f + depth.coerceIn(-0.012f, 0f) else 1f
 
 /** 设备自适应信息，用于视频卡片过渡差异化。 */
 internal data class VideoTransitionAdaptiveInfo(

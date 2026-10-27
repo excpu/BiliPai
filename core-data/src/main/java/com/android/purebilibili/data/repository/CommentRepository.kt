@@ -1031,6 +1031,8 @@ object CommentRepository {
                 }
                 Result.failure(Exception(errorMsg))
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             CoreDataLog.e("CommentRepo", "searchMentionUsers exception: keyword=$keyword", e)
             Result.failure(e)
@@ -1130,13 +1132,15 @@ object CommentRepository {
     suspend fun uploadCommentImage(
         fileName: String,
         mimeType: String,
-        bytes: ByteArray
+        bytes: ByteArray,
+        biz: String = "new_dyn",
     ): Result<ReplyPicture> = withContext(Dispatchers.IO) {
         val mediaType = mimeType.toMediaType()
         uploadCommentImagePart(
             fileName = fileName.ifBlank { "comment_image.jpg" },
             mimeType = mimeType,
-            fileBody = bytes.toRequestBody(mediaType)
+            fileBody = bytes.toRequestBody(mediaType),
+            biz = biz,
         )
     }
 
@@ -1149,7 +1153,8 @@ object CommentRepository {
         fileName: String,
         mimeType: String,
         resolver: ContentResolver,
-        uri: Uri
+        uri: Uri,
+        biz: String = "new_dyn",
     ): Result<ReplyPicture> = withContext(Dispatchers.IO) {
         val size = queryContentImageSize(resolver, uri)
         if (size == null) {
@@ -1162,7 +1167,8 @@ object CommentRepository {
             uploadCommentImage(
                 fileName = fileName,
                 mimeType = mimeType,
-                bytes = bytes
+                bytes = bytes,
+                biz = biz,
             )
         } else {
             if (size <= 0L) return@withContext Result.failure(Exception("图片内容为空"))
@@ -1177,7 +1183,8 @@ object CommentRepository {
                     uri = uri,
                     mediaType = mimeType.toMediaType(),
                     contentLength = size
-                )
+                ),
+                biz = biz,
             )
         }
     }
@@ -1185,7 +1192,8 @@ object CommentRepository {
     private suspend fun uploadCommentImagePart(
         fileName: String,
         mimeType: String,
-        fileBody: RequestBody
+        fileBody: RequestBody,
+        biz: String,
     ): Result<ReplyPicture> = withContext(Dispatchers.IO) {
         try {
             val csrf = com.android.purebilibili.core.store.TokenManager.csrfCache
@@ -1200,7 +1208,7 @@ object CommentRepository {
             )
             val textMedia = "text/plain".toMediaType()
             val categoryBody = "daily".toRequestBody(textMedia)
-            val bizBody = "new_dyn".toRequestBody(textMedia)
+            val bizBody = biz.toRequestBody(textMedia)
             val csrfBody = csrf.toRequestBody(textMedia)
 
             val response = api.uploadCommentImage(

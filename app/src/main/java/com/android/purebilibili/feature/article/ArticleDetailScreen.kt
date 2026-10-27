@@ -37,6 +37,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
@@ -58,6 +59,7 @@ import com.android.purebilibili.core.util.responsiveContentWidth
 import com.android.purebilibili.data.repository.ArticleDetailUiModel
 import com.android.purebilibili.data.repository.ArticleRepository
 import com.android.purebilibili.feature.dynamic.components.ImagePreviewDialog
+import com.android.purebilibili.feature.dynamic.components.isImagePreviewSourceHidden
 import com.android.purebilibili.feature.dynamic.components.prepareImagePreviewSourceTransition
 import com.android.purebilibili.core.ui.AppShapes
 import com.android.purebilibili.core.ui.ContainerLevel
@@ -274,12 +276,14 @@ private fun ArticleDetailContent(
     var imagePreviewRequest by remember(article.bannerUrl, article.blocks) {
         mutableStateOf<ArticleImagePreviewRequest?>(null)
     }
+    val bannerSourceHidden = isImagePreviewSourceHidden(bannerSourceRect)
     val baseBannerModifier = Modifier
         .fillMaxWidth()
         .clip(AppShapes.container(ContainerLevel.Floating))
         .onGloballyPositioned { coordinates ->
             bannerSourceRect = coordinates.boundsInWindow()
         }
+        .alpha(if (bannerSourceHidden) 0f else 1f)
         .clickable(
             interactionSource = null,
             indication = null,
@@ -492,6 +496,7 @@ private fun ArticleDetailContent(
                 }
 
                 is ArticleContentBlock.Image -> {
+                    val sourceHidden = isImagePreviewSourceHidden(bodyImageSourceRects[index])
                     val imageAspectRatio = resolveArticleImageAspectRatio(
                         width = block.width,
                         height = block.height
@@ -512,6 +517,7 @@ private fun ArticleDetailContent(
                             .onGloballyPositioned { coordinates ->
                                 bodyImageSourceRects[index] = coordinates.boundsInWindow()
                             }
+                            .alpha(if (sourceHidden) 0f else 1f)
                             .clickable(interactionSource = null, indication = null) {
                                 val payload = resolveArticleImagePreviewPayload(
                                     blocks = article.blocks,

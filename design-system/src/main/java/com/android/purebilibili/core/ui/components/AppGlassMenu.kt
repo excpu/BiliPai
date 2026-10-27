@@ -66,7 +66,7 @@ class AppGlassMenuRequest(
     val onSourceVisibilityChange: (Boolean) -> Unit = {},
     val interactiveContent: Boolean = false,
     val darkTheme: Boolean? = null,
-    val showScrollbar: Boolean = true,
+    val showScrollbar: Boolean = false,
     val fitWholeItems: Boolean = false,
     val useAvailableHeight: Boolean = false,
 )
@@ -88,6 +88,8 @@ val LocalAppGlassMenuDarkTheme = compositionLocalOf<Boolean?> { null }
 
 val LocalAppGlassMenuPresenter = compositionLocalOf<AppGlassMenuPresenter?> { null }
 val LocalAppGlassMenuScope = compositionLocalOf<AppGlassMenuScope?> { null }
+/** Interactive panels can finish their action after the shared popup has returned to its source. */
+val LocalAppGlassPanelDismissAction = compositionLocalOf<((() -> Unit) -> Unit)?> { null }
 
 @Composable
 fun appGlassMenuAvailable(): Boolean {
@@ -115,7 +117,7 @@ fun AppGlassMenu(
     carriedPress: AppSingleChoicePopupPress? = null,
     onSourceVisibilityChange: (Boolean) -> Unit = {},
     interactiveContent: Boolean = false,
-    showScrollbar: Boolean = true,
+    showScrollbar: Boolean = false,
     fitWholeItems: Boolean = false,
     useAvailableHeight: Boolean = false,
     content: @Composable () -> Unit,
@@ -189,6 +191,9 @@ fun AppGlassMenu(
                     CompositionLocalProvider(contentLocals) {
                         CompositionLocalProvider(
                             LocalAppGlassMenuScope provides scope.takeUnless { interactiveContent },
+                            LocalAppGlassPanelDismissAction provides if (interactiveContent) {
+                                { action: () -> Unit -> scope.dispatch(action, true) }
+                            } else null,
                             LocalAppGlassMenuBackdrop provides scope.backdrop,
                             // 菜单绘制在独立覆盖层，不能继承触发控件的玻璃形变归属。
                             com.android.purebilibili.core.ui.blur.LocalAppGlassContainer provides null,

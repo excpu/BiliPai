@@ -468,7 +468,8 @@ internal fun alignMaterialSurfacesWithMiuix(
 
 internal fun resolveMiuixColorsFromMaterialBridge(
     bridge: MiuixMaterialBridge,
-    darkTheme: Boolean
+    darkTheme: Boolean,
+    useMonetMapping: Boolean = false,
 ): top.yukonga.miuix.kmp.theme.Colors {
     val base = if (darkTheme) miuixDarkColorScheme() else miuixLightColorScheme()
     val disabledPrimary = opaqueCompositeOver(bridge.primary.copy(alpha = 0.38f), bridge.surface)
@@ -503,7 +504,7 @@ internal fun resolveMiuixColorsFromMaterialBridge(
         primaryContainer = bridge.primaryContainer,
         onPrimaryContainer = bridge.onPrimaryContainer,
         secondary = bridge.outlineVariant,
-        onSecondary = resolveReadableTextColor(
+        onSecondary = if (useMonetMapping) bridge.outline else resolveReadableTextColor(
             candidate = bridge.outline,
             background = bridge.outlineVariant,
             fallback = bridge.onSurface,
@@ -526,7 +527,7 @@ internal fun resolveMiuixColorsFromMaterialBridge(
         onError = bridge.onError,
         background = bridge.background,
         onBackground = bridge.onBackground,
-        onBackgroundVariant = bridge.onSurfaceVariant,
+        onBackgroundVariant = if (useMonetMapping) bridge.primary else bridge.onSurfaceVariant,
         surface = bridge.surface,
         onSurface = bridge.onSurface,
         surfaceVariant = bridge.surfaceVariant,
@@ -978,10 +979,10 @@ fun PureBiliBiliTheme(
         seedPaletteStyle = seedPaletteStyle,
     )
 
-    val baseThemeRoleOverrides = remember(lightMaterialScheme, darkMaterialScheme, uiStyle, amoledDarkTheme) {
-        // 高级编辑器从当前样式的原生底色与文字开始，避免 Miuix 首次开启时套用 MD3 底色。
+    val baseThemeRoleOverrides = remember(lightMaterialScheme, darkMaterialScheme, uiStyle, amoledDarkTheme, liquidGlassEnabled) {
+        // 高级编辑器从当前材质的实际色板开始，保留背景、文字与控件的配对关系。
         themeRoleOverridesFromSchemes(
-            lightMaterialScheme, darkMaterialScheme, uiStyle, amoledDarkTheme,
+            lightMaterialScheme, darkMaterialScheme, uiStyle, amoledDarkTheme, liquidGlassEnabled,
         )
     }
     val effectiveThemeRoleOverrides = remember(md3ColorSource, themeRoleOverrides, uiStyle, baseThemeRoleOverrides, md3CustomColorHex, seedPaletteStyle) {
@@ -994,21 +995,21 @@ fun PureBiliBiliTheme(
         } else effective
     }
     val resolvedLightMaterialScheme = remember(
-        lightMaterialScheme, effectiveThemeRoleOverrides, colorStyle, colorSpec,
+        lightMaterialScheme, effectiveThemeRoleOverrides, colorStyle, colorSpec, uiStyle,
         liquidGlassEnabled, md3ColorSource, customPrimaryColor, colorContrast, seedPaletteStyle,
     ) {
         resolveConfiguredMaterialScheme(
             lightMaterialScheme, effectiveThemeRoleOverrides, false, colorStyle, colorSpec,
-            colorContrast, seedPaletteStyle, md3ColorSource, customPrimaryColor, liquidGlassEnabled,
+            colorContrast, seedPaletteStyle, md3ColorSource, customPrimaryColor, liquidGlassEnabled, uiStyle,
         )
     }
     val resolvedDarkMaterialScheme = remember(
-        darkMaterialScheme, effectiveThemeRoleOverrides, colorStyle, colorSpec,
+        darkMaterialScheme, effectiveThemeRoleOverrides, colorStyle, colorSpec, uiStyle,
         liquidGlassEnabled, md3ColorSource, customPrimaryColor, colorContrast, seedPaletteStyle,
     ) {
         resolveConfiguredMaterialScheme(
             darkMaterialScheme, effectiveThemeRoleOverrides, true, colorStyle, colorSpec,
-            colorContrast, seedPaletteStyle, md3ColorSource, customPrimaryColor, liquidGlassEnabled,
+            colorContrast, seedPaletteStyle, md3ColorSource, customPrimaryColor, liquidGlassEnabled, uiStyle,
         )
     }
     val lightEndpointPalette = remember(
@@ -1116,7 +1117,13 @@ fun PureBiliBiliTheme(
                 typography = materialTypography,
                 shapes = shapes,
                 motionScheme = materialMotionScheme,
-                content = { com.android.purebilibili.core.ui.ProvideAppContentColors(content) }
+                content = {
+                    com.android.purebilibili.core.ui.ProvideAppContentColors(
+                        nativeInteractionColors = com.android.purebilibili.core.ui.isMiuixNonGlassEnabled(uiStyle, liquidGlassEnabled),
+                        miuixContentColors = uiStyle == AppUiStyle.MIUIX,
+                        content = content,
+                    )
+                }
             )
         }
     }

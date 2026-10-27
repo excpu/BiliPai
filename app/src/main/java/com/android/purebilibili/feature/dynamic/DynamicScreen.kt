@@ -53,6 +53,7 @@ import androidx.compose.material3.Button
 import com.android.purebilibili.core.ui.components.AppListItem
 import com.android.purebilibili.core.ui.components.AppRadioButton
 import com.android.purebilibili.core.ui.components.AppText
+import com.android.purebilibili.core.ui.components.AppTextButton
 import com.android.purebilibili.feature.dynamic.components.DynamicPublishComposer
 import com.android.purebilibili.feature.dynamic.components.saveDynamicImageToGallery
 import com.android.purebilibili.feature.dynamic.components.DynamicShareToMessageDialog
@@ -243,6 +244,7 @@ fun DynamicScreen(
     val selfUser by viewModel.selfUser.collectAsStateWithLifecycle()
     val selfUid = accountIdentity.mid ?: 0L
     var showAuthorSearch by rememberSaveable(selfUid) { mutableStateOf(false) }
+    val authorSearchSource = com.android.purebilibili.core.ui.components.rememberAppGlassMenuSource()
     var authorFeedTabEnabled by rememberSaveable(selfUid) { mutableStateOf(false) }
     val authorSearchLoading by viewModel.authorSearchLoading.collectAsStateWithLifecycle()
     var handledScrollAccountGeneration by rememberSaveable {
@@ -282,6 +284,8 @@ fun DynamicScreen(
     var showRepostDialog by remember { mutableStateOf<String?>(null) }  // 存储要转发的动态ID
     var showPublishDialog by remember { mutableStateOf(false) }
     var editingDynamicId by remember { mutableStateOf<String?>(null) }
+    var editingReplyOid by remember { mutableStateOf<Long?>(null) }
+    var editingReplyType by remember { mutableIntStateOf(0) }
     var editingDraft by remember {
         mutableStateOf(com.android.purebilibili.data.model.response.DynamicPublishDraft(text = ""))
     }
@@ -292,6 +296,8 @@ fun DynamicScreen(
             onReport = { pendingReport = it },
             onEdit = {
                 editingDynamicId = it.dynamicId
+                editingReplyOid = it.replyOid
+                editingReplyType = it.replyType
                 editingDraft = it.initialDraft
                 showPublishDialog = true
             },
@@ -973,11 +979,19 @@ fun DynamicScreen(
                                     onTabSelected = onDynamicTabSelected,
                                     displayMode = displayMode,
                                     onDisplayModeChange = { viewModel.setDisplayMode(it) },
+                                    authorSearchSource = authorSearchSource,
                                     onAuthorSearchClick = {
                                         showAuthorSearch = true
                                         viewModel.prepareAuthorSearch()
                                     },
-                                    onPublishClick = { showPublishDialog = true },
+                                    onPublishClick = {
+                                        editingReplyOid = null
+                                        editingReplyType = 0
+                                        editingDynamicId = null
+                                        editingDraft = com.android.purebilibili.feature.dynamic.components.DynamicDraftStore.load(context, selfUid)
+                                            ?: com.android.purebilibili.data.model.response.DynamicPublishDraft(text = "")
+                                        showPublishDialog = true
+                                    },
                                     actionDockCollapsed = dynamicTopActionsCollapsed,
                                     onActionDockCollapsedChange = onDynamicTopActionsCollapsedChange,
                                     publishSkinDecoration = publishSkinDecoration,
@@ -1176,11 +1190,19 @@ fun DynamicScreen(
                                     onTabSelected = onDynamicTabSelected,
                                     displayMode = displayMode,
                                     onDisplayModeChange = { viewModel.setDisplayMode(it) },
+                                    authorSearchSource = authorSearchSource,
                                     onAuthorSearchClick = {
                                         showAuthorSearch = true
                                         viewModel.prepareAuthorSearch()
                                     },
-                                    onPublishClick = { showPublishDialog = true },
+                                    onPublishClick = {
+                                        editingReplyOid = null
+                                        editingReplyType = 0
+                                        editingDynamicId = null
+                                        editingDraft = com.android.purebilibili.feature.dynamic.components.DynamicDraftStore.load(context, selfUid)
+                                            ?: com.android.purebilibili.data.model.response.DynamicPublishDraft(text = "")
+                                        showPublishDialog = true
+                                    },
                                     actionDockCollapsed = dynamicTopActionsCollapsed,
                                     onActionDockCollapsedChange = onDynamicTopActionsCollapsedChange,
                                     publishSkinDecoration = publishSkinDecoration,
@@ -1300,7 +1322,35 @@ fun DynamicScreen(
         }
     }
 
-    if (showAuthorSearch) {
+    val authorSearchGlassHandled = com.android.purebilibili.core.ui.components.AppGlassMenu(
+        expanded = showAuthorSearch,
+        onDismissRequest = { showAuthorSearch = false },
+        source = authorSearchSource,
+        title = "搜索 UP 主",
+        placement = if (authorSearchSource.isAvailable)
+            com.android.purebilibili.core.ui.components.AppGlassMenuPlacement.ANCHOR_END
+        else com.android.purebilibili.core.ui.components.AppGlassMenuPlacement.CENTER,
+        minWidth = 0.dp,
+        maxWidth = 400.dp,
+        maxHeight = 520.dp,
+        interactiveContent = true,
+    ) {
+        val dismissAfterAnimation = com.android.purebilibili.core.ui.components.LocalAppGlassPanelDismissAction.current
+        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            com.android.purebilibili.feature.dynamic.components.DynamicAuthorSearchContent(
+                users = followedUsers,
+                isLoading = authorSearchLoading,
+                onAuthorSelected = { uid ->
+                    if (dismissAfterAnimation != null) dismissAfterAnimation { handleUserSelection(uid) }
+                    else { showAuthorSearch = false; handleUserSelection(uid) }
+                },
+            )
+            AppTextButton(onClick = {
+                if (dismissAfterAnimation != null) dismissAfterAnimation {} else showAuthorSearch = false
+            }) { AppText("关闭") }
+        }
+    }
+    if (showAuthorSearch && !authorSearchGlassHandled) {
         com.android.purebilibili.feature.dynamic.components.DynamicAuthorSearchDialog(
             users = followedUsers,
             isLoading = authorSearchLoading,
@@ -1337,9 +1387,14 @@ fun DynamicScreen(
             isEditing = isEditing,
             submitting = submitting,
             errorMessage = publishError,
+            replyOid = editingReplyOid,
+            replyType = editingReplyType,
+            draftAccountId = selfUid.takeIf { it > 0 && !isEditing },
             onDismiss = {
                 showPublishDialog = false
                 editingDynamicId = null
+                editingReplyOid = null
+                editingReplyType = 0
                 editingDraft = com.android.purebilibili.data.model.response.DynamicPublishDraft(text = "")
             },
             onSubmit = { draft ->
@@ -1349,11 +1404,16 @@ fun DynamicScreen(
                 if (editId.isNullOrBlank()) {
                     viewModel.publishDynamic(draft = draft, context = context) { success, msg ->
                         android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
-                        submitting = false
                         if (success) {
-                            showPublishDialog = false
-                            editingDraft = com.android.purebilibili.data.model.response.DynamicPublishDraft(text = "")
+                            dynamicMenuScope.launch {
+                                val clearResult = com.android.purebilibili.feature.dynamic.components.DynamicDraftStore.clear(context, selfUid)
+                                if (clearResult.isFailure) android.widget.Toast.makeText(context, "发布成功，但草稿清除失败", android.widget.Toast.LENGTH_LONG).show()
+                                submitting = false
+                                showPublishDialog = false
+                                editingDraft = com.android.purebilibili.data.model.response.DynamicPublishDraft(text = "")
+                            }
                         } else {
+                            submitting = false
                             publishError = msg
                         }
                     }

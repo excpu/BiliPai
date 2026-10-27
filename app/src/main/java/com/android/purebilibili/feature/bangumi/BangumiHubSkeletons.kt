@@ -197,7 +197,7 @@ internal fun BangumiFollowManagerSkeleton(modifier: Modifier = Modifier) {
                     color = blockColor,
                     shape = AppShapes.container(ContainerLevel.Chip),
                     modifier = Modifier
-                        .width(92.dp)
+                        .width(104.dp)
                         .aspectRatio(BANGUMI_POSTER_ASPECT_RATIO),
                 )
                 Column(

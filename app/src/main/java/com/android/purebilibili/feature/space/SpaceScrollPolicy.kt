@@ -1,8 +1,5 @@
 package com.android.purebilibili.feature.space
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import kotlinx.coroutines.flow.filterNotNull
@@ -31,19 +28,4 @@ internal suspend fun LazyGridState.measureSpacePinnedTabsHeightPx(): Int {
     return snapshotFlow {
         layoutInfo.visibleItemsInfo.firstOrNull { it.key == "space_tabs" }?.size?.height
     }.filterNotNull().first()
-}
-
-/** 浮动排序条按实际滚动距离露出/收回，松手后保留当前露出量。 */
-internal class SpaceFloatingSummaryState {
-    var heightPx: Float = 0f
-    var exposedHeightPx: Float by mutableFloatStateOf(0f)
-        private set
-
-    fun scrollBy(deltaPx: Float) {
-        exposedHeightPx = (exposedHeightPx + deltaPx).coerceIn(0f, heightPx.coerceAtLeast(0f))
-    }
-
-    fun reset() {
-        exposedHeightPx = 0f
-    }
 }

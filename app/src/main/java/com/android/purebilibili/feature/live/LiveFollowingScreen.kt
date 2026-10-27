@@ -209,6 +209,7 @@ fun LiveFollowingScreen(
                                 viewerText = item.watchedShow?.textLarge.orEmpty(),
                                 areaName = item.areaName,
                             ),
+                            enableSharedCoverTransition = true,
                             onClick = { onLiveClick(item.roomid, item.title, item.uname) },
                             onLongPress = { coverToSave = LiveRoomCardUiModel(item.roomid, item.title, item.displayCover(), item.uname, item.online, item.areaName) },
                         )

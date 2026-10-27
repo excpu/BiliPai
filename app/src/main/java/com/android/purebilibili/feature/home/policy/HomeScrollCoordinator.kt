@@ -27,12 +27,7 @@ internal data class HomeHeaderSettleTransition(
 internal fun resolveHomeRecommendationHeaderCollapseMode(
     homeHeaderCollapseMode: HomeHeaderCollapseMode
 ): HomeHeaderCollapseMode {
-    // 首页分类栏常驻；兼容旧收起范围，不改写存储，始终显示仍尊重用户选择。
-    return if (homeHeaderCollapseMode.hasAnyCollapse) {
-        HomeHeaderCollapseMode.SEARCH_ONLY
-    } else {
-        HomeHeaderCollapseMode.OFF
-    }
+    return homeHeaderCollapseMode
 }
 
 internal fun quantizeHomeHeaderOffset(

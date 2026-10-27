@@ -9,13 +9,13 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
 
 /** Visual work only; never gates audio, downloads, casting or persistence. */
-internal val LocalVisualWorkAllowed = compositionLocalOf { true }
+val LocalVisualWorkAllowed = compositionLocalOf { true }
 
-internal fun shouldRunVisualWork(pageActive: Boolean, resumed: Boolean, focused: Boolean): Boolean =
+fun shouldRunVisualWork(pageActive: Boolean, resumed: Boolean, focused: Boolean): Boolean =
     pageActive && resumed && focused
 
 @Composable
-internal fun rememberVisualWorkActive(): Boolean {
+fun rememberVisualWorkActive(): Boolean {
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     return shouldRunVisualWork(
         pageActive = LocalVisualWorkAllowed.current,

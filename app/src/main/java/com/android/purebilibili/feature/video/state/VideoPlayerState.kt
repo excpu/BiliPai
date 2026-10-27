@@ -1001,6 +1001,7 @@ fun rememberVideoPlayerState(
     fallbackResumePositionMs: Long = 0L,
     startPaused: Boolean = false,
     entryTransitionFinished: Boolean = true,
+    relatedPublicationAllowed: Boolean = true,
     playbackSessionActive: Boolean = true,
 ): VideoPlayerState {
 
@@ -1593,6 +1594,10 @@ fun rememberVideoPlayerState(
 
     // 网络请求与播放器绑定分开，进场门控只约束媒体准备。
     // 门控开放前先 attachPlayer，保证 prepare 使用当前播放器。
+    DisposableEffect(viewModel, relatedPublicationAllowed) {
+        viewModel.setRelatedPublicationAllowed(relatedPublicationAllowed)
+        onDispose { viewModel.setRelatedPublicationAllowed(true) }
+    }
     DisposableEffect(viewModel, player, entryTransitionFinished, playbackSessionActive) {
         if (playbackSessionActive && (entryTransitionFinished || reuseFromMiniPlayerAtEntry)) {
             viewModel.attachPlayer(player)

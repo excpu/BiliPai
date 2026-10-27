@@ -548,6 +548,11 @@ internal class MiuixVideoCardTransitionProgress(
             settleVisualReturn = 0f
             return 1f
         }
+        if (scope.role == NavRole.Outgoing && scope.settle?.phase != NavSettlePhase.Cancel && scope.settle != null &&
+            !(gestureTranslationEnabled && scope.gesture != null && scope.settle?.phase == NavSettlePhase.Commit)
+        ) {
+            return (1f + scope.relativeDepth).coerceIn(0f, 1f)
+        }
         val rawDepth = resolveMiuixVideoCardDepthProgress(scope.relativeDepth)
         val rawReturn = 1f - rawDepth
         val settle = scope.settle
@@ -666,10 +671,11 @@ internal class MiuixVideoCardTransitionProgress(
             } else {
                 if (settleVisualReturn >= 1f) 0f else (1f - visualReturn) / (1f - settleVisualReturn)
             }
-            lastFollowPose = releaseFollowPose
-                .settle(weight)
-                // 冲量从零建立再归零，不在释放首帧直接叠加旋转。
-                .withReleaseImpulse(settle.releaseVelocity, weight)
+            lastFollowPose = releaseFollowPose.settle(weight).let { pose ->
+                // 提交返回时直接收拢姿态，取消时仍保留原有回弹反馈。
+                if (settle.phase == NavSettlePhase.Cancel) pose.withReleaseImpulse(settle.releaseVelocity, weight)
+                else pose
+            }
         }
         return lastFollowPose
     }
@@ -734,7 +740,7 @@ internal class MiuixVideoCardTransitionProgress(
             isCoveredOrRevealedParent(scope) -> VideoCardTransitionSettleState.Held
             scope.settle?.phase == NavSettlePhase.Cancel -> VideoCardTransitionSettleState.CancelRestore
             isGestureInProgress() -> VideoCardTransitionSettleState.InteractiveSeek
-            scope.role == NavRole.Outgoing && scope.relativeDepth <= -1f -> VideoCardTransitionSettleState.Idle
+            scope.role == NavRole.Outgoing && scope.relativeDepth <= -1f && !scope.isRunning -> VideoCardTransitionSettleState.Idle
             scope.settle?.phase == NavSettlePhase.Commit || scope.role == NavRole.Outgoing ->
                 VideoCardTransitionSettleState.AutoReturn
             scope.role == NavRole.Incoming -> VideoCardTransitionSettleState.AutoEnter
@@ -780,12 +786,12 @@ internal fun resolveVideoHeroNavMotion(
     returning: Boolean,
     gestureTranslationEnabled: Boolean = false,
 ): NavMotion = NavMotion(
-    // A gesture can stop at raw depth 0.999. Give the reserved final card flight its own
-    // duration even when the navigation driver's remaining distance is below spring tolerance.
-    commit = NavSettleSpec.Tween(
-        durationMillis = spec.returnDurationMillis,
-        easing = spec.returnSpatialSpec,
-        matchReleaseVelocity = !spec.reducedMotion,
+    // 松手从当前值和速度接续官方弹簧；细化终点精度，避免接近落点时提前停止。
+    commit = NavSettleSpec.Spring(
+        dampingRatio = if (spec.reducedMotion || gestureTranslationEnabled) 1f else 0.82f,
+        stiffness = spec.commitStiffness * if (gestureTranslationEnabled && !spec.reducedMotion) 1.5f else 1f,
+        clampOvershoot = spec.reducedMotion || gestureTranslationEnabled,
+        visibilityThreshold = if (gestureTranslationEnabled) 0.001f else 0.0001f,
     ),
     cancel = if (gestureTranslationEnabled) NavSettleSpec.Tween(
         durationMillis = spec.cancelDurationMillis,
@@ -795,7 +801,12 @@ internal fun resolveVideoHeroNavMotion(
         dampingRatio = VideoHeroMotionTokens.SPRING_DAMPING,
         stiffness = spec.cancelStiffness,
     ),
-    programmatic = NavSettleSpec.Tween(
+    programmatic = if (returning && !spec.reducedMotion) NavSettleSpec.Spring(
+        dampingRatio = 0.82f,
+        stiffness = spec.commitStiffness,
+        clampOvershoot = false,
+        visibilityThreshold = 0.0001f,
+    ) else NavSettleSpec.Tween(
         durationMillis = if (returning) spec.returnDurationMillis else spec.enterDurationMillis,
         easing = if (returning) spec.returnSpatialSpec else spec.enterSpatialSpec,
     ),
@@ -838,6 +849,7 @@ internal fun miuixVideoCardNavTransition(
 
     return object : NavTransition {
         override val opaqueDepth: Float = fallback.opaqueDepth
+        override val retainsSpringOvershoot = true
         override val motion: NavMotion get() = if (returningProvider()) returnMotion else enterMotion
 
         // Source-page scrim and blur are rendered by the existing depth layer from this same
@@ -918,7 +930,7 @@ internal fun miuixVideoCardNavTransition(
                         val sourceScaleX = (bounds.width / width).coerceIn(0.05f, 1f)
                         val sourceScaleY = (bounds.height / height).coerceIn(0.05f, 1f)
                         val landingScale = resolveVideoHeroLandingScale(
-                            depth = morph,
+                            depth = 1f + scope.relativeDepth,
                             autoReturning = !heroMotionSpec.reducedMotion &&
                                 scope.settle != null && scope.settle?.phase != NavSettlePhase.Cancel &&
                                 scope.role == NavRole.Outgoing,
@@ -996,7 +1008,7 @@ internal fun miuixVideoCardNavTransition(
                         // 帧内记忆：同一帧多层 graphicsLayer 只推进一次状态机。
                         val morph = progress.visualDepthMemoized(scope)
                         val landingScale = resolveVideoHeroLandingScale(
-                            depth = morph,
+                            depth = 1f + scope.relativeDepth,
                             autoReturning = !heroMotionSpec.reducedMotion &&
                                 scope.settle != null && scope.settle?.phase != NavSettlePhase.Cancel &&
                                 scope.role == NavRole.Outgoing,

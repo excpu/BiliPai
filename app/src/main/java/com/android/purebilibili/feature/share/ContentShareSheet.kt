@@ -34,7 +34,8 @@ internal fun ContentShareSheet(source: ContentSharePayload, onDismiss: () -> Uni
             AppText("分享「${source.title}」", maxLines = 2)
             if (source.positionMs > 0) Row {
                 AppCheckbox(checked = precise, onCheckedChange = { precise = it })
-                AppText("从 ${source.positionMs / 60000}:${(source.positionMs / 1000 % 60).toString().padStart(2, '0')} 开始播放")
+                AppText("从 ${source.positionMs / 60000}:${(source.positionMs / 1000 % 60).toString().padStart(2, '0')} 开始播放" +
+                    if (source.dynamicType != null) "（动态分享除外）" else "", modifier = Modifier.weight(1f))
             }
             AppButton(onClick = { copyPlainTextToClipboard(context, payload.url, "内容链接"); onDismiss() }, modifier = Modifier.fillMaxWidth()) { AppText("复制链接") }
             AppButton(onClick = { target = "message" }, modifier = Modifier.fillMaxWidth()) { AppText("分享至消息") }

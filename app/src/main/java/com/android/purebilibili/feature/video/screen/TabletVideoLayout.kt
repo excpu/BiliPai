@@ -1445,9 +1445,10 @@ internal fun TabletSecondaryContent(
                             if (success.relatedLoadState == VideoPlaybackUiState.RelatedLoadState.LOADING) {
                                 item(key = "tablet_related_loading") {
                                     Column {
-                                        repeat(3) {
+                                        repeat(com.android.purebilibili.feature.video.ui.components.RELATED_VIDEO_SKELETON_ROW_COUNT) {
                                             com.android.purebilibili.feature.video.ui.components.RelatedVideoGridRowSkeleton(
                                                 cardLayout = relatedVideoCardLayout,
+                                                cardPresentation = cardPresentation,
                                             )
                                         }
                                     }
@@ -2051,10 +2052,15 @@ private fun TabletVideoInfoStaggeredItem(
 
 @Composable
 private fun TabletRelatedCarouselSkeleton(modifier: Modifier = Modifier) {
+    val animationGate = com.android.purebilibili.core.ui.rememberDecorativeAnimationGate()
     val color = com.android.purebilibili.core.ui.skeleton.rememberContentSkeletonBlockColor(
-        com.android.purebilibili.core.ui.skeleton.rememberContentSkeletonPulseState(),
+        com.android.purebilibili.core.ui.skeleton.rememberSkeletonSweepState(
+            animated = animationGate.active,
+            initialPosition = -1.5f,
+            durationMillis = 1500,
+        ),
     )
-    Column(modifier = modifier) {
+    Column(modifier = modifier.then(animationGate.modifier)) {
         Spacer(Modifier.height(24.dp))
         AppText(
             text = "更多推荐",

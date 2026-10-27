@@ -197,7 +197,7 @@ internal fun shouldReuseVideoContentTabBarLiquidGlassDock(
 internal fun resolveVideoContentTabBarStartPaddingDp(
     reusesLiquidGlassDock: Boolean,
     containerHorizontalPaddingDp: Int,
-): Int = if (reusesLiquidGlassDock) 0 else containerHorizontalPaddingDp
+): Int = if (reusesLiquidGlassDock) 16 else containerHorizontalPaddingDp
 
 internal fun resolveVideoContentTabBarLiquidChromeSpec(
     androidNativeLiquidGlassEnabled: Boolean,
@@ -1197,7 +1197,6 @@ internal fun VideoContentSection(
                     },
                 isPlayerCollapsed = isPlayerCollapsed,
                 miuixBackdrop = videoContentMiuixBackdrop,
-                liquidGlassTabsOffsetX = (-4).dp,
                 indicatorPositionProvider = {
                     pagerState.currentPage + pagerState.currentPageOffsetFraction
                 },
@@ -1532,9 +1531,10 @@ private fun VideoIntroTab(
         if (visibleRelatedVideos.isEmpty() &&
             (!relatedContentReady || relatedLoadState == VideoPlaybackUiState.RelatedLoadState.LOADING)
         ) {
-            items(count = 3, key = { "video_related_loading_$it" }, contentType = { "video_related_loading" }) {
+            items(count = com.android.purebilibili.feature.video.ui.components.RELATED_VIDEO_SKELETON_ROW_COUNT, key = { "video_related_loading_$it" }, contentType = { "video_related_loading" }) {
                 com.android.purebilibili.feature.video.ui.components.RelatedVideoGridRowSkeleton(
                     cardLayout = relatedVideoCardLayout,
+                    cardPresentation = cardPresentation,
                 )
             }
         } else if (visibleRelatedVideos.isEmpty()) {
@@ -1563,7 +1563,7 @@ private fun VideoIntroTab(
             if (!relatedContentReady) {
                 com.android.purebilibili.feature.video.ui.components.RelatedVideoGridRowSkeleton(
                     cardLayout = relatedVideoCardLayout,
-                    title = row.firstOrNull()?.title,
+                    cardPresentation = cardPresentation,
                 )
             } else CompositionLocalProvider(
                 LocalVideoCardSharedElementSourceRoute provides
@@ -2320,8 +2320,10 @@ internal fun VideoContentTabBar(
                 // Counts have a metadata reservation before comment loading starts. Data arrival
                 // updates text only, rather than starting a second width spring during entry.
                 liquidGlassAnimateLabelWidthChanges = false,
-                // Count-bearing detail tabs keep compact glass spacing; native layouts ignore this override.
+                // The glass indicator follows each equal-width slot, including the short first label.
+                // Native MD3 and Miuix renderers ignore these glass-only parameters.
                 liquidGlassLabelHorizontalPadding = 10.dp,
+                liquidGlassAdaptIndicatorToLabel = false,
                 selectedValue = selectedTabIndex,
                 onSelectionChange = onTabSelected,
                 // 仅移动页面显式指定的玻璃 dock；原生布局及右侧弹幕操作保持原位。

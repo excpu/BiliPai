@@ -175,7 +175,7 @@ internal fun SettingsSearchEmptyState(
             color = AppContentColors.secondaryText(),
             textAlign = TextAlign.Center,
         )
-        androidx.compose.material3.TextButton(
+        com.android.purebilibili.core.ui.components.AppTextButton(
             onClick = onClearQuery,
             modifier = Modifier.appElasticPress(),
         ) { AppText("清除搜索") }

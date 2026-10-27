@@ -15,6 +15,7 @@ import com.android.purebilibili.core.store.TokenManager
 import com.android.purebilibili.core.ui.AppContentColors
 import com.android.purebilibili.core.ui.AppTopBar
 import com.android.purebilibili.core.ui.ImmersiveAppScaffold
+import com.android.purebilibili.core.ui.LocalAppThemeConfig
 import com.android.purebilibili.core.ui.components.*
 import com.android.purebilibili.core.ui.rememberAppBackIcon
 import com.android.purebilibili.data.model.AccountLedgerKind
@@ -63,12 +64,25 @@ internal fun AccountLedgerContent(
                     navigationIcon = { AppIconButton(onClick = onBack) { AppIcon(rememberAppBackIcon(), "返回") } },
                     actions = { AppTextButton(onClick = onRefresh, enabled = loggedIn && !section.loading) { AppText("刷新") } },
                 )
-                AppNativeTabRow(
-                    options = AccountLedgerKind.entries.map { AppSegmentOption(it, it.title) },
-                    selectedValue = selected,
-                    onSelectionChange = onSelect,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                val options = AccountLedgerKind.entries.map { AppSegmentOption(it, it.title) }
+                if (LocalAppThemeConfig.current.liquidGlassEnabled) {
+                    AppThemeAdaptiveTabRow(
+                        options = options,
+                        selectedValue = selected,
+                        onSelectionChange = onSelect,
+                        role = AppTabRowRole.SECONDARY,
+                        // 等宽玻璃槽位的指示器覆盖完整槽位，原生标签栏保留原有几何。
+                        liquidGlassAdaptIndicatorToLabel = false,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                    )
+                } else {
+                    AppNativeTabRow(
+                        options = options,
+                        selectedValue = selected,
+                        onSelectionChange = onSelect,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
         },
     ) { padding ->

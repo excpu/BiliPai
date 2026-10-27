@@ -27,7 +27,7 @@ class BiliPaiNavDisplayHostStructureTest {
             .substringAfter("val videoFallbackTransition = resolveVideoCardFallbackTransition(")
             .substringBefore("val observedVideoFallbackTransition")
 
-        assertTrue(fallbackBlock.contains("predictiveBackExcludedTransition"))
+        assertTrue(fallbackBlock.contains("NavTransitions.MiuixDefault"))
         assertTrue(fallbackBlock.contains("globalTransition"))
         assertTrue(fallbackBlock.contains("animationStyle = style"))
         assertTrue(source.contains("videoCardTransitionProgress.observe(videoFallbackTransition)"))

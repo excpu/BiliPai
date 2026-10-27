@@ -122,6 +122,8 @@ import com.android.purebilibili.feature.video.ui.components.VideoAspectRatio
 import com.android.purebilibili.feature.video.ui.components.PlaybackSpeed
 import com.android.purebilibili.feature.video.ui.components.SpeedSelectionMenuPlacement
 import com.android.purebilibili.feature.video.ui.components.resolveSafeVideoAspectRatio
+import com.android.purebilibili.feature.video.ui.components.schedulePlayerViewViewportRefresh
+import com.android.purebilibili.feature.video.ui.components.cancelPlayerViewViewportRefresh
 import com.android.purebilibili.feature.video.ui.components.toFullscreenAspectRatio
 import com.android.purebilibili.feature.video.ui.components.toVideoAspectRatio
 import com.android.purebilibili.core.ui.common.copyOnLongPress
@@ -249,13 +251,8 @@ fun FullscreenPlayerOverlay(
         .getFullscreenAspectRatio(context)
         .collectAsStateWithLifecycle(initialValue = FullscreenAspectRatio.FIT
         )
-    var isVerticalContent by remember(player) {
-        mutableStateOf(
-            player?.videoSize?.let { size ->
-                size.width > 0 && size.height > size.width
-            } ?: false
-        )
-    }
+    var playerVideoSize by remember(player) { mutableStateOf(player?.videoSize ?: androidx.media3.common.VideoSize.UNKNOWN) }
+    val isVerticalContent = playerVideoSize.width > 0 && playerVideoSize.height > playerVideoSize.width
     var aspectRatio by remember {
         mutableStateOf(
             resolveSafeVideoAspectRatio(
@@ -417,17 +414,13 @@ fun FullscreenPlayerOverlay(
     DisposableEffect(player) {
         val exoPlayer = player
         if (exoPlayer == null) {
-            isVerticalContent = false
+            playerVideoSize = androidx.media3.common.VideoSize.UNKNOWN
             onDispose { }
         } else {
-            fun updateVerticalContent() {
-                val size = exoPlayer.videoSize
-                isVerticalContent = size.width > 0 && size.height > size.width
-            }
-            updateVerticalContent()
+            playerVideoSize = exoPlayer.videoSize
             val listener = object : Player.Listener {
                 override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
-                    isVerticalContent = videoSize.width > 0 && videoSize.height > videoSize.width
+                    playerVideoSize = videoSize
                 }
             }
             exoPlayer.addListener(listener)
@@ -1064,21 +1057,36 @@ fun FullscreenPlayerOverlay(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                val viewportLayout = remember(maxWidth, maxHeight, aspectRatio) {
+                val viewportLayout = remember(maxWidth, maxHeight, aspectRatio, playerVideoSize) {
                     with(density) {
                         com.android.purebilibili.feature.video.ui.components.resolveVideoViewportLayout(
                             containerWidth = maxWidth.roundToPx(),
                             containerHeight = maxHeight.roundToPx(),
-                            aspectRatio = aspectRatio
+                            aspectRatio = aspectRatio,
+                            videoWidth = playerVideoSize.width,
+                            videoHeight = playerVideoSize.height,
                         )
                     }
                 }
                 val viewportModifier = with(density) {
                     Modifier
-                        .size(
+                        .requiredSize(
                             width = viewportLayout.width.toDp(),
                             height = viewportLayout.height.toDp()
                         )
+                }
+
+                LaunchedEffect(playerViewRef, exoPlayer, viewportLayout, aspectRatio, playerVideoSize) {
+                    playerViewRef?.let { view ->
+                        schedulePlayerViewViewportRefresh(
+                            playerView = view,
+                            resizeMode = aspectRatio.playerResizeMode,
+                            expectedWidth = viewportLayout.width,
+                            expectedHeight = viewportLayout.height,
+                            videoWidth = playerVideoSize.width,
+                            videoHeight = playerVideoSize.height,
+                        )
+                    }
                 }
 
                 key(exoPlayer, useTextureSurface) {
@@ -1100,6 +1108,7 @@ fun FullscreenPlayerOverlay(
                         playerViewRef = playerView
                     },
                     onRelease = { view ->
+                        cancelPlayerViewViewportRefresh(view)
                         if (playerViewRef === view) playerViewRef = null
                         view.player = null
                     },

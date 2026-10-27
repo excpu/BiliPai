@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -24,6 +25,7 @@ import java.io.File
 @Composable
 internal fun ShareImagePreviewSheet(document: ShareImageDocument, onDismiss: () -> Unit, modifier: Modifier = Modifier, capturedFiles: List<File> = emptyList(), loadDocument: (suspend () -> ShareImageDocument)? = null) {
     val context = LocalContext.current
+    val isDarkTheme = com.android.purebilibili.core.ui.isAppInDarkTheme()
     val scope = rememberCoroutineScope()
     var footer by remember(document.key) { mutableStateOf(true) }
     var files by remember(document.key) { mutableStateOf<List<File>>(emptyList()) }
@@ -51,13 +53,13 @@ internal fun ShareImagePreviewSheet(document: ShareImageDocument, onDismiss: () 
         } catch (cancelled: CancellationException) { throw cancelled } catch (failure: Exception) { error = failure.message ?: "保存失败" } finally { busy = false }
     }
     val permission = rememberStoragePermissionState { granted -> if (granted) scope.launch { save() } }
-    LaunchedEffect(document, footer, retry) {
+    LaunchedEffect(document, footer, retry, isDarkTheme) {
         loading = true
         files = emptyList()
         error = null
         status = null
         savedFiles.clear()
-        try { files = capturedFiles.ifEmpty { renderShareImages(context, loadDocument?.invoke() ?: document, footer) } } catch (cancelled: CancellationException) { throw cancelled } catch (failure: Exception) { error = failure.message ?: "生成图片失败，请重试" } finally { loading = false }
+        try { files = capturedFiles.ifEmpty { renderShareImages(context, loadDocument?.invoke() ?: document, footer, isDarkTheme) } } catch (cancelled: CancellationException) { throw cancelled } catch (failure: Exception) { error = failure.message ?: "生成图片失败，请重试" } finally { loading = false }
     }
     AppModalBottomSheet(modifier = modifier, onDismissRequest = { if (!busy) onDismiss() }) {
         Column(Modifier.fillMaxWidth().heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.85f).dp).navigationBarsPadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -70,7 +72,7 @@ internal fun ShareImagePreviewSheet(document: ShareImageDocument, onDismiss: () 
                     AsyncImage(file, null, modifier = Modifier.fillMaxWidth().aspectRatio(bounds.outWidth.toFloat() / bounds.outHeight.coerceAtLeast(1)))
                 }
             }
-            if (capturedFiles.isEmpty()) Row {
+            if (capturedFiles.isEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
                 AppCheckbox(checked = footer, onCheckedChange = { if (!busy && !loading) footer = it })
                 AppText("显示二维码和署名页脚")
             }

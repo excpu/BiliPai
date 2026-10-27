@@ -282,6 +282,20 @@ fun AnimationSettingsContent(
             AppSegmentOption(BiliPaiPredictiveBackAnimationStyle.MIUIX, "Miuix"),
             AppSegmentOption(BiliPaiPredictiveBackAnimationStyle.SCALE, stringResource(R.string.animation_back_style_scale)),
             AppSegmentOption(BiliPaiPredictiveBackAnimationStyle.CLASSIC, stringResource(R.string.animation_back_style_classic)),
+            AppSegmentOption(BiliPaiPredictiveBackAnimationStyle.FADE, stringResource(R.string.animation_page_fade)),
+            AppSegmentOption(BiliPaiPredictiveBackAnimationStyle.FADE_IN, stringResource(R.string.animation_page_fade_in)),
+            AppSegmentOption(BiliPaiPredictiveBackAnimationStyle.RIGHT_TO_LEFT, stringResource(R.string.animation_page_right_to_left)),
+            AppSegmentOption(BiliPaiPredictiveBackAnimationStyle.LEFT_TO_RIGHT, stringResource(R.string.animation_page_left_to_right)),
+            AppSegmentOption(BiliPaiPredictiveBackAnimationStyle.UP_TO_DOWN, stringResource(R.string.animation_page_up_to_down)),
+            AppSegmentOption(BiliPaiPredictiveBackAnimationStyle.DOWN_TO_UP, stringResource(R.string.animation_page_down_to_up)),
+            AppSegmentOption(BiliPaiPredictiveBackAnimationStyle.RIGHT_TO_LEFT_FADE, stringResource(R.string.animation_page_right_to_left_fade)),
+            AppSegmentOption(BiliPaiPredictiveBackAnimationStyle.LEFT_TO_RIGHT_FADE, stringResource(R.string.animation_page_left_to_right_fade)),
+            AppSegmentOption(BiliPaiPredictiveBackAnimationStyle.ZOOM, stringResource(R.string.animation_page_zoom)),
+            AppSegmentOption(BiliPaiPredictiveBackAnimationStyle.CIRCULAR_REVEAL, stringResource(R.string.animation_page_circular_reveal)),
+            AppSegmentOption(BiliPaiPredictiveBackAnimationStyle.IOS, stringResource(R.string.animation_page_ios)),
+            AppSegmentOption(BiliPaiPredictiveBackAnimationStyle.SIZE, stringResource(R.string.animation_page_size)),
+            AppSegmentOption(BiliPaiPredictiveBackAnimationStyle.SHARED_AXIS, stringResource(R.string.animation_page_shared_axis)),
+            AppSegmentOption(BiliPaiPredictiveBackAnimationStyle.NO_TRANSITION, stringResource(R.string.animation_page_instant)),
     )
     val predictiveBackExitDirection = remember(appNavigationSettings.predictiveBackExitDirection) {
         BiliPaiPredictiveBackExitDirection.fromStorageValue(

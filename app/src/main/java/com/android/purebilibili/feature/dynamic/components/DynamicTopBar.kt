@@ -31,6 +31,7 @@ import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import com.android.purebilibili.core.ui.components.AppIcon
 import androidx.compose.material3.MaterialTheme
 import com.android.purebilibili.core.ui.components.AppIconButton
+import com.android.purebilibili.core.ui.components.appGlassMenuSource
 import com.android.purebilibili.core.ui.components.AppWindowAction
 import com.android.purebilibili.core.ui.components.AppWindowActionMenu
 import androidx.compose.runtime.Composable
@@ -110,6 +111,7 @@ fun DynamicTopBarWithTabs(
     /** True when the horizontal UP user list is visible directly below the bar. */
     shouldShowHorizontalUserList: Boolean = false,
     onAuthorSearchClick: (() -> Unit)? = null,
+    authorSearchSource: com.android.purebilibili.core.ui.components.AppGlassMenuSource? = null,
 ) {
     val density = LocalDensity.current
     val statusBarHeight = WindowInsets.statusBars.getTop(density).let { with(density) { it.toDp() } }
@@ -241,7 +243,12 @@ fun DynamicTopBarWithTabs(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (onAuthorSearchClick != null) {
-                            AppIconButton(onClick = onAuthorSearchClick) {
+                            AppIconButton(
+                                onClick = onAuthorSearchClick,
+                                modifier = authorSearchSource?.let {
+                                    Modifier.appGlassMenuSource(it)
+                                } ?: Modifier,
+                            ) {
                                 AppIcon(
                                     imageVector = Icons.Outlined.Search,
                                     contentDescription = "搜索 UP 主动态",
@@ -298,20 +305,20 @@ fun DynamicTopBarWithTabs(
                                 }
                             }
                         }
+                        // 玻璃菜单直接显示位置选项，单层面板沿用更多按钮的锚点；
+                        // 关闭玻璃时保留原生菜单原有的分级结构。
+                        val positionActions = DynamicDisplayMode.entries.map { mode ->
+                            AppWindowAction(
+                                label = resolveDynamicDisplayModeLabel(mode),
+                                selected = displayMode == mode,
+                                onClick = { onDisplayModeChange(mode) },
+                            )
+                        }
+                        val useGlassPositionMenu = com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled &&
+                            com.android.purebilibili.core.ui.components.appGlassMenuAvailable()
                         AppWindowActionMenu(
-                            groups = listOf(
-                                listOf(
-                                    AppWindowAction(
-                                        label = "关注列表位置",
-                                        children = DynamicDisplayMode.entries.map { mode ->
-                                            AppWindowAction(
-                                                label = resolveDynamicDisplayModeLabel(mode),
-                                                selected = displayMode == mode,
-                                                onClick = { onDisplayModeChange(mode) },
-                                            )
-                                        },
-                                    ),
-                                ),
+                            groups = if (useGlassPositionMenu) listOf(positionActions) else listOf(
+                                listOf(AppWindowAction(label = "关注列表位置", children = positionActions)),
                             ),
                         ) {
                             AppIcon(

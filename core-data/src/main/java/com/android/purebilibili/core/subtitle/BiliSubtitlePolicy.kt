@@ -94,7 +94,9 @@ enum class SubtitleAutoPreference {
     OFF,
     ON,
     WITHOUT_AI,
-    AUTO
+    AUTO,
+    /** 只自动启用中文字幕（含 AI 中文），没有中文字幕时不开启。 */
+    CHINESE_ONLY
 }
 
 private val SUBTITLE_JSON = Json {
@@ -288,8 +290,25 @@ fun parseBiliSubtitleBody(rawJson: String): List<SubtitleCue> {
     }
 }
 
+/**
+ * B 站 AI 字幕的 lan 形如 ai-zh / ai-en，真实语言码在 ai- 之后。
+ * 归一化后才能与普通轨道按同一语言家族比较。
+ */
+private fun stripSubtitleAiLanguagePrefix(languageCode: String?): String {
+    val normalized = languageCode?.trim()?.lowercase().orEmpty()
+    if (normalized.isEmpty()) return ""
+    return normalized.removePrefix("ai-").ifBlank { normalized }
+}
+
+private fun isChineseSubtitleLanguage(languageCode: String?, languageLabel: String? = null): Boolean {
+    if (stripSubtitleAiLanguagePrefix(languageCode).startsWith("zh")) return true
+    // 少数接口只给 lan_doc，没有可用的语言码
+    val label = languageLabel.orEmpty()
+    return label.contains("中文") || label.contains("汉语") || label.contains("简体")
+}
+
 private fun resolveLanguageFamily(languageCode: String?): String? {
-    val normalized = languageCode?.trim()?.takeIf { it.isNotBlank() } ?: return null
+    val normalized = stripSubtitleAiLanguagePrefix(languageCode).takeIf { it.isNotBlank() } ?: return null
     return normalized.substringBefore('-').lowercase()
 }
 
@@ -319,12 +338,11 @@ fun resolveDefaultSubtitleLanguages(
         )
     }
 
+    // 中文字幕（含 AI 中文）优先于其它语言；中文内部官方优先于 AI。
     val primary = tracks.firstOrNull { track ->
-        track.lan.equals("zh-Hans", ignoreCase = true)
+        isChineseSubtitleLanguage(track.lan, track.lanDoc) && !isLikelyAiSubtitleTrack(track)
     } ?: tracks.firstOrNull { track ->
-        track.lan.equals("zh-CN", ignoreCase = true)
-    } ?: tracks.firstOrNull { track ->
-        track.lan.startsWith("zh", ignoreCase = true)
+        isChineseSubtitleLanguage(track.lan, track.lanDoc)
     } ?: findTrackByPreferredLanguage(
         tracks = tracks,
         preferredLanguage = preferredPrimaryLanguage
@@ -388,7 +406,9 @@ fun resolveSubtitleDisplayModeByAutoPreference(
     hasSecondaryTrack: Boolean,
     primaryTrackLikelyAi: Boolean,
     secondaryTrackLikelyAi: Boolean,
-    isMuted: Boolean
+    isMuted: Boolean,
+    primaryTrackLanguage: String?,
+    secondaryTrackLanguage: String?
 ): SubtitleDisplayMode {
     val defaultMode = resolveDefaultSubtitleDisplayMode(
         hasPrimaryTrack = hasPrimaryTrack,
@@ -412,6 +432,14 @@ fun resolveSubtitleDisplayModeByAutoPreference(
         SubtitleAutoPreference.AUTO -> {
             if (!defaultModeLikelyAi || isMuted) defaultMode else SubtitleDisplayMode.OFF
         }
+        // 只开中文字幕：主轨是中文就只开主轨（不叠加英文副轨），否则退回副轨，都没有就关闭。
+        SubtitleAutoPreference.CHINESE_ONLY -> when {
+            hasPrimaryTrack && isChineseSubtitleLanguage(primaryTrackLanguage) ->
+                SubtitleDisplayMode.PRIMARY_ONLY
+            hasSecondaryTrack && isChineseSubtitleLanguage(secondaryTrackLanguage) ->
+                SubtitleDisplayMode.SECONDARY_ONLY
+            else -> SubtitleDisplayMode.OFF
+        }
     }
 }
 
@@ -434,7 +462,9 @@ fun resolveSubtitlePreferenceSession(
         hasSecondaryTrack = hasSecondaryTrack,
         primaryTrackLikelyAi = primaryTrackLikelyAi,
         secondaryTrackLikelyAi = secondaryTrackLikelyAi,
-        isMuted = isMuted
+        isMuted = isMuted,
+        primaryTrackLanguage = primaryLanguage,
+        secondaryTrackLanguage = secondaryLanguage
     )
     return SubtitlePreferenceSession(
         key = sessionKey,

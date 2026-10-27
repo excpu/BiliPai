@@ -30,7 +30,11 @@ fun rememberSkeletonBreathingEnabled(): Boolean {
 
 /** NaN 表示静态占位；只有开关开启且页面可见、允许动态效果时才创建动画。 */
 @Composable
-fun rememberSkeletonSweepState(animated: Boolean = true): State<Float> {
+fun rememberSkeletonSweepState(
+    animated: Boolean = true,
+    initialPosition: Float = -0.5f,
+    durationMillis: Int = 1000,
+): State<Float> {
     val enabled = rememberSkeletonBreathingEnabled()
     val active = com.android.purebilibili.core.ui.rememberVisualWorkActive()
     val reduceMotion = com.android.purebilibili.core.ui.motion.rememberSystemReduceMotion()
@@ -38,10 +42,10 @@ fun rememberSkeletonSweepState(animated: Boolean = true): State<Float> {
         return rememberUpdatedState(Float.NaN)
     }
     return rememberInfiniteTransition(label = "skeletonSweep").animateFloat(
-        initialValue = -0.5f,
+        initialValue = initialPosition,
         targetValue = 1.5f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = LinearEasing),
+            animation = tween(durationMillis, easing = LinearEasing),
             repeatMode = RepeatMode.Restart,
         ),
         label = "skeletonSweepPosition",

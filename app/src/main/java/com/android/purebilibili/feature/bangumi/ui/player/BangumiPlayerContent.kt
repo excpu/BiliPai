@@ -1,9 +1,20 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 // 文件路径: feature/bangumi/ui/player/BangumiPlayerContent.kt
 package com.android.purebilibili.feature.bangumi.ui.player
 
 import com.android.purebilibili.feature.video.viewmodel.CommentSubjectKey
 import com.android.purebilibili.feature.video.viewmodel.resolveReplyCount
 import com.android.purebilibili.core.ui.AppContentColors
+import com.android.purebilibili.core.ui.AppIcons
+import com.android.purebilibili.core.ui.rememberAppShareIcon
+import com.android.purebilibili.core.ui.rememberAppWatchLaterIcon
+import com.android.purebilibili.feature.video.ui.section.BiliActionButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ThumbUp
+import androidx.compose.material.icons.rounded.ThumbUp
+import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material.icons.rounded.Star
 
 import com.android.purebilibili.navigation.animatePagerSelection
 import com.android.purebilibili.core.ui.resolveFilledButtonContainerColor
@@ -89,6 +100,19 @@ fun BangumiPlayerContent(
     onCommentUrlClick: ((String) -> Unit)? = null,
     onDownloadClick: () -> Unit = {},
     onShareClick: () -> Unit = {},
+    isLiked: Boolean = false,
+    likeStatusKnown: Boolean = false,
+    coinCount: Int = 0,
+    onToggleLike: () -> Unit = {},
+    onCoin: () -> Unit = {},
+    isFavorited: Boolean? = null,
+    onFavorite: () -> Unit = {},
+    inWatchLater: Boolean? = null,
+    watchLaterBusy: Boolean = false,
+    onWatchLater: () -> Unit = {},
+    onSeasonClick: (Long) -> Unit = {},
+    tripleInProgress: Boolean = false,
+    onTriple: () -> Unit = {},
     commentsOnly: Boolean = false,
     isVideoPlaying: Boolean = false,
     handleCommentFeedback: Boolean = true,
@@ -458,6 +482,84 @@ fun BangumiPlayerContent(
             }
         }
 
+        if (!isCourse) {
+            item {
+                var confirmTriple by remember(currentEpisode.id) { mutableStateOf(false) }
+                val actionColor = MaterialTheme.colorScheme.primary
+                val episodeActionEnabled = currentEpisode.aid > 0L && !tripleInProgress
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        BiliActionButton(
+                            icon = if (likeStatusKnown && isLiked) Icons.Rounded.ThumbUp else Icons.Outlined.ThumbUp,
+                            text = if (tripleInProgress) "处理中" else if (likeStatusKnown && isLiked) "已点赞" else "点赞",
+                            isActive = likeStatusKnown && isLiked,
+                            activeColor = actionColor,
+                            enabled = episodeActionEnabled && likeStatusKnown,
+                            onClick = onToggleLike,
+                            onLongClick = if (currentEpisode.id > 0L && !tripleInProgress) {
+                                { confirmTriple = true }
+                            } else null,
+                        )
+                    }
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        BiliActionButton(
+                            icon = AppIcons.BiliCoin,
+                            text = if (coinCount > 0) "已投币 $coinCount" else "投币",
+                            isActive = coinCount > 0,
+                            activeColor = actionColor,
+                            enabled = episodeActionEnabled,
+                            onClick = onCoin,
+                        )
+                    }
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        BiliActionButton(
+                            icon = if (isFavorited == true) Icons.Rounded.Star else Icons.Outlined.StarBorder,
+                            text = if (isFavorited == true) "已收藏" else "收藏",
+                            isActive = isFavorited == true,
+                            activeColor = actionColor,
+                            enabled = episodeActionEnabled,
+                            onClick = onFavorite,
+                        )
+                    }
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        BiliActionButton(
+                            icon = rememberAppShareIcon(),
+                            text = "分享",
+                            isActive = false,
+                            activeColor = actionColor,
+                            onClick = onShareClick,
+                        )
+                    }
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        BiliActionButton(
+                            icon = rememberAppWatchLaterIcon(),
+                            text = if (watchLaterBusy) "处理中" else if (inWatchLater == true) "已添加" else "稍后看",
+                            isActive = inWatchLater == true,
+                            activeColor = actionColor,
+                            enabled = currentEpisode.aid > 0L && !watchLaterBusy,
+                            onClick = onWatchLater,
+                        )
+                    }
+                }
+                if (confirmTriple) {
+                    AppAlertDialog(
+                        onDismissRequest = { confirmTriple = false },
+                        title = { AppText("一键三连") },
+                        text = { AppText("将尝试点赞、投币和收藏当前剧集。") },
+                        confirmButton = {
+                            com.android.purebilibili.core.ui.AppDialogAction(onClick = { confirmTriple = false; onTriple() }) { AppText("确定") }
+                        },
+                        dismissButton = {
+                            com.android.purebilibili.core.ui.AppDialogAction(onClick = { confirmTriple = false }) { AppText("取消") }
+                        },
+                    )
+                }
+            }
+        }
+
         if (isCourse) {
             item {
                 Row(
@@ -485,6 +587,33 @@ fun BangumiPlayerContent(
                         )
                     ) {
                         AppText("分享课程")
+                    }
+                }
+            }
+        }
+
+        if (!isCourse && detail.seasons.orEmpty().count { it.seasonId > 0L } > 1) {
+            item {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    AppText("相关季度", style = MaterialTheme.typography.titleMedium)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(detail.seasons.orEmpty().filter { it.seasonId > 0L }.distinctBy { it.seasonId }, key = { it.seasonId }) { season ->
+                            val selected = season.seasonId == detail.seasonId
+                            AppTextButton(onClick = { onSeasonClick(season.seasonId) }, enabled = !selected) {
+                                val title = season.seasonTitle.ifBlank { season.title }.ifBlank { "季度" }
+                                // The current season is non-clickable but remains selected,
+                                // so preserve its accent instead of the disabled button tint.
+                                CompositionLocalProvider(
+                                    com.android.purebilibili.core.ui.LocalAppButtonSlotColorCorrectionEnabled provides !selected,
+                                ) {
+                                    AppText(
+                                        if (selected) "$title · 当前" else title,
+                                        color = if (selected) AppContentColors.accent() else AppContentColors.primaryText(),
+                                        maxLines = 1,
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
