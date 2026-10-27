@@ -191,3 +191,6 @@ reasonix.toml
 /plugins/samples/watch-compass/README.md
 /plugins/samples/winter-cloud-skin/README.md
 /plugins/sdk/README.md
+
+
+/gradle/gradle-daemon-jvm.properties
