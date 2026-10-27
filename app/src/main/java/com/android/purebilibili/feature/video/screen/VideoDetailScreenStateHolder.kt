@@ -4582,7 +4582,11 @@ internal fun VideoDetailScreenStateHolder(
                         // PiliPlus 使用 MediaQuery.viewPadding.top 作为独立 AppBar 高度。
                         // Android 侧读取根窗口 ignoringVisibility inset，并用系统 dimen 兜底。
                         val insetDensity = LocalDensity.current
-                        val collapsedSystemBarInset = remember(view, configuration.densityDpi) {
+                        val measuredSystemBarInset = remember(
+                            view,
+                            configuration.densityDpi,
+                            configuration.orientation,
+                        ) {
                             val rootInsetPx = ViewCompat.getRootWindowInsets(view)
                                 ?.getInsetsIgnoringVisibility(
                                     WindowInsetsCompat.Type.statusBars() or
@@ -4602,6 +4606,9 @@ internal fun VideoDetailScreenStateHolder(
                             }
                             with(insetDensity) { maxOf(rootInsetPx, resourceInsetPx).toDp() }
                         }
+                        // 退出全屏时根窗口 inset / 系统 dimen 可能仍是横屏值（如 Pixel），小于实时的
+                        // 状态栏沉浸带；播放器高度必须不低于「16:9 画面 + 沉浸带」，否则画面被压出左右黑边。
+                        val collapsedSystemBarInset = maxOf(measuredSystemBarInset, playerTopInset)
                         val inlinePlayerHeight = inlineViewportHeight + collapsedSystemBarInset
                         // 全屏容器高：全屏（横屏窗口）取窗口高；收起动画起点（竖屏窗口）取
                         // 横屏窗口高的等效几何 ≈ 竖屏窗口宽。此前取 screenHeightDp，旋转回
