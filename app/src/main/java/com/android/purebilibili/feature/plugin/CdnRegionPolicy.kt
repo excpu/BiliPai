@@ -5,6 +5,7 @@ import com.android.purebilibili.plugin.sdk.PlaybackCdnCandidate
 import com.android.purebilibili.plugin.sdk.PlaybackCdnCandidateSource
 import com.android.purebilibili.plugin.sdk.CdnHealthEvent
 import com.android.purebilibili.plugin.sdk.CdnLineDiagnostic
+import com.android.purebilibili.plugin.sdk.PlaybackCdnRewriteResult
 import java.net.URI
 
 @Serializable
@@ -104,6 +105,84 @@ internal fun applyPlaybackCdnPreference(
 private fun rewriteCandidateHost(url: String, host: String, unrestricted: Boolean): String? =
     if (unrestricted) rewriteCdnUrlHost(url, host) else rewriteBilivideoHost(url, host)
 
+/** 番剧/课程起播前解析出的播放地址。 */
+internal data class BangumiCdnUrlSelection(
+    val videoUrl: String?,
+    val audioUrl: String?,
+)
+
+/**
+ * 解析番剧单集的播放地址：先让插件重排候选，再应用用户在设置页选择的首选线路。
+ *
+ * 剧集播放器原先只调用 [PlaybackCdnPlugin.rewritePlaybackCandidates]（安全模式，仅重排已有
+ * 地址、从不合成新主机），完全没有应用「首选线路 / 自定义线路」，所以 CDN 自选在番剧、课程
+ * 与 PGC 多 P 里不生效。这里与 PUGV 的选线语义保持一致：只替换 Host（端口），路径与签名
+ * 参数原样保留；主机非法或偏好为「基础URL」时不改写。
+ */
+internal fun resolveBangumiCdnUrls(
+    videoUrls: List<String>,
+    audioUrls: List<String>,
+    pluginRewrite: PlaybackCdnRewriteResult? = null,
+    preference: PlaybackCdnPreference = PlaybackCdnPreference.BASE_URL,
+    customHost: String? = null,
+): BangumiCdnUrlSelection {
+    val rawVideoUrls = videoUrls.filter { it.isNotBlank() }
+    val rawAudioUrls = audioUrls.filter { it.isNotBlank() }
+    val pluginVideoUrls = pluginRewrite?.videoUrls?.filter { it.isNotBlank() }.orEmpty()
+    val pluginAudioUrls = pluginRewrite?.audioUrls?.filter { it.isNotBlank() }.orEmpty()
+    val orderedVideoUrls = pluginVideoUrls.ifEmpty { rawVideoUrls }
+    val orderedAudioUrls =
+        if (pluginRewrite == null) rawAudioUrls else pluginAudioUrls.ifEmpty { rawAudioUrls }
+    if (orderedVideoUrls.isEmpty()) {
+        return BangumiCdnUrlSelection(null, orderedAudioUrls.firstOrNull())
+    }
+    val candidates = buildPlaybackCdnCandidates(orderedVideoUrls, orderedAudioUrls)
+    val selected = applyPlaybackCdnPreference(candidates, preference, customHost).firstOrNull()
+        ?: return BangumiCdnUrlSelection(orderedVideoUrls.first(), orderedAudioUrls.firstOrNull())
+    return BangumiCdnUrlSelection(
+        videoUrl = selected.videoUrl.takeIf { it.isNotBlank() } ?: orderedVideoUrls.first(),
+        audioUrl = selected.audioUrl?.takeIf { it.isNotBlank() } ?: orderedAudioUrls.firstOrNull(),
+    )
+}
+
+/**
+ * 多 P / MP4 分段地址的线路改写。
+ *
+ * 分段必须严格按原顺序播放，因此这里不参与「备用URL」轮转，只在偏好线路带有主机时逐个替换
+ * Host；无法改写的分段保持原地址，避免整集直接播不了。
+ */
+internal fun resolveBangumiCdnSegmentUrls(
+    segmentUrls: List<String>,
+    preference: PlaybackCdnPreference = PlaybackCdnPreference.BASE_URL,
+    customHost: String? = null,
+): List<String> {
+    if (segmentUrls.isEmpty()) return segmentUrls
+    val useCustomHost = preference == PlaybackCdnPreference.CUSTOM
+    val host = if (useCustomHost) {
+        normalizePlaybackCdnHost(customHost) ?: return segmentUrls
+    } else {
+        preference.host ?: return segmentUrls
+    }
+    return segmentUrls.map { url -> rewriteCandidateHost(url, host, useCustomHost) ?: url }
+}
+
+/**
+ * 判断两个播放地址是否指向同一份资源。
+ *
+ * `playUrl` 可能已被 CDN 自选改写过 Host，直接比较整串 URL 会与缓存的 DASH 轨道失配，
+ * 导致按码率重选轨道（编码回退）。这里忽略主机与查询串，只比较路径。
+ */
+internal fun isSameCdnResource(url: String?, other: String?): Boolean {
+    val left = url?.takeIf { it.isNotBlank() } ?: return false
+    val right = other?.takeIf { it.isNotBlank() } ?: return false
+    if (left == right) return true
+    val leftPath = runCatching { URI(left).rawPath }.getOrNull()?.takeIf { it.isNotEmpty() }
+        ?: return false
+    val rightPath = runCatching { URI(right).rawPath }.getOrNull()?.takeIf { it.isNotEmpty() }
+        ?: return false
+    return leftPath == rightPath
+}
+
 /** 首帧超时回退的默认时长（秒），与原有硬编码 2.5s 行为一致。 */
 const val PLAYBACK_CDN_FALLBACK_DEFAULT_TIMEOUT_SECONDS = 2.5f
 
@@ -151,9 +230,24 @@ internal fun normalizePlaybackCdnHost(input: String?): String? {
         .trim()
         .lowercase()
     if (authority.isEmpty() || authority.contains('@') || authority.any { it.isWhitespace() }) return null
-    val hostPart = if (authority.startsWith("[")) authority.substringBefore(']', authority) else authority.substringBefore(':')
-    val portPart = if (authority.startsWith("[")) authority.substringAfter(']', "").removePrefix(":")
-    else if (hostPart == authority) "" else authority.substringAfter(':')
+    // IPv6 字面量必须连同首尾方括号一起作为主机部分，否则无法与 [ipv6] 的正则匹配。
+    val bracketed = authority.startsWith("[")
+    val hostPart: String
+    val portPart: String
+    if (bracketed) {
+        val closeIndex = authority.indexOf(']')
+        if (closeIndex < 0) return null
+        hostPart = authority.substring(0, closeIndex + 1)
+        val rest = authority.substring(closeIndex + 1)
+        portPart = when {
+            rest.isEmpty() -> ""
+            rest.startsWith(":") -> rest.substring(1)
+            else -> return null
+        }
+    } else {
+        hostPart = authority.substringBefore(':')
+        portPart = if (hostPart == authority) "" else authority.substringAfter(':')
+    }
     val hostValid = if (hostPart.startsWith("[")) {
         hostPart.endsWith("]") && hostPart.matches(playbackCdnIpv6Pattern)
     } else {

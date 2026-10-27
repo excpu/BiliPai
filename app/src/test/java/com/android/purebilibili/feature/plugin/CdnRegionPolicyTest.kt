@@ -569,4 +569,109 @@ class CdnRegionPolicyTest {
         assertEquals(60_000L, playbackCdnFallbackTimeoutMillisFromSeconds(60f))
         assertEquals(1L, playbackCdnFallbackTimeoutMillisFromSeconds(0f))
     }
+
+    @Test
+    fun `bangumi urls honor custom host with path and query preserved`() {
+        val video = "https://upos-sz-mirrorcos.bilivideo.com/upgcxcode/99/1/video.m4s?deadline=17&gen=playurlv2"
+        val audio = "https://upos-sz-mirrorcos.bilivideo.com/upgcxcode/99/1/audio.m4s?deadline=17&gen=playurlv2"
+
+        val selection = resolveBangumiCdnUrls(
+            videoUrls = listOf(video),
+            audioUrls = listOf(audio),
+            preference = PlaybackCdnPreference.CUSTOM,
+            customHost = "proxy.example.com:8443",
+        )
+
+        assertEquals("https://proxy.example.com:8443/upgcxcode/99/1/video.m4s?deadline=17&gen=playurlv2", selection.videoUrl)
+        assertEquals("https://proxy.example.com:8443/upgcxcode/99/1/audio.m4s?deadline=17&gen=playurlv2", selection.audioUrl)
+    }
+
+    @Test
+    fun `bangumi urls apply builtin mirror preference`() {
+        val selection = resolveBangumiCdnUrls(
+            videoUrls = listOf("https://mx-bcache-c1.bilivideo.com/upgcxcode/video.m4s?sign=1"),
+            audioUrls = emptyList(),
+            preference = PlaybackCdnPreference.HW,
+        )
+
+        assertEquals("https://upos-sz-mirrorhw.bilivideo.com/upgcxcode/video.m4s?sign=1", selection.videoUrl)
+        assertNull(selection.audioUrl)
+    }
+
+    @Test
+    fun `bangumi urls keep original when preference is base url or custom host invalid`() {
+        val video = "https://upos-sz-mirrorcos.bilivideo.com/video.m4s?sign=1"
+
+        assertEquals(
+            video,
+            resolveBangumiCdnUrls(listOf(video), emptyList(), preference = PlaybackCdnPreference.BASE_URL).videoUrl,
+        )
+        assertEquals(
+            video,
+            resolveBangumiCdnUrls(listOf(video), emptyList(), preference = PlaybackCdnPreference.CUSTOM, customHost = "bad host").videoUrl,
+        )
+        assertNull(resolveBangumiCdnUrls(emptyList(), emptyList()).videoUrl)
+    }
+
+    @Test
+    fun `bangumi urls apply preference on top of plugin reorder`() {
+        val pluginVideo = "https://plugin.example.org/video.m4s?sign=1"
+        val rewrite = com.android.purebilibili.plugin.sdk.PlaybackCdnRewriteResult(
+            candidates = listOf(
+                com.android.purebilibili.plugin.sdk.PlaybackCdnCandidate(
+                    videoUrl = pluginVideo,
+                    audioUrl = "",
+                    source = PlaybackCdnCandidateSource.CUSTOM,
+                )
+            ),
+            regionLabel = "plugin",
+        )
+
+        val selection = resolveBangumiCdnUrls(
+            videoUrls = listOf("https://upos-sz-mirrorcos.bilivideo.com/video.m4s?sign=1"),
+            audioUrls = emptyList(),
+            pluginRewrite = rewrite,
+            preference = PlaybackCdnPreference.CUSTOM,
+            customHost = "cdn.example.net",
+        )
+
+        assertEquals("https://cdn.example.net/video.m4s?sign=1", selection.videoUrl)
+    }
+
+    @Test
+    fun `bangumi segments rewrite host but keep order and unparseable urls`() {
+        val segments = listOf(
+            "https://upos-sz-mirrorcos.bilivideo.com/p1.mp4?sign=1",
+            "https://upos-sz-mirrorcos.bilivideo.com/p2.mp4?sign=2",
+            "not a url",
+        )
+
+        val rewritten = resolveBangumiCdnSegmentUrls(
+            segmentUrls = segments,
+            preference = PlaybackCdnPreference.CUSTOM,
+            customHost = "cdn.example.net",
+        )
+
+        assertEquals(
+            listOf(
+                "https://cdn.example.net/p1.mp4?sign=1",
+                "https://cdn.example.net/p2.mp4?sign=2",
+                "not a url",
+            ),
+            rewritten,
+        )
+        assertEquals(segments, resolveBangumiCdnSegmentUrls(segments, preference = PlaybackCdnPreference.BASE_URL))
+    }
+
+    @Test
+    fun `same cdn resource ignores host and query but not path`() {
+        assertTrue(
+            isSameCdnResource(
+                "https://cdn.example.net/upgcxcode/1/video.m4s?deadline=2",
+                "https://upos-sz-mirrorcos.bilivideo.com/upgcxcode/1/video.m4s?deadline=1",
+            )
+        )
+        assertFalse(isSameCdnResource("https://a.example.com/1.m4s", null))
+        assertFalse(isSameCdnResource("https://a.example.com/1.m4s", "https://a.example.com/2.m4s"))
+    }
 }

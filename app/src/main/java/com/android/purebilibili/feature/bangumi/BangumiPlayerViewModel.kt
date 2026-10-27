@@ -30,12 +30,18 @@ import com.android.purebilibili.feature.video.playback.policy.shouldRefreshPremi
 import com.android.purebilibili.feature.video.usecase.VideoInteractionUseCase
 import com.android.purebilibili.feature.video.policy.resolveFavoriteFolderMediaId
 import com.android.purebilibili.feature.video.viewmodel.resolveFavoriteFolderMutation
+import com.android.purebilibili.feature.plugin.BangumiCdnUrlSelection
+import com.android.purebilibili.feature.plugin.PlaybackCdnPreference
+import com.android.purebilibili.feature.plugin.isSameCdnResource
+import com.android.purebilibili.feature.plugin.resolveBangumiCdnSegmentUrls
+import com.android.purebilibili.feature.plugin.resolveBangumiCdnUrls
 import com.android.purebilibili.plugin.sdk.PlaybackCdnPlugin
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -199,6 +205,75 @@ class BangumiPlayerViewModel : BasePlayerViewModel() {
             rememberedAudioQuality = PlayerSettingsStore.getCachedLastSelectedAudioQuality(context)
         )
     }
+
+    /**
+     * 读取 CDN 自选设置（首选线路 + 自定义主机）。
+     *
+     * 本 VM 不是 `AndroidViewModel`，没有 `application`，因此沿用 [resolveConfiguredAudioQuality]
+     * 的 `NetworkModule.appContext` 写法；DataStore 只能挂起读取，所以这里用 `first()`，
+     * 调用点全部在协程里。拿不到上下文或读取失败时回退「基础URL」，即完全不改写。
+     */
+    private suspend fun playbackCdnPreference(): PlaybackCdnPreference {
+        val context = NetworkModule.appContext ?: return PlaybackCdnPreference.BASE_URL
+        return runCatching {
+            PlaybackCdnPreference.fromStorageValue(
+                SettingsManager.getPlaybackCdnPreference(context).first()
+            )
+        }.getOrDefault(PlaybackCdnPreference.BASE_URL)
+    }
+
+    private suspend fun playbackCdnCustomHost(): String? {
+        val context = NetworkModule.appContext ?: return null
+        return runCatching {
+            SettingsManager.getPlaybackCdnCustomHost(context).first()
+        }.getOrNull()
+    }
+
+    /**
+     * 剧集起播的统一选线入口：插件重排 + 用户偏好（内置镜像或自定义主机）。
+     *
+     * 与 PUGV 不同，这里没有 `allVideoUrls` 状态可以回退，因此把原始地址一并留在候选里，
+     * 改写后的线路排在最前。
+     */
+    private suspend fun resolveEpisodeCdnUrls(
+        videoUrl: String?,
+        audioUrl: String?,
+        videoBackupUrls: List<String> = emptyList(),
+        audioBackupUrls: List<String> = emptyList(),
+    ): BangumiCdnUrlSelection {
+        val pluginRewrite = PluginManager.getEnabledPlugins(PlaybackCdnPlugin::class).firstOrNull()
+            ?.rewritePlaybackCandidates(
+                videoUrls = buildList {
+                    videoUrl?.takeIf { it.isNotBlank() }?.let(::add)
+                    videoBackupUrls.filter { it.isNotBlank() }.forEach(::add)
+                },
+                audioUrls = buildList {
+                    audioUrl?.takeIf { it.isNotBlank() }?.let(::add)
+                    audioBackupUrls.filter { it.isNotBlank() }.forEach(::add)
+                }
+            )
+        return resolveBangumiCdnUrls(
+            videoUrls = buildList {
+                videoUrl?.takeIf { it.isNotBlank() }?.let(::add)
+                videoBackupUrls.filter { it.isNotBlank() }.forEach(::add)
+            },
+            audioUrls = buildList {
+                audioUrl?.takeIf { it.isNotBlank() }?.let(::add)
+                audioBackupUrls.filter { it.isNotBlank() }.forEach(::add)
+            },
+            pluginRewrite = pluginRewrite,
+            preference = playbackCdnPreference(),
+            customHost = playbackCdnCustomHost(),
+        )
+    }
+
+    /** 多 P / MP4 分段按用户线路逐个替换 Host，保持分段顺序不变。 */
+    private suspend fun resolveEpisodeCdnSegments(segmentUrls: List<String>): List<String> =
+        resolveBangumiCdnSegmentUrls(
+            segmentUrls = segmentUrls,
+            preference = playbackCdnPreference(),
+            customHost = playbackCdnCustomHost(),
+        )
     
     private var currentSeasonId: Long = 0
     private var currentEpId: Long = 0
@@ -389,14 +464,15 @@ class BangumiPlayerViewModel : BasePlayerViewModel() {
                     "https://www.bilibili.com/bangumi/play/ep${cachedState.currentEpisode.id}"
                 }
                 val cachedDashManifest = cachedState.cachedDash?.let { dash ->
+                    // playUrl 可能已被 CDN 自选改写过 Host，按路径匹配轨道，避免误重选导致编码回退。
                     val cachedVideo = dash.video.firstOrNull {
-                        it.getValidUrl() == cachedState.playUrl
+                        isSameCdnResource(it.getValidUrl(), cachedState.playUrl)
                     } ?: dash.getBestVideo(
                         cachedState.quality,
                         preferCodec = resolveBangumiPreferredCodec(isCoursePlayback)
                     )
                     val cachedAudio = dash.audio.orEmpty().firstOrNull {
-                        it.getValidUrl() == cachedState.audioUrl
+                        isSameCdnResource(it.getValidUrl(), cachedState.audioUrl)
                     }
                     buildBangumiDashManifest(
                         dash = dash,
@@ -637,23 +713,17 @@ class BangumiPlayerViewModel : BasePlayerViewModel() {
                     audioUrl = audio?.backupUrl?.firstOrNull()
                 }
 
-                // Keep the complete signed playurl candidates intact. The CDN plugin may only
-                // reorder these addresses in its safe mode; it never synthesizes a new host.
-                PluginManager.getEnabledPlugins(PlaybackCdnPlugin::class).firstOrNull()
-                    ?.rewritePlaybackCandidates(
-                        videoUrls = buildList {
-                            videoUrl?.takeIf { it.isNotBlank() }?.let(::add)
-                            video?.backupUrl.orEmpty().filter { it.isNotBlank() }.forEach(::add)
-                        },
-                        audioUrls = buildList {
-                            audioUrl?.takeIf { it.isNotBlank() }?.let(::add)
-                            audio?.backupUrl.orEmpty().filter { it.isNotBlank() }.forEach(::add)
-                        }
-                    )
-                    ?.let { rewrite ->
-                        videoUrl = rewrite.videoUrls.firstOrNull() ?: videoUrl
-                        audioUrl = rewrite.audioUrls.firstOrNull()?.takeIf { it.isNotBlank() } ?: audioUrl
-                    }
+                // 先让插件在安全模式下重排已有地址，再应用用户的 CDN 自选（内置镜像或自定义主机）。
+                // 改写必须在 buildBangumiDashManifest 之前完成，本地 MPD 才会带上选定的线路。
+                resolveEpisodeCdnUrls(
+                    videoUrl = videoUrl,
+                    audioUrl = audioUrl,
+                    videoBackupUrls = video?.backupUrl.orEmpty(),
+                    audioBackupUrls = audio?.backupUrl.orEmpty(),
+                ).let { selection ->
+                    videoUrl = selection.videoUrl ?: videoUrl
+                    audioUrl = selection.audioUrl ?: audioUrl
+                }
 
                 dashManifest = buildBangumiDashManifest(
                     dash = dash,
@@ -669,12 +739,14 @@ class BangumiPlayerViewModel : BasePlayerViewModel() {
                 
             } else {
                 // FLV/MP4 格式
-                durlSegmentUrls = collectPlayableDurlUrls(
-                    when {
-                        !playData.durl.isNullOrEmpty() -> playData.durl
-                        !playData.durls.isNullOrEmpty() -> playData.durls
-                        else -> null
-                    }
+                durlSegmentUrls = resolveEpisodeCdnSegments(
+                    collectPlayableDurlUrls(
+                        when {
+                            !playData.durl.isNullOrEmpty() -> playData.durl
+                            !playData.durls.isNullOrEmpty() -> playData.durls
+                            else -> null
+                        }
+                    )
                 )
                 if (durlSegmentUrls.isNotEmpty()) {
                     videoUrl = durlSegmentUrls.first()
@@ -1058,8 +1130,15 @@ class BangumiPlayerViewModel : BasePlayerViewModel() {
                         preferCodec = resolveBangumiPreferredCodec(isCourse)
                     )
                     val audio = audioSelection?.selected?.track
-                    videoUrl = video?.getValidUrl()
-                    audioUrl = audio?.getValidUrl()
+                    // 切清晰度同样要应用 CDN 自选，且必须在生成本地 MPD 之前改写地址。
+                    val cdnSelection = resolveEpisodeCdnUrls(
+                        videoUrl = video?.getValidUrl(),
+                        audioUrl = audio?.getValidUrl(),
+                        videoBackupUrls = video?.backupUrl.orEmpty(),
+                        audioBackupUrls = audio?.backupUrl.orEmpty(),
+                    )
+                    videoUrl = cdnSelection.videoUrl
+                    audioUrl = cdnSelection.audioUrl
                     dashManifest = buildBangumiDashManifest(
                         dash = dash,
                         video = video,
@@ -1071,12 +1150,14 @@ class BangumiPlayerViewModel : BasePlayerViewModel() {
                     )
                     durlSegmentUrls = emptyList()
                 } else {
-                    durlSegmentUrls = collectPlayableDurlUrls(
-                        when {
-                            !playData.durl.isNullOrEmpty() -> playData.durl
-                            !playData.durls.isNullOrEmpty() -> playData.durls
-                            else -> null
-                        }
+                    durlSegmentUrls = resolveEpisodeCdnSegments(
+                        collectPlayableDurlUrls(
+                            when {
+                                !playData.durl.isNullOrEmpty() -> playData.durl
+                                !playData.durls.isNullOrEmpty() -> playData.durls
+                                else -> null
+                            }
+                        )
                     )
                     videoUrl = durlSegmentUrls.firstOrNull()
                     audioUrl = null
@@ -1174,7 +1255,7 @@ class BangumiPlayerViewModel : BasePlayerViewModel() {
         }
     }
 
-    private fun switchAudioQuality(audioQuality: Int): Boolean {
+    private suspend fun switchAudioQuality(audioQuality: Int): Boolean {
         ensureFollowCacheSession()
         val currentState = _uiState.value as? BangumiPlayerState.Success ?: return false
         val player = exoPlayer ?: return false
@@ -1187,10 +1268,17 @@ class BangumiPlayerViewModel : BasePlayerViewModel() {
             isDolbyAudioSupported = MediaUtils.isDolbyAtmosAudioSupported(),
             isDolbyAudioSoftwareDecoded = MediaUtils.isDolbySoftwareAudioDecoderRequired()
         )
-        val audioUrl = selection.selected?.track?.getValidUrl()
+        val rawAudioUrl = selection.selected?.track?.getValidUrl()
             ?.takeIf { it.isNotBlank() }
             ?: return false
-        val selectedVideo = dash.video.firstOrNull { it.getValidUrl() == videoUrl }
+        // 换音质会重建 MPD，音轨同样要过一遍 CDN 自选，否则只有音频掉回原始主机。
+        // playUrl 已经是选线后的地址，这里偏好改写是幂等的，视频保持原值。
+        val audioUrl = resolveEpisodeCdnUrls(
+            videoUrl = videoUrl,
+            audioUrl = rawAudioUrl,
+            audioBackupUrls = selection.selected?.track?.backupUrl.orEmpty(),
+        ).audioUrl ?: rawAudioUrl
+        val selectedVideo = dash.video.firstOrNull { isSameCdnResource(it.getValidUrl(), videoUrl) }
             ?: dash.getBestVideo(
                 currentState.quality,
                 preferCodec = resolveBangumiPreferredCodec(currentState.seasonDetail.seasonType == 10)
