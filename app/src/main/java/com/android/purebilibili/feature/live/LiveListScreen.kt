@@ -628,12 +628,17 @@ fun LiveListScreen(
             liveContent(contentTopPadding)
         }
     } else {
+        // 独立直播页的搜索胶囊只采样列表兄弟层，不能把顶栏录入自己的玻璃背景。
+        val searchBackdrop = if (com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled) {
+            com.android.purebilibili.core.ui.blur.rememberChromeBackdropSource()
+        } else null
         ImmersiveAppScaffold(
             modifier = Modifier.fillMaxSize(),
             containerColor = palette.backgroundTop,
             topBarSurfaceColor = palette.backgroundTop,
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             blurContentReady = !(state.isLoading && state.contentItems.isEmpty()),
+            chromeBackdropSource = searchBackdrop,
             topBar = {
                 Box(
                     Modifier.windowInsetsPadding(
@@ -648,12 +653,14 @@ fun LiveListScreen(
                         onBack = onBack,
                         onSearchClick = onSearchClick,
                         onAreaListClick = onAreaListClick,
+                        searchBackdrop = searchBackdrop?.takeIf { it.isReady }?.backdrop,
                     )
                 }
             },
         ) { padding ->
             Box(
                 Modifier.fillMaxSize()
+                    .then(searchBackdrop?.modifier ?: Modifier)
                     .background(palette.backgroundBrush())
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
             ) {
@@ -832,7 +839,8 @@ private fun LiveListHeader(
     showNavigationBack: Boolean,
     onBack: () -> Unit,
     onSearchClick: () -> Unit,
-    onAreaListClick: () -> Unit
+    onAreaListClick: () -> Unit,
+    searchBackdrop: top.yukonga.miuix.kmp.blur.Backdrop? = null,
 ) {
     val palette = rememberLiveChromePalette()
     val compactChrome = rememberAppTopChromePolicy().compactChromeSpec
@@ -879,31 +887,45 @@ private fun LiveListHeader(
                     )
                 }
             }
-            AppSurface(
-                onClick = onSearchClick,
-                color = palette.searchField,
-                shape = AppShapes.container(ContainerLevel.Pill),
-                modifier = Modifier
-                    .weight(1f)
-                    .height(compactChrome.primaryHeightDp.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(
-                        horizontal = compactChrome.inputHorizontalPaddingDp.dp,
-                    ),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    AppIcon(
-                        imageVector = Icons.Outlined.Search,
-                        contentDescription = null,
-                        tint = palette.secondaryText
-                    )
-                    Spacer(Modifier.width(AppSpacingTokens.Medium))
-                    AppText(
-                        text = "搜索直播间 / 主播",
-                        color = palette.secondaryText,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+            // 中间槽位弹性占位，胶囊本身限制宽度；手机、窄分屏会按可用宽度收缩。
+            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                com.android.purebilibili.feature.home.components.BottomBarMatchedReusableLiquidDock(
+                    shape = AppShapes.container(ContainerLevel.Pill),
+                    modifier = Modifier.widthIn(max = 220.dp).fillMaxWidth(),
+                    backdrop = searchBackdrop,
+                    reuseEnabled = true,
+                    elasticFeedbackEnabled = true,
+                    useNeutralLiquidContainer = true,
+                    shellLensIntensity = com.android.purebilibili.feature.home.components
+                        .resolveFloatingDockGeometryScale(compactChrome.primaryHeightDp.toFloat()),
+                ) { liquidChromeActive ->
+                    // 玻璃外壳拥有材质；关闭时保留原生 Surface 的颜色、形状与点击行为。
+                    AppSurface(
+                        onClick = onSearchClick,
+                        color = if (liquidChromeActive) Color.Transparent else palette.searchField,
+                        shape = AppShapes.container(ContainerLevel.Pill),
+                        modifier = Modifier.fillMaxWidth().height(compactChrome.primaryHeightDp.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = compactChrome.inputHorizontalPaddingDp.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            AppIcon(
+                                imageVector = Icons.Outlined.Search,
+                                contentDescription = null,
+                                tint = palette.secondaryText,
+                            )
+                            Spacer(Modifier.width(AppSpacingTokens.Medium))
+                            AppText(
+                                text = "搜索直播间 / 主播",
+                                color = palette.secondaryText,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
                 }
             }
             // 关注直播入口收敛到页内「已关注」分类与关注主播行，头部不再重复；

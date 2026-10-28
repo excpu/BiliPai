@@ -836,13 +836,25 @@ internal fun buildRichCommentAnnotatedString(
             }
         }
 
-        val replyPattern = "^回复 @(.*?) :".toRegex()
+        val replyPattern = "^回复 (@.+?)(\\s*[:：])".toRegex()
         val replyMatch = replyPattern.find(text)
         var startIndex = 0
         if (replyMatch != null) {
-            withStyle(SpanStyle(color = color, fontWeight = FontWeight.Medium)) {
-                append(replyMatch.value)
+            val mention = replyMatch.groupValues[1]
+            val mid = atNameToMid[mention.removePrefix("@")]
+            withStyle(SpanStyle(color = color)) { append("回复 ") }
+            // 回复前缀中的 @ 与正文提及共用强调色；只有有效用户 ID 才附加跳转。
+            withStyle(SpanStyle(color = urlColor, fontWeight = FontWeight.Medium)) {
+                if (mid != null && mid > 0L) {
+                    withLink(commentLinkAnnotation(
+                        payload = RICH_COMMENT_LINK_USER_PREFIX + mid,
+                        listener = linkListener,
+                    )) { append(mention) }
+                } else {
+                    append(mention)
+                }
             }
+            withStyle(SpanStyle(color = color)) { append(replyMatch.groupValues[2]) }
             startIndex = replyMatch.range.last + 1
         }
 

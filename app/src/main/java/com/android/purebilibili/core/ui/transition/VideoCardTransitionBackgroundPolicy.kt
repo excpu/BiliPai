@@ -203,7 +203,6 @@ internal data class VideoCardTransitionBackgroundState(
     val motionTierProvider: () -> MotionTier = { MotionTier.Normal },
     val isLightBackgroundProvider: () -> Boolean = { false },
     val realtimeBlurEnabledProvider: () -> Boolean = { false },
-    val clearSnapshotEnabledProvider: () -> Boolean = { false },
 )
 
 internal val LocalVideoCardTransitionBackgroundState = compositionLocalOf {
@@ -932,18 +931,6 @@ internal fun shouldUseVideoCardTransitionSnapshotBlur(
     return sdkInt >= Build.VERSION_CODES.S
 }
 
-internal fun shouldUseClearVideoCardTransitionSnapshot(
-    exposure: VideoCardTransitionExposure,
-    motionTier: MotionTier,
-    enabled: Boolean,
-    sdkInt: Int = Build.VERSION.SDK_INT,
-): Boolean = enabled && motionTier != MotionTier.Reduced &&
-    sdkInt >= Build.VERSION_CODES.S && resolveVideoCardTransitionRenderDecision(exposure).updateBlurEffect
-
-/** 无模糊路径保留原先的清晰背景与遮罩，不引入额外缩放、圆角或阴影。 */
-internal fun VideoCardTransitionBackgroundFrame.withoutDepthEffects(): VideoCardTransitionBackgroundFrame =
-    copy(blurRadiusPx = 0f, contentScale = 1f, cornerRadiusPx = 0f, shadowElevationPx = 0f)
-
 /**
  * 每帧内多次读取同一 frame 时，用 (progress, phase, …) 缓存避免重复纯函数计算。
  */
@@ -1196,8 +1183,7 @@ internal fun shouldLiveRecordVideoCardTransitionSnapshot(
  *   Host 快照。源页若仍在 composition，可继续用同一层跟手改半径；否则由
  *   [VideoCardTransitionHostDepthLayer] 在 NavDisplay 下绘制。
  * - IDLE：Host 释放会话
- * - API 31 以下或未启用冻结层：保留实时内容与 scrim
- * - 玻璃首页且关闭模糊：复用清晰冻结层并保留 scrim
+ * - API 31 以下 / 实时模糊关闭：保留 scrim 与元素级缩放
  * - Reduced：只保留轻 scrim
  */
 @Composable
@@ -1209,7 +1195,6 @@ internal fun Modifier.videoCardTransitionBackgroundEffect(
     motionTierProvider: () -> MotionTier = { MotionTier.Normal },
     isLightBackgroundProvider: () -> Boolean = { false },
     realtimeBlurEnabledProvider: () -> Boolean = { false },
-    clearSnapshotEnabledProvider: () -> Boolean = { false },
     scaleReductionProvider: () -> Float = { VIDEO_CARD_TRANSITION_BACKGROUND_SCALE_REDUCTION },
     sourceBoundsProvider: () -> Rect? = { null },
     snapshotHandle: VideoCardTransitionSnapshotHandle? = null,
@@ -1256,7 +1241,7 @@ internal fun Modifier.videoCardTransitionBackgroundEffect(
     )
     val retainSnapshot = renderDecision.retainSourceSnapshot &&
         motionTier != MotionTier.Reduced &&
-        (realtimeBlurEnabledProvider() || clearSnapshotEnabledProvider()) &&
+        realtimeBlurEnabledProvider() &&
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
     LaunchedEffect(phase, exposure, retainSnapshot, isHostOwnedSnapshot, sourceRendererToken) {
@@ -1330,6 +1315,11 @@ internal fun Modifier.videoCardTransitionBackgroundEffect(
         liveRecordingActive = liveRecordingActive,
     )
 
+    // 无模糊时隔离实时内容的绘制指令：外层遮罩更新不重新执行列表绘制，
+    // 图片、数据和来源卡显隐仍按自身失效信号更新，不冻结为整页快照。
+    // 模糊路径继续直接录制来源，避免冻结层持有随实时内容变化的子图层。
+    val isolateLiveContent = motionTier == MotionTier.Reduced ||
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.S || !realtimeBlurEnabledProvider()
     return this.drawWithContent {
         val activePhase = phaseProvider()
         val activeExposure = exposureProvider()
@@ -1340,7 +1330,6 @@ internal fun Modifier.videoCardTransitionBackgroundEffect(
                 displayListStale = snapshotState.displayListStale,
                 motionTier = motionTierProvider(),
                 realtimeBlurEnabled = realtimeBlurEnabledProvider(),
-                clearSnapshotEnabled = clearSnapshotEnabledProvider(),
                 sourceRendererReady = snapshotState.hasReadySourceRenderer,
             )
         ) {
@@ -1373,8 +1362,6 @@ internal fun Modifier.videoCardTransitionBackgroundEffect(
                     )
                     val heldFrame = if (realtimeBlurEnabledProvider()) {
                         resolvedHeldFrame
-                    } else if (clearSnapshotEnabledProvider()) {
-                        resolvedHeldFrame.withoutDepthEffects()
                     } else {
                         resolvedHeldFrame.copy(blurRadiusPx = 0f)
                     }
@@ -1400,13 +1387,8 @@ internal fun Modifier.videoCardTransitionBackgroundEffect(
             motionTier = activeMotionTier,
             realtimeBlurEnabled = realtimeBlurEnabledProvider(),
         )
-        val clearSnapshotActive = shouldUseClearVideoCardTransitionSnapshot(
-            exposure = activeExposure,
-            motionTier = activeMotionTier,
-            enabled = clearSnapshotEnabledProvider(),
-        )
-        if (!snapshotBlurActive && !clearSnapshotActive) {
-            // No snapshot / Reduced / older APIs: only scrim changes. Do not compute or
+        if (!snapshotBlurActive) {
+            // Blur off / Reduced / older APIs: only scrim changes. Do not compute or
             // allocate the unused blur, corner, shadow and scale frame on every draw.
             drawContent()
             val isLightBackground = isLightBackgroundProvider()
@@ -1449,7 +1431,7 @@ internal fun Modifier.videoCardTransitionBackgroundEffect(
             return@drawWithContent
         }
 
-        val resolvedFrame = snapshotState.frameCache.resolve(
+        val frame = snapshotState.frameCache.resolve(
             progress = activeProgress,
             phase = activePhase,
             motionTier = activeMotionTier,
@@ -1459,10 +1441,10 @@ internal fun Modifier.videoCardTransitionBackgroundEffect(
             deviceCornerRadiusPx = deviceCornerRadiusPx,
             scaleReduction = scaleReductionProvider(),
         )
-        val frame = if (snapshotBlurActive) resolvedFrame else resolvedFrame.withoutDepthEffects()
 
         // OPENING 首录；预测/返回 DL stale 时重录。
-        // 失效层绝不绘制；成功录制后复用冻结层，交接阶段才恢复实时内容。
+        // 防黑：失效层绝不 drawLayer。防无糊：成功 record 后只画带 BlurEffect 的冻结层，
+        // 不要先 drawContent 再叠层——部分机型上 live 底会压过/闪掉景深。
         val needsRecord = snapshotState.needsSourceRefresh ||
             !isVideoCardTransitionSnapshotDrawable(
                 hasRecordedContent = snapshotState.hasRecordedContent,
@@ -1551,7 +1533,7 @@ internal fun Modifier.videoCardTransitionBackgroundEffect(
             }
             drawRect(scrimColor.copy(alpha = frame.scrimAlpha))
         }
-    }
+    }.then(if (isolateLiveContent) Modifier.graphicsLayer() else Modifier)
 }
 
 /** Match both renderers' visibility boundary before recording or resolving a blur frame. */

@@ -171,6 +171,16 @@ data class Page(
     val part: String = "",
     val duration: Long = 0,
     @SerialName("first_frame") val firstFrame: String = "",
+    /** 分P尺寸；/x/player/pagelist 会返回，用于在播放信息加载前判断横竖屏。 */
+    val dimension: Dimension? = null,
+)
+
+/** /x/player/pagelist 的响应：只含分P列表，比 x/web-interface/view 轻量得多。 */
+@Serializable
+data class PageListResponse(
+    val code: Int = 0,
+    val message: String = "",
+    val data: List<Page>? = null
 )
 
 //  视频标签响应

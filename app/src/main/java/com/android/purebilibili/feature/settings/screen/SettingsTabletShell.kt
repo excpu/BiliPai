@@ -51,8 +51,7 @@ import com.android.purebilibili.core.ui.blur.unifiedBlur
 import com.android.purebilibili.core.ui.rememberAppBackIcon
 import com.android.purebilibili.feature.home.components.BiliPaiImmersiveTopBar
 import com.android.purebilibili.feature.home.components.shouldUseBiliPaiProgressiveTopBlur
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
+import com.android.purebilibili.core.ui.blur.rememberChromeBackdropSource
 import com.android.purebilibili.core.util.AppFoldPosture
 import com.android.purebilibili.core.util.LocalAppWindowAdaptiveInfo
 import com.android.purebilibili.core.util.LocalWindowSizeClass
@@ -152,7 +151,8 @@ fun SettingsTabletShell(
                     hasBackdrop = true,
                 ) && !isLowBlurBudgetForced()
                 val fadeActive = config.progressiveTopFadeEnabled && !config.headerBlurEnabled
-                val tabletChromeBackdrop = if (progressive) rememberLayerBackdrop() else null
+                val tabletChromeSource = if (progressive) rememberChromeBackdropSource() else null
+                val tabletChromeBackdrop = tabletChromeSource?.takeIf { it.isReady }?.backdrop
                 val tabletHazeState = if (
                     config.headerBlurEnabled && !progressive &&
                         shouldAllowRenderEffectBackedHazeEffect(Build.VERSION.SDK_INT)
@@ -198,14 +198,8 @@ fun SettingsTabletShell(
                 }
                 Column(
                     modifier = Modifier
-                    .weight(1f)
-                    .then(
-                            if (tabletChromeBackdrop != null) {
-                                Modifier.layerBackdrop(tabletChromeBackdrop)
-                            } else {
-                                Modifier
-                            }
-                        )
+                        .weight(1f)
+                        .then(tabletChromeSource?.modifier ?: Modifier)
                         .then(if (tabletHazeReady) Modifier.hazeSourceCompat(requireNotNull(tabletHazeState)) else Modifier)
                         .padding(horizontal = layoutPolicy.masterPanePaddingDp.dp),
                 ) {

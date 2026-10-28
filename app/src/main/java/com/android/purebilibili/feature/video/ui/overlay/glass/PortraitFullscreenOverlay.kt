@@ -516,6 +516,7 @@ private fun PortraitProgressControlStrip(
             PortraitChromeChip(
                 label = "字幕",
                 highlighted = subtitleEnabled,
+                highlightedColor = AppContentColors.accent(),
                 onClick = onSubtitleClick
             )
             Spacer(modifier = Modifier.width(8.dp))
@@ -555,7 +556,8 @@ private fun PortraitChromeChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     showHiResBadge: Boolean = false,
-    showDolbyBadge: Boolean = false
+    showDolbyBadge: Boolean = false,
+    highlightedColor: Color = MaterialTheme.colorScheme.primaryFixed,
 ) {
     val glass = LocalPlayerControlGlassEnabled.current
     PlayerControlGlassDock(enabled = true, modifier = modifier) {
@@ -565,7 +567,7 @@ private fun PortraitChromeChip(
             shape = AppShapes.container(ContainerLevel.Pill),
             color = if (glass) Color.Transparent else Color.White.copy(alpha = 0.14f),
             contentColor = if (highlighted) {
-                MaterialTheme.colorScheme.primaryFixed
+                highlightedColor
             } else {
                 Color.White
             }

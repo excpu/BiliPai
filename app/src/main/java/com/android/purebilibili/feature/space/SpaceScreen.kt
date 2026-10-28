@@ -1,5 +1,6 @@
 package com.android.purebilibili.feature.space
 
+import com.android.purebilibili.navigation.tabIndicatorPosition
 import com.android.purebilibili.feature.home.effectiveGridColumnCount
 import com.android.purebilibili.feature.home.effectiveGridColumnCountCompact
 import com.android.purebilibili.feature.home.gridColumnPinchEnabled
@@ -70,13 +71,13 @@ import com.android.purebilibili.core.ui.components.liquidDockViewport
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyGridState
-import com.android.purebilibili.core.ui.components.AppLazyVerticalGrid as LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
+import com.android.purebilibili.core.ui.components.AppLazyVerticalStaggeredGrid as LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.items
+import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
+import com.android.purebilibili.core.ui.rememberCompatibleStaggeredGridState
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -150,6 +151,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.scrollable
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
@@ -386,10 +390,10 @@ fun SpaceScreen(
             shouldAllowRenderEffectBackedHazeEffect(Build.VERSION.SDK_INT) &&
             !isLowBlurBudgetForced()
     ) rememberRecoverableHazeState() else null
-    val defaultPageGridStates = SpaceMainTab.entries.associateWith { rememberLazyGridState() }
+    val defaultPageGridStates = SpaceMainTab.entries.associateWith { rememberCompatibleStaggeredGridState() }
     val contributionGridStateFor = remember(mid) {
-        val states = mutableMapOf<String, LazyGridState>()
-        val stateFor: (String) -> LazyGridState = { id -> states.getOrPut(id) { LazyGridState() } }
+        val states = mutableMapOf<String, LazyStaggeredGridState>()
+        val stateFor: (String) -> LazyStaggeredGridState = { id -> states.getOrPut(id) { com.android.purebilibili.core.ui.createCompatibleStaggeredGridState() } }
         stateFor
     }
     val contributionTabId = (uiState as? SpaceUiState.Success)?.selectedContributionTabId.orEmpty()
@@ -527,6 +531,7 @@ fun SpaceScreen(
     // 共享顶栏颜色来源，关闭玻璃时沿用原生 MD3 / Miuix 的背景与布局。
     val spaceTopBarIconBackdrop = com.android.purebilibili.core.ui.blur.rememberSurfaceOverlayBackdrop(spaceChromeBackdrop, spaceTopChromeSurfaceColor)
     AppScaffold(
+        topBarIconBackdropSource = spaceChromeSource,
         topBar = {
             BiliPaiImmersiveTopBar(
                 backdrop = spaceChromeBackdrop,
@@ -767,7 +772,7 @@ fun SpaceScreen(
             alpha = if (uiState is SpaceUiState.Loading) 1f else contentRevealAlpha.value
         }) {
                 // Loading 不再单独渲染一棵骨架网格：它和 Success 共用同一个 SpaceContent
-                // 调用点（同一棵 LazyVerticalGrid）。Loading 时喂一个占位 Success 并把
+                // 调用点（同一棵 LazyVerticalStaggeredGrid）。Loading 时喂一个占位 Success 并把
                 // isInitialLoading 传下去，由内容网格在原地铺骨架 item；数据到达后是
                 // item 原地替换，网格与滚动状态都不会重建，首屏不跳。
                 val isLoadingSpace = uiState is SpaceUiState.Loading
@@ -1236,8 +1241,8 @@ private fun SpacePlayedVideoLocatePrompt(
 @Composable
 private fun SpaceContent(
     state: SpaceUiState.Success,
-    gridState: LazyGridState,
-    pageGridStates: Map<SpaceMainTab, LazyGridState>,
+    gridState: LazyStaggeredGridState,
+    pageGridStates: Map<SpaceMainTab, LazyStaggeredGridState>,
     onVideoClick: (String, Long, Long) -> Unit,
     videoProgressLookup: (String) -> Long,
     onAudioClick: (Long) -> Unit,
@@ -1299,10 +1304,10 @@ private fun SpaceContent(
     animatedVisibilityScope: AnimatedVisibilityScope?,
     chromeTopInset: Dp = 0.dp,
     pinContentTabs: Boolean = false,
-    contributionGridStateFor: (String) -> LazyGridState,
+    contributionGridStateFor: (String) -> LazyStaggeredGridState,
     /**
      * 首屏加载中：在同一个内容网格里铺骨架 item，而不是另起一棵独立的骨架网格。
-     * 骨架与真实卡片共用同一个 LazyVerticalGrid / gridState，数据到达时是 item
+     * 骨架与真实卡片共用同一个 LazyVerticalStaggeredGrid / gridState，数据到达时是 item
      * 原地替换，网格不重建、滚动锚点不丢。
      */
     isInitialLoading: Boolean = false,
@@ -1401,7 +1406,7 @@ private fun SpaceContent(
         state.hasMoreVideos
     ) {
         derivedStateOf {
-            val lastVisible = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            val lastVisible = gridState.layoutInfo.visibleItemsInfo.maxOfOrNull { it.index } ?: 0
             val totalItems = gridState.layoutInfo.totalItemsCount
             selectedMainTab == SpaceMainTab.CONTRIBUTION &&
                 selectedContributionTab.subTab in setOf(SpaceSubTab.VIDEO, SpaceSubTab.CHARGING_VIDEO) &&
@@ -1555,6 +1560,8 @@ private fun SpaceContent(
             .responsiveContentWidth(maxWidth = adaptiveLayoutSpec.contentMaxWidthDp.dp)
             .then(modifier)
     ) {
+        // 手势边界在回调中读取测量值，不让滚动逐帧触发组合。
+        val pinnedTabsHeights = remember { mutableMapOf<SpaceMainTab, Int>() }
         HorizontalPager(
             state = pagerState,
             userScrollEnabled = false,
@@ -1572,7 +1579,9 @@ private fun SpaceContent(
                             naturalTop.coerceAtLeast(chromeBottom) + tabs.size.height
                         } else (naturalTop + tabs.size.height).coerceAtLeast(chromeBottom)
                     } else if (info.visibleItemsInfo.any { it.index > 1 }) {
-                        chromeBottom
+                        chromeBottom + if (pinContentTabs) {
+                            (pinnedTabsHeights[displayedMainTabs[pagerState.currentPage].tab] ?: 0)
+                        } else 0
                     } else {
                         Float.POSITIVE_INFINITY
                     }
@@ -1675,8 +1684,67 @@ private fun SpaceContent(
                 windowHeightDp = windowSizeClass.heightDp.value,
             ).heightDp
         }
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(gridColumns),
+        val tabsPinned by remember(gridState, pinContentTabs, chromeTopInset, density, isInitialLoading) {
+            derivedStateOf {
+                if (!pinContentTabs || isInitialLoading) false else {
+                    val info = gridState.layoutInfo
+                    val tabs = info.visibleItemsInfo.firstOrNull { it.key == "space_tabs" }
+                    shouldShowSpacePinnedTabs(
+                        tabsOffsetPx = tabs?.offset?.y,
+                        beforeContentPaddingPx = info.beforeContentPadding,
+                        chromeBottomPx = with(density) { chromeTopInset.roundToPx() },
+                        firstVisibleItemIndex = gridState.firstVisibleItemIndex,
+                    )
+                }
+            }
+        }
+        val pinnedTabsContent: @Composable () -> Unit = {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .onSizeChanged { pinnedTabsHeights[primaryTab] = it.height }
+                    .background(MaterialTheme.colorScheme.surface),
+            ) {
+                SpaceContentTabs(
+                    state = state,
+                    onMainTabSelected = onMainTabSelected,
+                    onMainTabReselected = {
+                        if (gridState.firstVisibleItemIndex > 0) {
+                            coroutineScope.launch { gridState.animateScrollToItem(1) }
+                        }
+                    },
+                    onContributionTabSelected = { id ->
+                        if (id != state.selectedContributionTabId) {
+                            val target = contributionGridStateFor(id)
+                            if (gridState.firstVisibleItemIndex == 0) {
+                                target.requestScrollToItem(0, gridState.firstVisibleItemScrollOffset)
+                            } else if (target.firstVisibleItemIndex == 0) {
+                                target.requestScrollToItem(1)
+                            }
+                        }
+                        onContributionTabSelected(id)
+                    },
+                    pagerState = pagerState,
+                    page = page,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (selectedMainTab == SpaceMainTab.CONTRIBUTION &&
+                    selectedContributionTab.subTab in setOf(SpaceSubTab.VIDEO, SpaceSubTab.CHARGING_VIDEO) &&
+                    !state.isSearchMode && (state.videos.isNotEmpty() || state.totalVideos > 0)
+                ) {
+                    SpaceContributionVideoSummaryBar(
+                        totalCount = state.totalVideos.takeIf { it > 0 } ?: state.videos.size,
+                        currentOrder = state.sortOrder,
+                        onSelectSortOrder = onSelectSortOrder,
+                    )
+                }
+            }
+        }
+        // 瀑布流不提供原生吸顶 item；每页用独立顶层承接标签，跨栏占位保留滚动几何。
+        // 玻璃与原生材质继续使用各自的标签组件参数。
+        Box(Modifier.fillMaxSize()) {
+        LazyVerticalStaggeredGrid(
+            columns = StaggeredGridCells.Fixed(gridColumns),
             state = gridState,
             overscrollEffect = if (pinContentTabs) null else spaceOverscrollEffect,
             modifier = Modifier
@@ -1712,11 +1780,11 @@ private fun SpaceContent(
                     }
             ),
             horizontalArrangement = Arrangement.spacedBy(spaceFeedCardLayout.itemSpacingDp.dp),
-            verticalArrangement = Arrangement.spacedBy(spaceFeedCardLayout.verticalItemSpacingDp.dp)
-        ) LazyVerticalGrid@{
-            // 首屏骨架直接铺在内容网格里：与真实卡片共用同一个 LazyVerticalGrid 与同一个
+            verticalItemSpacing = spaceFeedCardLayout.verticalItemSpacingDp.dp
+        ) LazyVerticalStaggeredGrid@{
+            // 首屏骨架直接铺在内容网格里：与真实卡片共用同一个 LazyVerticalStaggeredGrid 与同一个
             // gridState，数据到达后是 item 原地替换，网格本身不重建、也不丢滚动锚点。
-            // （显式标签：LazyVerticalGrid 是 AppLazyVerticalGrid 的导入别名，避免隐式
+            // （显式标签：LazyVerticalStaggeredGrid 是 AppLazyVerticalStaggeredGrid 的导入别名，避免隐式
             // 标签名与别名不一致导致 return@ 解析到别处。）
             if (isInitialLoading) {
                 SpaceLoadingSkeleton(
@@ -1726,9 +1794,9 @@ private fun SpaceContent(
                     useExpandedHeader = adaptiveLayoutSpec.useExpandedHeader,
                     blockColor = spaceSkeletonBlockColor,
                 )
-                return@LazyVerticalGrid
+                return@LazyVerticalStaggeredGrid
             }
-            item(span = { GridItemSpan(maxLineSpan) }) {
+            item(span = StaggeredGridItemSpan.FullLine) {
                 Box(
                     Modifier
                         .stationaryPagerHeader(pagerState, page)
@@ -1767,76 +1835,33 @@ private fun SpaceContent(
                 }
             }
 
-            if (pinContentTabs) {
-                // 同一个标签 item 随资料上移后停在工具栏下；保留整页视口供头图绘制，
-                // 只在布局阶段补偿 stickyHeader 的顶部位置，不改变原生/玻璃组件尺寸。
-                stickyHeader(key = "space_tabs") {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .zIndex(1f)
-                            .offset {
-                                val info = gridState.layoutInfo
-                                val tabs = info.visibleItemsInfo.firstOrNull { it.key == "space_tabs" }
-                                androidx.compose.ui.unit.IntOffset(0, resolveSpaceTabsPinOffsetPx(
-                                    tabsOffsetPx = tabs?.offset?.y ?: 0,
-                                    beforeContentPaddingPx = info.beforeContentPadding,
-                                    chromeBottomPx = chromeTopInset.roundToPx(),
-                                ))
-                            }
-                            .background(MaterialTheme.colorScheme.surface),
+            item(key = "space_tabs", span = StaggeredGridItemSpan.FullLine) {
+                if (pinContentTabs) {
+                    // 保留列表中的尺寸，吸顶后隐藏原位内容与语义，避免重复入口。
+                    Box(
+                        Modifier
+                            .graphicsLayer { alpha = if (tabsPinned) 0f else 1f }
+                            .then(if (tabsPinned) Modifier.clearAndSetSemantics { } else Modifier),
                     ) {
-                        SpaceContentTabs(
-                            state = state,
-                            onMainTabSelected = onMainTabSelected,
-                            onMainTabReselected = {
-                                if (gridState.firstVisibleItemIndex > 0) {
-                                    coroutineScope.launch { gridState.animateScrollToItem(1) }
-                                }
-                            },
-                            onContributionTabSelected = { id ->
-                                if (id != state.selectedContributionTabId) {
-                                    val target = contributionGridStateFor(id)
-                                    if (gridState.firstVisibleItemIndex == 0) {
-                                        target.requestScrollToItem(0, gridState.firstVisibleItemScrollOffset)
-                                    } else if (target.firstVisibleItemIndex == 0) {
-                                        target.requestScrollToItem(1)
-                                    }
-                                }
-                                onContributionTabSelected(id)
-                            },
-                            pagerState = pagerState,
-                            page = page,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        if (selectedMainTab == SpaceMainTab.CONTRIBUTION &&
-                            selectedContributionTab.subTab in setOf(SpaceSubTab.VIDEO, SpaceSubTab.CHARGING_VIDEO) &&
-                            !state.isSearchMode && (state.videos.isNotEmpty() || state.totalVideos > 0)
-                        ) {
-                            SpaceContributionVideoSummaryBar(
-                                totalCount = state.totalVideos.takeIf { it > 0 } ?: state.videos.size,
-                                currentOrder = state.sortOrder,
-                                onSelectSortOrder = onSelectSortOrder,
-                            )
-                        }
+                        pinnedTabsContent()
                     }
+                } else {
+                    SpaceContentTabs(
+                        state = state,
+                        onMainTabSelected = onMainTabSelected,
+                        onContributionTabSelected = onContributionTabSelected,
+                        pagerState = pagerState,
+                        page = page,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
-            } else item(key = "space_tabs", span = { GridItemSpan(maxLineSpan) }) {
-                SpaceContentTabs(
-                    state = state,
-                    onMainTabSelected = onMainTabSelected,
-                    onContributionTabSelected = onContributionTabSelected,
-                    pagerState = pagerState,
-                    page = page,
-                    modifier = Modifier.fillMaxWidth(),
-                )
             }
 
             val showSearch = selectedMainTab == SpaceMainTab.DYNAMIC ||
                 (selectedMainTab == SpaceMainTab.CONTRIBUTION &&
                     selectedContributionTab.subTab in setOf(SpaceSubTab.VIDEO, SpaceSubTab.CHARGING_VIDEO))
             if (showSearch && state.isSearchMode) {
-                item(key = "space_search", span = { GridItemSpan(maxLineSpan) }) {
+                item(key = "space_search", span = StaggeredGridItemSpan.FullLine) {
                     LaunchedEffect(state.isSearchMode, currentSearchScope) {
                         searchFocusRequester.requestFocus()
                     }
@@ -1850,7 +1875,7 @@ private fun SpaceContent(
                     )
                 }
             } else if (false && shouldShowSpaceSearchEntry(currentSearchScope, state.isSearchMode)) {
-                item(key = "space_search_entry", span = { GridItemSpan(maxLineSpan) }) {
+                item(key = "space_search_entry", span = StaggeredGridItemSpan.FullLine) {
                     SpaceSearchEntryChip(
                         label = resolveSpaceSearchEntryLabel(currentSearchScope),
                         onClick = onSearchEntryClick,
@@ -1861,7 +1886,7 @@ private fun SpaceContent(
         when (selectedMainTab) {
             SpaceMainTab.HOME -> {
                 state.topVideo?.let { topVideo ->
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceTopVideoCard(
                             video = topVideo,
                             onClick = { playVideoFromSpace(topVideo.bvid) },
@@ -1873,13 +1898,13 @@ private fun SpaceContent(
                 }
 
                 if (state.notice.isNotBlank()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceNoticeCard(notice = state.notice)
                     }
                 }
 
                 if (state.videos.isNotEmpty() || state.totalVideos > 0) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "视频",
                             count = state.totalVideos.takeIf { it > 0 } ?: state.videos.size,
@@ -1910,7 +1935,7 @@ private fun SpaceContent(
                 }
 
                 if (state.homeFavoriteFolders.isNotEmpty() || state.homeFavoriteFolderCount > 0) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "收藏",
                             count = state.homeFavoriteFolderCount.takeIf { it > 0 }
@@ -1921,7 +1946,7 @@ private fun SpaceContent(
                     items(
                         items = state.homeFavoriteFolders.take(1),
                         key = { "home_favorite_${it.id}" },
-                        span = { GridItemSpan(maxLineSpan) }
+                        span = { StaggeredGridItemSpan.FullLine }
                     ) { folder ->
                         SpaceFavoriteFolderRow(
                             folder = folder,
@@ -1940,7 +1965,7 @@ private fun SpaceContent(
                 }
 
                 if (state.homeCoinVideos.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "最近投币的视频",
                             count = state.homeCoinVideoCount.takeIf { it > 0 } ?: state.homeCoinVideos.size,
@@ -1981,7 +2006,7 @@ private fun SpaceContent(
                 }
 
                 if (state.homeLikeVideos.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "最近点赞的视频",
                             count = state.homeLikeVideoCount.takeIf { it > 0 } ?: state.homeLikeVideos.size,
@@ -2026,7 +2051,7 @@ private fun SpaceContent(
                 }
 
                 if (state.articles.isNotEmpty() || state.totalArticles > 0) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "图文",
                             count = state.totalArticles.takeIf { it > 0 } ?: state.articles.size,
@@ -2041,7 +2066,7 @@ private fun SpaceContent(
                     items(
                         items = state.articles.take(1),
                         key = { "home_article_${it.id}" },
-                        span = { GridItemSpan(maxLineSpan) }
+                        span = { StaggeredGridItemSpan.FullLine }
                     ) { article ->
                         SpaceArticleListItem(
                             article = article,
@@ -2058,7 +2083,7 @@ private fun SpaceContent(
                 }
 
                 if (state.audios.isNotEmpty() || state.totalAudios > 0) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "音频",
                             count = state.totalAudios.takeIf { it > 0 } ?: state.audios.size,
@@ -2073,7 +2098,7 @@ private fun SpaceContent(
                     items(
                         items = state.audios.take(1),
                         key = { "home_audio_${it.id}" },
-                        span = { GridItemSpan(maxLineSpan) }
+                        span = { StaggeredGridItemSpan.FullLine }
                     ) { audio ->
                         SpaceAudioListItem(
                             audio = audio,
@@ -2084,7 +2109,7 @@ private fun SpaceContent(
                 }
 
                 if (state.homeBangumiItems.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "追番",
                             count = state.homeBangumiCount.takeIf { it > 0 } ?: state.homeBangumiItems.size,
@@ -2111,7 +2136,7 @@ private fun SpaceContent(
                 }
 
                 if (state.homeComicItems.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "漫画",
                             count = state.homeComicCount.takeIf { it > 0 } ?: state.homeComicItems.size,
@@ -2150,7 +2175,7 @@ private fun SpaceContent(
                     state.homeBangumiItems.isEmpty() &&
                     state.homeComicItems.isEmpty()
                 ) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionEmptyState(
                             title = "主页空空的",
                             subtitle = "暂时没有可展示的主页内容"
@@ -2168,7 +2193,7 @@ private fun SpaceContent(
                 )
 
                 if (state.searchQuery.isNotBlank() && state.dynamics.isNotEmpty() && dynamicCardItems.isEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionEmptyState(
                             title = "没有结果",
                             subtitle = if (state.isLoadingDynamics) {
@@ -2181,14 +2206,14 @@ private fun SpaceContent(
                         )
                     }
                 } else if (presentationState == SpaceDynamicPresentationState.EMPTY) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionEmptyState(
                             title = "暂无动态",
                             subtitle = "这个空间暂时没有可展示的动态内容"
                         )
                     }
                 } else if (presentationState == SpaceDynamicPresentationState.ERROR) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceErrorSection(
                             message = "动态加载失败，请稍后重试",
                             onRetry = onLoadDynamic
@@ -2198,7 +2223,7 @@ private fun SpaceContent(
                     items(
                         items = dynamicCardItems,
                         key = { "space_dynamic_${it.id_str}" },
-                        span = { GridItemSpan(1) }
+                        span = { StaggeredGridItemSpan.SingleLane }
                     ) { dynamic ->
                         DynamicCardV2(
                             item = dynamic,
@@ -2253,13 +2278,13 @@ private fun SpaceContent(
                     }
 
                     if (state.isLoadingDynamics && dynamicCardItems.isNotEmpty()) {
-                        item(span = { GridItemSpan(maxLineSpan) }) {
+                        item(span = StaggeredGridItemSpan.FullLine) {
                             SpaceLoadingFooter()
                         }
                     }
 
                     if (state.hasMoreDynamics && dynamicCardItems.isNotEmpty()) {
-                        item(span = { GridItemSpan(maxLineSpan) }) {
+                        item(span = StaggeredGridItemSpan.FullLine) {
                             LaunchedEffect(dynamicCardItems.size, isPageActive) {
                                 if (isPageActive) onLoadMoreDynamic()
                             }
@@ -2273,7 +2298,7 @@ private fun SpaceContent(
                 when (selectedContributionTab.subTab) {
                     SpaceSubTab.VIDEO, SpaceSubTab.CHARGING_VIDEO -> {
                         if ((!pinContentTabs || state.isSearchMode) && (state.videos.isNotEmpty() || state.totalVideos > 0)) {
-                            item(key = "space_video_summary_bar", span = { GridItemSpan(maxLineSpan) }) {
+                            item(key = "space_video_summary_bar", span = StaggeredGridItemSpan.FullLine) {
                                 SpaceContributionVideoSummaryBar(
                                     totalCount = state.totalVideos.takeIf { it > 0 } ?: state.videos.size,
                                     currentOrder = state.sortOrder,
@@ -2283,7 +2308,7 @@ private fun SpaceContent(
                         }
 
                         if (state.videos.isEmpty() && !state.isLoadingMore) {
-                            item(span = { GridItemSpan(maxLineSpan) }) {
+                            item(span = StaggeredGridItemSpan.FullLine) {
                                 SpaceSectionEmptyState(
                                     title = "暂无投稿",
                                     subtitle = "这个分区下暂时没有可展示的视频"
@@ -2301,12 +2326,11 @@ private fun SpaceContent(
                                 )
                             },
                             span = {
-                                GridItemSpan(
-                                    resolveSpaceContributionVideoGridSpan(
-                                        layoutMode = contributionVideoLayoutMode,
-                                        maxLineSpan = maxLineSpan
-                                    )
-                                )
+                                if (contributionVideoLayoutMode == SpaceContributionVideoLayoutMode.GRID) {
+                                    StaggeredGridItemSpan.SingleLane
+                                } else {
+                                    StaggeredGridItemSpan.FullLine
+                                }
                             }
                         ) { video ->
                             val localProgressMs = videoProgressLookup(video.bvid)
@@ -2357,7 +2381,7 @@ private fun SpaceContent(
                         }
 
                         if (state.isLoadingMore) {
-                            item(span = { GridItemSpan(maxLineSpan) }) {
+                            item(span = StaggeredGridItemSpan.FullLine) {
                                 SpaceLoadingFooter()
                             }
                         }
@@ -2365,7 +2389,7 @@ private fun SpaceContent(
 
                     SpaceSubTab.AUDIO -> {
                         if (state.audios.isEmpty() && !state.isLoadingAudios) {
-                            item(span = { GridItemSpan(maxLineSpan) }) {
+                            item(span = StaggeredGridItemSpan.FullLine) {
                                 SpaceSectionEmptyState(
                                     title = "暂无音频",
                                     subtitle = "这个 UP 还没有公开的音频作品"
@@ -2376,7 +2400,7 @@ private fun SpaceContent(
                         items(
                             items = state.audios,
                             key = { "space_audio_${it.id}" },
-                            span = { GridItemSpan(maxLineSpan) }
+                            span = { StaggeredGridItemSpan.FullLine }
                         ) { audio ->
                             SpaceAudioListItem(
                                 audio = audio,
@@ -2386,11 +2410,11 @@ private fun SpaceContent(
                         }
 
                         if (state.isLoadingAudios) {
-                            item(span = { GridItemSpan(maxLineSpan) }) {
+                            item(span = StaggeredGridItemSpan.FullLine) {
                                 SpaceLoadingFooter()
                             }
                         } else if (state.hasMoreAudios && state.audios.isNotEmpty()) {
-                            item(span = { GridItemSpan(maxLineSpan) }) {
+                            item(span = StaggeredGridItemSpan.FullLine) {
                                 LaunchedEffect(state.audios.size, isPageActive) { if (isPageActive) onLoadMoreAudios() }
                                 Spacer(modifier = Modifier.height(1.dp))
                             }
@@ -2399,7 +2423,7 @@ private fun SpaceContent(
 
                     SpaceSubTab.ARTICLE, SpaceSubTab.OPUS -> {
                         if (state.articles.isEmpty() && !state.isLoadingArticles) {
-                            item(span = { GridItemSpan(maxLineSpan) }) {
+                            item(span = StaggeredGridItemSpan.FullLine) {
                                 SpaceSectionEmptyState(
                                     title = "暂无图文",
                                     subtitle = "这个 UP 还没有公开的图文内容"
@@ -2410,7 +2434,7 @@ private fun SpaceContent(
                         items(
                             items = state.articles,
                             key = { "space_article_${it.id}" },
-                            span = { GridItemSpan(maxLineSpan) }
+                            span = { StaggeredGridItemSpan.FullLine }
                         ) { article ->
                             SpaceArticleListItem(
                                 article = article,
@@ -2426,11 +2450,11 @@ private fun SpaceContent(
                         }
 
                         if (state.isLoadingArticles) {
-                            item(span = { GridItemSpan(maxLineSpan) }) {
+                            item(span = StaggeredGridItemSpan.FullLine) {
                                 SpaceLoadingFooter()
                             }
                         } else if (state.hasMoreArticles && state.articles.isNotEmpty()) {
-                            item(span = { GridItemSpan(maxLineSpan) }) {
+                            item(span = StaggeredGridItemSpan.FullLine) {
                                 LaunchedEffect(state.articles.size, isPageActive) { if (isPageActive) onLoadMoreArticles() }
                                 Spacer(modifier = Modifier.height(1.dp))
                             }
@@ -2440,7 +2464,7 @@ private fun SpaceContent(
                     SpaceSubTab.SEASON_VIDEO -> {
                         val season = state.seasons.firstOrNull { it.meta.season_id == selectedContributionTab.seasonId }
                         val archives = state.seasonArchives[selectedContributionTab.seasonId].orEmpty()
-                        item(span = { GridItemSpan(maxLineSpan) }) {
+                        item(span = StaggeredGridItemSpan.FullLine) {
                             SpaceCollectionSummaryCard(
                                 title = season?.meta?.name ?: selectedContributionTab.title,
                                 subtitle = season?.meta?.description.orEmpty(),
@@ -2459,7 +2483,7 @@ private fun SpaceContent(
                             )
                         }
                         if (archives.isEmpty()) {
-                            item(span = { GridItemSpan(maxLineSpan) }) {
+                            item(span = StaggeredGridItemSpan.FullLine) {
                                 SpaceSectionEmptyState(
                                     title = "暂无合集内容",
                                     subtitle = "这个合集暂时没有可展示的视频"
@@ -2470,12 +2494,11 @@ private fun SpaceContent(
                             items = archives,
                             key = { "season_video_${it.aid}_${it.bvid}" },
                             span = {
-                                GridItemSpan(
-                                    resolveSpaceContributionVideoGridSpan(
-                                        layoutMode = contributionVideoLayoutMode,
-                                        maxLineSpan = maxLineSpan,
-                                    )
-                                )
+                                if (contributionVideoLayoutMode == SpaceContributionVideoLayoutMode.GRID) {
+                                    StaggeredGridItemSpan.SingleLane
+                                } else {
+                                    StaggeredGridItemSpan.FullLine
+                                }
                             }
                         ) { archive ->
                             SpaceContributionArchiveVideoItem(
@@ -2494,7 +2517,7 @@ private fun SpaceContent(
                     SpaceSubTab.SERIES -> {
                         val series = state.series.firstOrNull { it.meta.series_id == selectedContributionTab.seriesId }
                         val archives = state.seriesArchives[selectedContributionTab.seriesId].orEmpty()
-                        item(span = { GridItemSpan(maxLineSpan) }) {
+                        item(span = StaggeredGridItemSpan.FullLine) {
                             SpaceCollectionSummaryCard(
                                 title = series?.meta?.name ?: selectedContributionTab.title,
                                 subtitle = series?.meta?.description.orEmpty(),
@@ -2513,7 +2536,7 @@ private fun SpaceContent(
                             )
                         }
                         if (archives.isEmpty()) {
-                            item(span = { GridItemSpan(maxLineSpan) }) {
+                            item(span = StaggeredGridItemSpan.FullLine) {
                                 SpaceSectionEmptyState(
                                     title = "暂无系列内容",
                                     subtitle = "这个系列暂时没有可展示的视频"
@@ -2524,12 +2547,11 @@ private fun SpaceContent(
                             items = archives,
                             key = { "series_video_${it.aid}_${it.bvid}" },
                             span = {
-                                GridItemSpan(
-                                    resolveSpaceContributionVideoGridSpan(
-                                        layoutMode = contributionVideoLayoutMode,
-                                        maxLineSpan = maxLineSpan,
-                                    )
-                                )
+                                if (contributionVideoLayoutMode == SpaceContributionVideoLayoutMode.GRID) {
+                                    StaggeredGridItemSpan.SingleLane
+                                } else {
+                                    StaggeredGridItemSpan.FullLine
+                                }
                             }
                         ) { archive ->
                             SpaceContributionArchiveVideoItem(
@@ -2546,7 +2568,7 @@ private fun SpaceContent(
                     }
 
                     SpaceSubTab.UGC_SEASON, SpaceSubTab.COMIC -> {
-                        item(span = { GridItemSpan(maxLineSpan) }) {
+                        item(span = StaggeredGridItemSpan.FullLine) {
                             SpaceSectionEmptyState(
                                 title = "该分类暂未开放",
                                 subtitle = "当前仓库还没有为这个投稿分类补齐独立列表视图"
@@ -2558,7 +2580,7 @@ private fun SpaceContent(
 
             SpaceMainTab.FAVORITE -> {
                 if (state.createdFavoriteFolders.isEmpty() && state.collectedFavoriteFolders.isEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionEmptyState(
                             title = "暂无收藏夹",
                             subtitle = "该用户还没有公开的收藏夹"
@@ -2567,7 +2589,7 @@ private fun SpaceContent(
                 }
 
                 if (state.createdFavoriteFolders.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "创建的收藏夹",
                             count = state.createdFavoriteFolders.size,
@@ -2577,7 +2599,7 @@ private fun SpaceContent(
                     items(
                         items = state.createdFavoriteFolders,
                         key = { "created_favorite_${it.id}" },
-                        span = { GridItemSpan(maxLineSpan) }
+                        span = { StaggeredGridItemSpan.FullLine }
                     ) { folder ->
                         SpaceFavoriteFolderRow(
                             folder = folder,
@@ -2596,7 +2618,7 @@ private fun SpaceContent(
                 }
 
                 if (state.collectedFavoriteFolders.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "收藏的合集",
                             count = state.collectedFavoriteFolders.size,
@@ -2606,7 +2628,7 @@ private fun SpaceContent(
                     items(
                         items = state.collectedFavoriteFolders,
                         key = { "collected_favorite_${it.id}" },
-                        span = { GridItemSpan(maxLineSpan) }
+                        span = { StaggeredGridItemSpan.FullLine }
                     ) { folder ->
                         SpaceFavoriteFolderRow(
                             folder = folder,
@@ -2627,7 +2649,7 @@ private fun SpaceContent(
 
             SpaceMainTab.BANGUMI -> {
                 if (state.bangumiItems.isEmpty() && !state.isLoadingBangumi) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionEmptyState(
                             title = "暂无追番",
                             subtitle = "这个 UP 还没有公开的追番内容"
@@ -2641,11 +2663,11 @@ private fun SpaceContent(
                     )
                 }
                 if (state.isLoadingBangumi) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceLoadingFooter()
                     }
                 } else if (state.hasMoreBangumi && state.bangumiItems.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         LaunchedEffect(state.bangumiItems.size, isPageActive) { if (isPageActive) onLoadMoreBangumi() }
                         Spacer(modifier = Modifier.height(1.dp))
                     }
@@ -2659,7 +2681,7 @@ private fun SpaceContent(
                     state.createdFavoriteFolders.isEmpty() &&
                     state.collectedFavoriteFolders.isEmpty()
                 ) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionEmptyState(
                             title = "暂无合集",
                             subtitle = "该用户还没有公开的系列、合集或收藏夹"
@@ -2668,7 +2690,7 @@ private fun SpaceContent(
                 }
 
                 if (state.seasons.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "合集",
                             count = state.seasons.size,
@@ -2678,7 +2700,7 @@ private fun SpaceContent(
                     items(
                         items = state.seasons,
                         key = { "season_${it.meta.season_id}" },
-                        span = { GridItemSpan(maxLineSpan) }
+                        span = { StaggeredGridItemSpan.FullLine }
                     ) { season ->
                         SpaceCollectionWithPreviewCard(
                             title = season.meta.name,
@@ -2703,7 +2725,7 @@ private fun SpaceContent(
                 }
 
                 if (state.series.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "系列",
                             count = state.series.size,
@@ -2713,7 +2735,7 @@ private fun SpaceContent(
                     items(
                         items = state.series,
                         key = { "series_${it.meta.series_id}" },
-                        span = { GridItemSpan(maxLineSpan) }
+                        span = { StaggeredGridItemSpan.FullLine }
                     ) { series ->
                         SpaceCollectionWithPreviewCard(
                             title = series.meta.name,
@@ -2738,7 +2760,7 @@ private fun SpaceContent(
                 }
 
                 if (state.createdFavoriteFolders.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "创建的收藏夹",
                             count = state.createdFavoriteFolders.size,
@@ -2748,7 +2770,7 @@ private fun SpaceContent(
                     items(
                         items = state.createdFavoriteFolders,
                         key = { "collection_created_favorite_${it.id}" },
-                        span = { GridItemSpan(maxLineSpan) }
+                        span = { StaggeredGridItemSpan.FullLine }
                     ) { folder ->
                         SpaceFavoriteFolderRow(
                             folder = folder,
@@ -2767,7 +2789,7 @@ private fun SpaceContent(
                 }
 
                 if (state.collectedFavoriteFolders.isNotEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         SpaceSectionHeader(
                             title = "收藏的合集",
                             count = state.collectedFavoriteFolders.size,
@@ -2777,7 +2799,7 @@ private fun SpaceContent(
                     items(
                         items = state.collectedFavoriteFolders,
                         key = { "collection_collected_favorite_${it.id}" },
-                        span = { GridItemSpan(maxLineSpan) }
+                        span = { StaggeredGridItemSpan.FullLine }
                     ) { folder ->
                         SpaceFavoriteFolderRow(
                             folder = folder,
@@ -2803,7 +2825,7 @@ private fun SpaceContent(
                     items(
                         count = 6,
                         key = { index -> "space_cheese_skeleton_$index" },
-                        span = { GridItemSpan(maxLineSpan) },
+                        span = { StaggeredGridItemSpan.FullLine },
                         contentType = { SPACE_CHEESE_ROW_CONTENT_TYPE },
                     ) {
                         SpaceCheeseSkeletonItem(
@@ -2811,7 +2833,7 @@ private fun SpaceContent(
                         )
                     }
                 } else if (state.cheeseItems.isEmpty()) {
-                    item(span = { GridItemSpan(maxLineSpan) }) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
                         if (state.lastCheeseLoadFailed) {
                             SpaceErrorSection(
                                 message = "加载课堂失败",
@@ -2828,7 +2850,7 @@ private fun SpaceContent(
                     items(
                         items = state.cheeseItems,
                         key = { "space_cheese_${it.seasonId}" },
-                        span = { GridItemSpan(maxLineSpan) },
+                        span = { StaggeredGridItemSpan.FullLine },
                         contentType = { SPACE_CHEESE_ROW_CONTENT_TYPE }
                     ) { item ->
                         SpaceCheeseCard(
@@ -2840,11 +2862,11 @@ private fun SpaceContent(
                         )
                     }
                     if (state.isLoadingCheese) {
-                        item(span = { GridItemSpan(maxLineSpan) }) {
+                        item(span = StaggeredGridItemSpan.FullLine) {
                             SpaceLoadingFooter()
                         }
                     } else if (state.hasMoreCheese) {
-                        item(span = { GridItemSpan(maxLineSpan) }) {
+                        item(span = StaggeredGridItemSpan.FullLine) {
                             LaunchedEffect(state.cheeseItems.size, isPageActive) { if (isPageActive) onLoadMoreCheese() }
                             Spacer(modifier = Modifier.height(1.dp))
                         }
@@ -2854,7 +2876,7 @@ private fun SpaceContent(
         }
         // Short overview/empty tabs must still have enough scroll travel to finish the
         // header-to-cutout handoff. Measure only the missing tail space, not a fixed footer.
-        item(key = "space_header_collapse_tail", span = { GridItemSpan(maxLineSpan) }) {
+        item(key = "space_header_collapse_tail", span = StaggeredGridItemSpan.FullLine) {
             // Keep the derived measurement stable when LazyGrid publishes a new layout result.
             val retainedHeight = remember(gridState) { intArrayOf(0) }
             val tailHeight = remember(
@@ -2894,6 +2916,22 @@ private fun SpaceContent(
             )
         }
     }
+
+        if (tabsPinned) {
+            Box(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = chromeTopInset, start = outerPaddingDp, end = outerPaddingDp)
+                    .zIndex(1f)
+                    .scrollable(
+                        state = gridState,
+                        orientation = Orientation.Vertical,
+                        reverseDirection = true,
+                    ),
+            ) {
+                pinnedTabsContent()
+            }
+        }
 
         // 投稿统计条滚走后，仅保留独立的排序工具条，固定在顶部导航栏下方。
         val isContributionVideoTab = selectedMainTab == SpaceMainTab.CONTRIBUTION &&
@@ -2941,8 +2979,10 @@ private fun SpaceContent(
             columns = gridColumns,
             modifier = Modifier
                 .align(Alignment.TopCenter)
+                .zIndex(2f)
                 .padding(top = chromeTopInset + 16.dp)
         )
+        } // 每页内容及吸顶层
         } // HorizontalPager
 
 
@@ -3608,7 +3648,7 @@ private fun SpaceContentTabs(
                 } else onMainTabSelected(tab)
             },
             modifier = Modifier.stationaryPagerHeader(pagerState, page),
-            indicatorPositionProvider = { pagerState.currentPage + pagerState.currentPageOffsetFraction },
+            indicatorPositionProvider = { pagerState.tabIndicatorPosition },
             isScrollInProgressProvider = { pagerState.isScrollInProgress },
         )
         if (shouldShowSpaceSecondarySwitch(selectedMainTab) && secondarySwitchItems.isNotEmpty()) {

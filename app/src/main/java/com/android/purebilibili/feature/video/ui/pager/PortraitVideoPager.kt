@@ -6,6 +6,10 @@
 package com.android.purebilibili.feature.video.ui.pager
 
 import com.android.purebilibili.feature.video.ui.gesture.detectPlayerTapGestures
+import com.android.purebilibili.feature.video.danmaku.resolvePortraitDanmakuUpperRegion
+import com.android.purebilibili.feature.video.danmaku.resolveDanmakuLayerLineHeightPx
+import com.android.purebilibili.feature.video.danmaku.resolveDanmakuTextSizePx
+import com.android.purebilibili.feature.video.ui.section.DanmakuViewportHost
 
 import com.android.purebilibili.data.repository.playableVideoQualityIds
 import com.android.purebilibili.data.repository.advertisedVideoQualityIds
@@ -200,6 +204,8 @@ import com.android.purebilibili.feature.video.ui.section.rebindPlayerSurfaceIfNe
 import com.android.purebilibili.feature.video.ui.section.resolveRelativeSeekTargetPosition
 import com.android.purebilibili.feature.video.ui.section.shouldKickPlaybackAfterSurfaceRecovery
 import com.android.purebilibili.feature.video.viewmodel.PlaybackEndAction
+import com.android.purebilibili.feature.video.viewmodel.CommentSubjectKey
+import com.android.purebilibili.feature.video.viewmodel.resolveReplyCount
 import com.android.purebilibili.feature.video.viewmodel.VideoPlaybackUiState
 import com.android.purebilibili.feature.video.viewmodel.VideoPlaybackViewModel
 import com.android.purebilibili.feature.video.viewmodel.VideoCommentViewModel
@@ -775,6 +781,11 @@ fun PortraitVideoPager(
     val exoPlayer = sharedPlayer ?: remember(context) {
         val audioFocusEnabled = SettingsManager.getAudioFocusEnabledSync(context)
         val createdPlayer = ExoPlayer.Builder(context)
+            .apply {
+                if (SettingsManager.getResilientVideoBufferSync(context)) {
+                    setLoadControl(com.android.purebilibili.feature.video.state.createVideoLoadControl(context))
+                }
+            }
             .setRenderersFactory(
                 HiResCompatibleRenderersFactory(context)
                     .setExtensionRendererMode(
@@ -1099,12 +1110,18 @@ fun PortraitVideoPager(
                     nextItem = nextItem,
                     currentLoadedInfo = collectionInfo
                 )
+                val currentIdentity = currentItem?.let(::resolvePortraitPagePlaybackIdentity)
+                val nextIdentity = nextItem?.let(::resolvePortraitPagePlaybackIdentity)
+                // Same-video parts are injected into pageItems before unrelated feed entries.
+                val hasNextPage = hasCollectionFollowUp &&
+                    currentIdentity?.bvid == nextIdentity?.bvid
                 val playbackEndAction = resolvePlaybackEndAction(
                     behavior = playbackCompletionBehavior,
                     autoPlayEnabled = autoPlayEnabled,
                     isExternalPlaylist = isExternalPlaylist,
                     externalPlaylistAutoContinueEnabled = externalPlaylistAutoContinueEnabled,
-                    hasNextPageOrSeasonTarget = hasCollectionFollowUp
+                    hasNextPage = hasNextPage,
+                    hasNextSeasonEpisode = hasCollectionFollowUp && !hasNextPage
                 )
                 when (playbackEndAction) {
                     PlaybackEndAction.STOP -> {
@@ -2589,6 +2606,7 @@ private fun VideoPageItem(
     var showUpPreview by remember(bvid) { mutableStateOf(false) }
     var commentSheetVisibilityProgress by remember { mutableFloatStateOf(0f) }
     var upPreviewVisibilityProgress by remember(bvid) { mutableFloatStateOf(0f) }
+    val portraitCommentStateHandle = commentViewModel.commentState.collectAsStateWithLifecycle()
     val subReplyState by commentViewModel.subReplyState.collectAsStateWithLifecycle()
     var portraitPageWidthPx by remember { mutableIntStateOf(0) }
     var portraitPageHeightPx by remember { mutableIntStateOf(0) }
@@ -3244,19 +3262,43 @@ private fun VideoPageItem(
                 translationY = commentExpansionTransform.translationYPx
                 transformOrigin = TransformOrigin(0.5f, 0f)
             }
+        val danmakuVideoViewport = resolvePortraitPlayerViewportSize(
+            containerWidth = portraitPageWidthPx,
+            containerHeight = portraitPageHeightPx,
+            currentVideoAspect = portraitPagerViewportAspect,
+            fillContainer = portraitPagerFillContainer,
+            aspectRatio = aspectRatio,
+            videoWidth = exoPlayer.videoSize.width,
+            videoHeight = exoPlayer.videoSize.height,
+            liquidGlassEnabled = com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled,
+        )
+        val upperDanmakuRegion = resolvePortraitDanmakuUpperRegion(
+            containerWidthPx = portraitPageWidthPx,
+            containerHeightPx = portraitPageHeightPx,
+            videoViewportWidthPx = danmakuVideoViewport.width,
+            videoViewportHeightPx = danmakuVideoViewport.height,
+            videoWidth = exoPlayer.videoSize.width,
+            videoHeight = exoPlayer.videoSize.height,
+            fitVideoInsideViewport = !portraitPagerFillContainer,
+            viewportOffsetYPx = portraitViewportVerticalOffsetPx,
+            safeTopPx = with(density) { pageDanmakuTopInset.roundToPx() },
+            minimumHeightPx = resolveDanmakuLayerLineHeightPx(
+                fontSize = resolveDanmakuTextSizePx(
+                    context.resources.displayMetrics.density,
+                    portraitDanmakuSettings.fontScale,
+                    isFullscreen = true,
+                ),
+                lineHeightMultiplier = portraitDanmakuSettings.lineHeight,
+            ) / portraitDanmakuSettings.displayArea.coerceIn(0.1f, 1f),
+            videoScale = scale,
+            videoTranslationYPx = panY,
+        )
         val danmakuSurfaceMode = resolvePortraitDanmakuSurfaceMode(
-            currentVideoAspect = currentVideoAspect,
+            upperRegionAvailable = upperDanmakuRegion != null,
             displayAreaMode = portraitDanmakuDisplayAreaMode
         )
         val viewportTransformModifier = Modifier
             .fillMaxSize()
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-                translationX = panX
-                translationY = panY
-            }
-        val pageDanmakuModifier = mediaLayerModifier
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -3338,19 +3380,20 @@ private fun VideoPageItem(
                 isPlayerReadyForThisVideo = isPlayerReadyForThisVideo,
             )
         ) {
-            PortraitDanmakuOverlay(
-                danmakuManager = danmakuManager,
-                videoWidth = exoPlayer.videoSize.width,
-                videoHeight = exoPlayer.videoSize.height,
-                resizeMode = playerViewRef?.resizeMode ?: portraitPagerResizeMode,
-                modifier = pageDanmakuModifier.then(
-                    if (shouldInsetPortraitDanmakuFromStatusBar(danmakuSurfaceMode)) {
-                        Modifier.padding(top = pageDanmakuTopInset)
-                    } else {
-                        Modifier
-                    }
+            val region = requireNotNull(upperDanmakuRegion)
+            Box(modifier = mediaLayerModifier) {
+                PortraitDanmakuOverlay(
+                    danmakuManager = danmakuManager,
+                    videoWidth = exoPlayer.videoSize.width,
+                    videoHeight = exoPlayer.videoSize.height,
+                    resizeMode = playerViewRef?.resizeMode ?: portraitPagerResizeMode,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .offset(y = with(density) { region.topPx.toDp() })
+                        .fillMaxWidth()
+                        .height(with(density) { region.heightPx.toDp() }),
                 )
-            )
+            }
         }
 
         // 封面图 (在加载中、未匹配到视频、或未开始播放时显示)
@@ -3792,13 +3835,16 @@ private fun VideoPageItem(
         bvid = bvid
     )
 
+    val favoriteFolderMenuAnchor = com.android.purebilibili.feature.video.ui.components.rememberFavoriteFolderMenuAnchor()
     PortraitVideoEngagementUi(
         session = pageEngagementSession,
+        favoriteFolderAnchor = favoriteFolderMenuAnchor,
         visible = isCurrentPage && !isInPipMode,
         onModalVisibilityChanged = { portraitEngagementModalVisible = it },
     )
 
     CompositionLocalProvider(
+        com.android.purebilibili.feature.video.ui.components.LocalFavoriteFolderMenuAnchor provides favoriteFolderMenuAnchor,
         com.android.purebilibili.feature.video.ui.overlay.LocalPlayerPageBackdrop provides
             portraitPageBackdrop.backdrop.takeIf {
                 capturePortraitPage && portraitPageBackdrop.isReady &&
@@ -3823,6 +3869,16 @@ private fun VideoPageItem(
         )
         val diagnosticLoggingEnabled by SettingsManager.getPlayerDiagnosticLoggingEnabled(context)
             .collectAsStateWithLifecycle(initialValue = true)
+        val displayedCommentCount by remember(
+            portraitCommentStateHandle, activeAid, bvid, portraitDetailInfo,
+        ) {
+            derivedStateOf {
+                portraitCommentStateHandle.value.resolveReplyCount(
+                    subject = CommentSubjectKey(activeAid),
+                    detailCount = portraitDetailInfo?.takeIf { it.bvid == bvid }?.stat?.reply,
+                )
+            }
+        }
         val portraitOverlayState = com.android.purebilibili.feature.video.ui.overlay.VideoPlayerOverlayState(
                 player = exoPlayer,
                 title = title,
@@ -3937,7 +3993,9 @@ private fun VideoPageItem(
                 isCoined = pageEngagementState.coinCount > 0,
                 isFavorited = pageEngagementState.isFavorited,
                 isDisliked = pageEngagementState.isDisliked,
-                hasFavoritePlaylist = portraitHasExternalPlaylist && portraitExternalPlaylist.isNotEmpty(),
+                hasExternalPlaylist = portraitHasExternalPlaylist && portraitExternalPlaylist.isNotEmpty(),
+                commentCount = displayedCommentCount?.toLong(),
+                engagementCountsKnown = portraitDetailInfo?.bvid == bvid,
                 likeCount = pageEngagementState.likeCount.toLong(),
                 favoriteCount = pageEngagementState.favoriteCount.toLong(),
                 coinCount = pageEngagementState.coinCount,
@@ -4248,7 +4306,7 @@ private fun VideoPageItem(
                     if (seekSession.isSliderMoving) seekSession.sliderPositionMs else progressState.current
                 },
                 onPlayModeClick = { PlaylistManager.togglePlayMode() },
-                onFavoritePlaylistClick = { showPortraitExternalPlaylist = true },
+                onExternalPlaylistClick = { showPortraitExternalPlaylist = true },
                 onPageSelect = { index ->
                     portraitDetailInfo?.pages?.getOrNull(index)?.let { page ->
                         onRequestCollectionItem(bvid, page.cid, portraitDetailInfo.ugc_season)
@@ -4407,7 +4465,7 @@ private fun VideoPageItem(
             val commentDraft = composerDrafts.comments.drafts[
                 com.android.purebilibili.feature.video.viewmodel.commentComposerDraftKey(draftReplyRpid)
             ] ?: com.android.purebilibili.feature.video.viewmodel.CommentComposerDraft()
-            val commentState by commentViewModel.commentState.collectAsStateWithLifecycle()
+            val commentState by portraitCommentStateHandle
             val commentFraudDetectionEnabled by com.android.purebilibili.core.store.SettingsManager
                 .getCommentFraudDetectionEnabled(context)
                 .collectAsStateWithLifecycle(initialValue = true
@@ -4554,7 +4612,9 @@ internal fun resolvePortraitActiveAid(
     itemAid: Long,
     currentPlayingAid: Long
 ): Long {
-    return if (isPlayerReadyForThisVideo) currentPlayingAid.coerceAtLeast(0L) else itemAid
+    // 切换开始时播放器先清空 AID；此时列表身份仍有效，不能用未知值覆盖。
+    return if (isPlayerReadyForThisVideo && currentPlayingAid > 0L) currentPlayingAid
+        else itemAid.coerceAtLeast(0L)
 }
 
 internal fun resolvePortraitOverlayControlsVisible(
@@ -4589,47 +4649,50 @@ private fun PortraitDanmakuOverlay(
     resizeMode: Int,
     modifier: Modifier = Modifier
 ) {
-    key(danmakuManager) {
-        AndroidView(
-            factory = { ctx ->
-                DanmakuRenderView(ctx).apply {
-                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                    // 弹幕层必须 passive，否则会吞掉竖屏全屏的全部触控。
-                    configureAsPassiveDanmakuOverlay()
-                    danmakuManager.attachView(this)
-                }
-            },
-            update = { view ->
-                view.configureAsPassiveDanmakuOverlay()
-                val viewportTag = "$videoWidth:$videoHeight:$resizeMode:${view.width}x${view.height}"
-                if (view.width > 0 && view.height > 0 && view.tag != viewportTag) {
-                    view.tag = viewportTag
-                    danmakuManager.attachView(view)
-                }
-            },
-            onRelease = { view -> danmakuManager.detachView(view) },
-            modifier = modifier
-        )
+    DanmakuViewportHost(modifier) { viewport ->
+        key(danmakuManager) {
+            AndroidView(
+                factory = { ctx ->
+                    DanmakuRenderView(ctx).apply {
+                        danmakuManager.updateViewport(viewport)
+                        addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+                            if (view.width > 0 && view.height > 0) danmakuManager.attachView(this)
+                        }
+                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                        // 弹幕层必须 passive，否则会吞掉竖屏全屏的全部触控。
+                        configureAsPassiveDanmakuOverlay()
+                        danmakuManager.attachView(this)
+                    }
+                },
+                update = { view ->
+                    view.configureAsPassiveDanmakuOverlay()
+                    danmakuManager.updateViewport(viewport)
+                    val viewportTag = "$videoWidth:$videoHeight:$resizeMode:${view.width}x${view.height}"
+                    if (view.width > 0 && view.height > 0 && view.tag != viewportTag) {
+                        view.tag = viewportTag
+                        danmakuManager.attachView(view)
+                    }
+                },
+                onRelease = { view -> danmakuManager.detachView(view) },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
     }
 }
 
 internal fun resolvePortraitPagerRepeatMode(): Int = Player.REPEAT_MODE_OFF
 
 internal fun resolvePortraitDanmakuSurfaceMode(
-    currentVideoAspect: Float,
+    upperRegionAvailable: Boolean,
     displayAreaMode: PortraitDanmakuDisplayAreaMode
 ): PortraitDanmakuSurfaceMode {
-    return when (displayAreaMode) {
-        PortraitDanmakuDisplayAreaMode.VIDEO_VIEWPORT -> PortraitDanmakuSurfaceMode.VideoViewport
-        PortraitDanmakuDisplayAreaMode.SCREEN_TOP -> PortraitDanmakuSurfaceMode.Page
+    return if (displayAreaMode == PortraitDanmakuDisplayAreaMode.SCREEN_TOP && upperRegionAvailable) {
+        PortraitDanmakuSurfaceMode.Page
+    } else {
+        PortraitDanmakuSurfaceMode.VideoViewport
     }
 }
 
-internal fun shouldInsetPortraitDanmakuFromStatusBar(
-    surfaceMode: PortraitDanmakuSurfaceMode
-): Boolean {
-    return surfaceMode == PortraitDanmakuSurfaceMode.Page
-}
 
 /**
  * Resolves the top safe inset for the page-level portrait danmaku surface.
@@ -4776,6 +4839,34 @@ internal fun resolvePortraitVideoViewportVerticalOffsetDp(
     return if (currentVideoAspect > 1f) -48 else 0
 }
 
+internal fun resolvePortraitPlayerViewportSize(
+    containerWidth: Int,
+    containerHeight: Int,
+    currentVideoAspect: Float,
+    fillContainer: Boolean,
+    aspectRatio: VideoAspectRatio?,
+    videoWidth: Int,
+    videoHeight: Int,
+    liquidGlassEnabled: Boolean,
+): PortraitVideoViewportSize {
+    return if (aspectRatio != null && !liquidGlassEnabled) {
+        com.android.purebilibili.feature.video.ui.components.resolveVideoViewportLayout(
+            containerWidth = containerWidth,
+            containerHeight = containerHeight,
+            aspectRatio = aspectRatio,
+            videoWidth = videoWidth,
+            videoHeight = videoHeight,
+        ).let { PortraitVideoViewportSize(it.width, it.height) }
+    } else {
+        resolvePortraitVideoViewportSize(
+            containerWidth = containerWidth,
+            containerHeight = containerHeight,
+            currentVideoAspect = currentVideoAspect,
+            fillContainer = fillContainer,
+        )
+    }
+}
+
 @Composable
 internal fun PortraitVideoViewportContainer(
     currentVideoAspect: Float,
@@ -4791,22 +4882,16 @@ internal fun PortraitVideoViewportContainer(
     BoxWithConstraints(modifier = modifier.clipToBounds()) {
         val density = LocalDensity.current
         val viewportSize = with(density) {
-            if (aspectRatio != null && !liquidGlassEnabled) {
-                com.android.purebilibili.feature.video.ui.components.resolveVideoViewportLayout(
-                    containerWidth = maxWidth.roundToPx(),
-                    containerHeight = maxHeight.roundToPx(),
-                    aspectRatio = aspectRatio,
-                    videoWidth = videoWidth,
-                    videoHeight = videoHeight,
-                ).let { PortraitVideoViewportSize(it.width, it.height) }
-            } else {
-                resolvePortraitVideoViewportSize(
-                    containerWidth = maxWidth.roundToPx(),
-                    containerHeight = maxHeight.roundToPx(),
-                    currentVideoAspect = currentVideoAspect,
-                    fillContainer = fillContainer,
-                )
-            }
+            resolvePortraitPlayerViewportSize(
+                containerWidth = maxWidth.roundToPx(),
+                containerHeight = maxHeight.roundToPx(),
+                currentVideoAspect = currentVideoAspect,
+                fillContainer = fillContainer,
+                aspectRatio = aspectRatio,
+                videoWidth = videoWidth,
+                videoHeight = videoHeight,
+                liquidGlassEnabled = liquidGlassEnabled,
+            )
         }
         val isLandscape = maxWidth > maxHeight
 

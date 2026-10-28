@@ -2182,7 +2182,7 @@ class MiniPlayerManager private constructor(private val context: Context) :
             val stopPlaybackOnExit = SettingsManager.getStopPlaybackOnExitSync(context)
             val audioFocusEnabled = SettingsManager.getAudioFocusEnabledSync(context)
 
-            // 音乐氛围在 HiResCompatibleRenderersFactory 的公共音频入口动态读取开关。
+            // 封面律动在公共音频入口按需读取开关。
             val renderersFactory = if (SettingsManager.getLoudnessNormalizationEnabledSync(context)) {
                 com.android.purebilibili.core.player.LoudnessAwareRenderersFactory(context)
             } else {
@@ -2191,6 +2191,11 @@ class MiniPlayerManager private constructor(private val context: Context) :
                 androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
             )
             _player = ExoPlayer.Builder(context)
+                .apply {
+                    if (SettingsManager.getResilientVideoBufferSync(context)) {
+                        setLoadControl(com.android.purebilibili.feature.video.state.createVideoLoadControl(context))
+                    }
+                }
                 .setRenderersFactory(renderersFactory)
                 .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
                 .setAudioAttributes(

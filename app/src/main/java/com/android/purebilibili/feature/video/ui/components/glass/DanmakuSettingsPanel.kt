@@ -357,7 +357,7 @@ fun DanmakuSettingsPanel(
     smartOcclusion: Boolean = true,
     fullscreenWidthMode: DanmakuPanelWidthMode = DanmakuPanelWidthMode.THIRD,
     portraitDisplayAreaMode: PortraitDanmakuDisplayAreaMode =
-        PortraitDanmakuDisplayAreaMode.VIDEO_VIEWPORT,
+        PortraitDanmakuDisplayAreaMode.SCREEN_TOP,
     syncUiState: DanmakuCloudSyncUiState = DanmakuCloudSyncUiState(),
     onSliderPreview: ((DanmakuSliderParameter, Float) -> Unit)? = null,
     onOpacityChange: (Float) -> Unit,

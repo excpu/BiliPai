@@ -4,9 +4,6 @@ import androidx.compose.foundation.combinedClickable
 import com.android.purebilibili.core.ui.components.appActionWithFeedback
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -101,24 +98,6 @@ internal fun PiliPlayerBar(
     }
 }
 
-@Composable
-internal fun PlayerPlayPauseButton(
-    isPlaying: Boolean,
-    onClick: () -> Unit,
-    sizeDp: Int = 42,
-    iconSizeDp: Int = 20,
-    height: Dp = PILI_PLAYER_BOTTOM_ROW_HEIGHT_DP.dp,
-) {
-    PlayerControlIconAction(
-        icon = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-        description = if (isPlaying) "暂停" else "播放",
-        width = sizeDp.dp,
-        height = height,
-        iconSize = iconSizeDp.dp,
-        modifier = Modifier.testTag("player_play_pause"),
-        onClick = onClick,
-    )
-}
 
 @Composable
 internal fun PlayerControlIconAction(
@@ -132,6 +111,7 @@ internal fun PlayerControlIconAction(
     dimmed: Boolean = false,
     iconSize: Dp = 22.dp,
     onLongClick: (() -> Unit)? = null,
+    selectedTint: Color = Color.White,
 ) {
     val glass = com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled
     // 玻璃单图标使用正圆；关闭玻璃时保留调用方原生槽位。
@@ -151,7 +131,8 @@ internal fun PlayerControlIconAction(
                 AppIcon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = Color.White.copy(alpha = if (dimmed) 0.5f else 1f),
+                    tint = (if (selected) selectedTint else Color.White)
+                        .copy(alpha = if (dimmed) 0.5f else 1f),
                     modifier = Modifier.size(iconSize),
                 )
             }

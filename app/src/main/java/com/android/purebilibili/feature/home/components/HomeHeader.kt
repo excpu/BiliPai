@@ -758,14 +758,17 @@ internal fun resolveHomeTopContinuousSlabHeight(
     ).blurHeight
 }
 
-/** 原生文字分类共用连续底色；普通磨砂保留少量透光，液态玻璃使用自身材质。 */
+/** 原生分类保留保护底色；渐进特效使用透光遮罩，普通磨砂与无特效维持原有底色。 */
 internal fun resolveHomeNativeTopProtectionAlpha(
     liquidGlassActive: Boolean,
     blurActive: Boolean,
+    contentRevealFraction: Float = 1f,
+    progressiveChromeActive: Boolean = false,
 ): Float = when {
     liquidGlassActive -> 0f
-    blurActive -> 0.96f
-    else -> 1f
+    progressiveChromeActive -> 0.24f * contentRevealFraction.coerceIn(0f, 1f)
+    blurActive -> 0.96f * contentRevealFraction.coerceIn(0f, 1f)
+    else -> contentRevealFraction.coerceIn(0f, 1f)
 }
 
 internal fun resolveHomeTopContinuousSlabSurfaceColor(
@@ -1394,7 +1397,7 @@ internal fun Modifier.homeTopChromeSurface(
                     blurRadiusDp = liquidGlassTuning?.progressiveBlurRadius
                         ?: BILIPAI_PROGRESSIVE_TOP_BLUR_RADIUS_DP,
                     gradient = ProgressiveBlur.Top.copy(
-                        startFraction = 0f,
+                        startFraction = liquidGlassTuning?.progressiveBlurStartFraction ?: 0f,
                         endFraction = liquidGlassTuning?.progressiveBlurEndFraction
                             ?: ProgressiveBlur.Top.endFraction,
                         curve = liquidGlassTuning?.progressiveBlurCurve
@@ -1419,7 +1422,7 @@ internal fun Modifier.homeTopChromeSurface(
                             blurRadiusDp = liquidGlassTuning?.progressiveBlurRadius
                                 ?: BILIPAI_PROGRESSIVE_TOP_BLUR_RADIUS_DP,
                             gradient = ProgressiveBlur.Top.copy(
-                                startFraction = 0f,
+                                startFraction = liquidGlassTuning?.progressiveBlurStartFraction ?: 0f,
                                 endFraction = liquidGlassTuning?.progressiveBlurEndFraction
                                     ?: ProgressiveBlur.Top.endFraction,
                                 curve = liquidGlassTuning?.progressiveBlurCurve
@@ -1433,11 +1436,14 @@ internal fun Modifier.homeTopChromeSurface(
                         val density = LocalDensity.current
                         val blurRadiusPx = with(density) { 25.dp.toPx() }
                         val shapeBlock = remember(shape) { { shape } }
-                        Modifier.miuixDrawBackdrop(
-                            backdrop = miuixBackdrop,
-                            shape = shapeBlock,
-                            effects = { miuixBlur(blurRadiusPx, blurRadiusPx) },
-                        )
+                        // 普通磨砂也保持效果回调身份，滚动引发的无关重组不重建效果缓存。
+                        remember(miuixBackdrop, shapeBlock, blurRadiusPx) {
+                            Modifier.miuixDrawBackdrop(
+                                backdrop = miuixBackdrop,
+                                shape = shapeBlock,
+                                effects = { miuixBlur(blurRadiusPx, blurRadiusPx) },
+                            )
+                        }
                     } else if (hazeState != null && !useProgressiveTopFade) {
                         Modifier.unifiedBlur(
                             hazeState = hazeState,
@@ -2090,10 +2096,12 @@ fun HomeHeader(
         }
     }
     val isProgressiveBlurRequested = progressiveTopBlurEnabled
-    val isProgressiveBlurActive = shouldUseBiliPaiProgressiveTopBlur(
+    val isProgressiveBlurEligible = shouldUseBiliPaiProgressiveTopBlur(
         enabled = isProgressiveBlurRequested && !isHeaderBlurEnabled,
-        hasBackdrop = miuixBackdrop != null,
-    ) && !forceLowBlurBudget
+        hasBackdrop = true,
+        blurRadiusDp = liquidGlassTuning.progressiveBlurRadius,
+    ) && !isLowBlurBudgetForced(forceLowBlurBudget)
+    val isProgressiveBlurActive = isProgressiveBlurEligible && miuixBackdrop != null
     val isProgressiveFadeActive = progressiveTopFadeEnabled && !isHeaderBlurEnabled
     val topChromeWallpaperPalette = if (!hasIllustratedHeader) {
         currentTopChromeWallpaperPalette(MaterialTheme.colorScheme.background)
@@ -2119,11 +2127,12 @@ fun HomeHeader(
         includeTabInBlur = true,
     )
     val progressiveBlurBottomExtension = resolveProgressiveTopBlurBottomExtension(
-        enabled = isProgressiveBlurRequested &&
-            liquidGlassTuning.progressiveBlurRadius > 0.001f,
-        endFraction = liquidGlassTuning.progressiveBlurEndFraction,
+        // 背景首次录制就绪前也保留有效特效的几何范围，避免渐隐高度随后跳变。
+        enabled = isProgressiveBlurEligible ||
+            (!isGlassEnabled && !topChromeLiquidGlassEnabled && isProgressiveFadeActive),
+        endFraction = if (isProgressiveBlurEligible) liquidGlassTuning.progressiveBlurEndFraction else 1f,
     )
-    val continuousSlabHeight = pinnedChromeLayout.blurHeight + progressiveBlurBottomExtension
+    val baseContinuousSlabHeight = pinnedChromeLayout.blurHeight + progressiveBlurBottomExtension
     val pinnedChromeContentHeight = pinnedChromeLayout.tabTop + currentTabHeight
     val isTopTabViewportSyncEnabled = resolveHomeTopTabViewportSyncEnabled(
         currentTabHeightDp = currentTabHeight.value,
@@ -2132,6 +2141,47 @@ fun HomeHeader(
     )
     val tabBorderAlpha = if (isTabFloating) tabChromeStyle.borderAlpha else 0f
     val topLayoutOrder = homeSettings?.homeTopLayoutOrder ?: HomeTopLayoutOrder.SEARCH_THEN_TABS
+    val nativeProgressiveLayout = !isGlassEnabled && !topChromeLiquidGlassEnabled &&
+        (isProgressiveBlurEligible || isProgressiveFadeActive)
+    val nativeProgressiveProtection = nativeProgressiveLayout &&
+        (isProgressiveBlurActive || isProgressiveFadeActive)
+    val panelVerticalInset = if (embedTopTabsInUnifiedPanel && renderUnifiedTopPanelChrome) {
+        unifiedPanelInnerPadding
+    } else 0.dp
+    val protectionTabTop = statusBarHeight + panelVerticalInset +
+        (if (topLayoutOrder == HomeTopLayoutOrder.SEARCH_THEN_TABS) {
+            currentSearchHeight + currentTabToSearchSpacing
+        } else 0.dp) + (if (embedTopTabsInUnifiedPanel) 0.dp else tabVerticalOffset)
+    val protectionTabBottom = protectionTabTop + currentTabHeight
+    val protectionContentBottom = maxOf(
+        pinnedChromeContentHeight + panelVerticalInset * 2,
+        protectionTabBottom,
+    )
+    val continuousSlabHeight = if (nativeProgressiveLayout) {
+        maxOf(baseContinuousSlabHeight, protectionContentBottom + 32.dp)
+    } else baseContinuousSlabHeight
+    val protectionHeight = maxOf(continuousSlabHeight, protectionContentBottom + 32.dp)
+    val tabProtectionVisibility = if (!hideTopTabs && expandedTabHeight > 0.dp) {
+        (tabAlpha * tabContentAlpha * (currentTabHeight / expandedTabHeight).coerceIn(0f, 1f)).coerceIn(0f, 1f)
+    } else 0f
+    // 只有非玻璃渐进顶栏延后清晰端；玻璃及其他控件继续使用原始调节参数。
+    val continuousSlabTuning = if (nativeProgressiveProtection && tabProtectionVisibility > 0f) {
+        val gradient = homeTopReadabilityBlurGradient(
+            gradient = ProgressiveBlur.Top.copy(
+                startFraction = liquidGlassTuning.progressiveBlurStartFraction,
+                endFraction = liquidGlassTuning.progressiveBlurEndFraction,
+                curve = liquidGlassTuning.progressiveBlurCurve,
+            ),
+            tabBottomFraction = (protectionTabBottom / continuousSlabHeight).coerceIn(0f, 1f),
+            clearEndFraction = ((protectionTabBottom + 24.dp) / continuousSlabHeight).coerceIn(0f, 1f),
+        )
+        liquidGlassTuning.copy(
+            progressiveBlurStartFraction = liquidGlassTuning.progressiveBlurStartFraction +
+                (gradient.startFraction - liquidGlassTuning.progressiveBlurStartFraction) * tabProtectionVisibility,
+            progressiveBlurEndFraction = liquidGlassTuning.progressiveBlurEndFraction +
+                (gradient.endFraction - liquidGlassTuning.progressiveBlurEndFraction) * tabProtectionVisibility,
+        )
+    } else liquidGlassTuning
     val topTabsContent: @Composable (Dp) -> Unit = { maxDockWidth ->
         val renderTabs: @Composable () -> Unit = {
         Box(modifier = Modifier.fillMaxWidth()) {
@@ -2377,7 +2427,7 @@ fun HomeHeader(
                         hazeState = hazeState,
                         miuixBackdrop = miuixBackdrop,
                         liquidStyle = liquidStyle,
-                        liquidGlassTuning = liquidGlassTuning,
+                        liquidGlassTuning = continuousSlabTuning,
                         liquidGlassPreset = bottomBarLiquidGlassPreset,
                         motionTier = motionTier,
                         isScrolling = topChromeMotionPolicy.isScrolling,
@@ -2399,15 +2449,36 @@ fun HomeHeader(
         val nativeTopProtectionAlpha = resolveHomeNativeTopProtectionAlpha(
             liquidGlassActive = isGlassEnabled || topChromeLiquidGlassEnabled,
             blurActive = isHeaderBlurEnabled || isProgressiveBlurActive,
+            progressiveChromeActive = isProgressiveBlurActive || isProgressiveFadeActive,
+            contentRevealFraction = if (isProgressiveBlurActive || isProgressiveFadeActive) {
+                maxOf(
+                    searchRevealFraction,
+                    if (expandedTabHeight > 0.dp) {
+                        (currentTabHeight / expandedTabHeight).coerceIn(0f, 1f)
+                    } else 0f,
+                )
+            } else 1f,
         )
-        // 仅关闭顶部液态玻璃时覆盖导航区域；放在模糊层之上，避免普通磨砂仍透出列表文字。
-        // 高度止于当前分类栏底部，不延伸到渐进模糊尾部，也不改变搜索行和标签的布局。
+        // 非玻璃渐进顶栏按控件位置保护分类文字，尾部渐隐；普通磨砂与无特效仍用原来的实色遮罩。
         if (nativeTopProtectionAlpha > 0f) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(pinnedChromeContentHeight)
-                    .background(MaterialTheme.colorScheme.background.copy(alpha = nativeTopProtectionAlpha))
+                    .height(if (nativeProgressiveProtection) protectionHeight else pinnedChromeContentHeight)
+                    .then(
+                        if (nativeProgressiveProtection) {
+                            Modifier.homeTopReadabilityProtection(
+                                color = MaterialTheme.colorScheme.background,
+                                contentBottom = protectionContentBottom,
+                                tabTop = protectionTabTop,
+                                tabBottom = protectionTabBottom,
+                                baseAlpha = nativeTopProtectionAlpha,
+                                tabVisibility = tabProtectionVisibility,
+                            )
+                        } else {
+                            Modifier.background(MaterialTheme.colorScheme.background.copy(alpha = nativeTopProtectionAlpha))
+                        }
+                    )
             )
         }
         // The skin head artwork belongs to the complete pinned header, not only the
@@ -2752,6 +2823,8 @@ fun HomeHeader(
                                         resolveHomeTopEdgeControlHeight().value
                                     ),
                                     isScrollInProgressProvider = { topChromeMotionPolicy.isScrolling },
+                                    // 此入口只有文字和图标，不消费外壳背景；原生回退不受影响。
+                                    captureShellForContent = false,
                                 ) { liquidChromeActive ->
                                     if (liquidChromeActive) {
                                         val searchPillInteractionSource = remember { MutableInteractionSource() }

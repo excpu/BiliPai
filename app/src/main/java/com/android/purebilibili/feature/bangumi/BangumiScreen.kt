@@ -1,5 +1,6 @@
 package com.android.purebilibili.feature.bangumi
 
+import com.android.purebilibili.navigation.tabIndicatorPosition
 import android.os.Build
 import com.android.purebilibili.core.ui.LocalNavigationBackHandler
 import androidx.compose.foundation.background
@@ -279,7 +280,7 @@ private fun BangumiHubScreen(
                             options = BangumiChannel.entries.map { AppSegmentOption(it, it.label) },
                             selectedValue = state.channel,
                             indicatorPositionProvider = if (state.page == BangumiHubPage.HOME) {
-                                { channelPager.currentPage + channelPager.currentPageOffsetFraction }
+                                { channelPager.tabIndicatorPosition }
                             } else null,
                             isScrollInProgressProvider = {
                                 state.page == BangumiHubPage.HOME && channelPager.isScrollInProgress

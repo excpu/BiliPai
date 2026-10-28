@@ -585,9 +585,9 @@ object CommentRepository {
                     CoreDataLog.w("CommentRepo", "getComments REST failed with code ${finalResponse.code}, restoring valid gRPC payload")
                     return@withContext fallbackGrpcResult
                 }
-                val errorMsg = resolveCommentReadErrorMessage(finalResponse.code)
+                val error = CommentReadException(finalResponse.code, finalResponse.message)
                 android.util.Log.e("CommentRepo", " getComments failed: oid=$oid, type=$type, ${finalResponse.code} - ${finalResponse.message}")
-                Result.failure(Exception(errorMsg))
+                Result.failure(error)
             }
         } catch (e: Exception) {
             if (fallbackGrpcResult != null) {
@@ -684,7 +684,7 @@ object CommentRepository {
                 response = fetchCommentEmptySuccessFallback(plan, oid, type, page, ps, mode, null)
             }
             currentCoroutineContext().ensureActive()
-            if (response.code != 0) return Result.failure(Exception(resolveCommentReadErrorMessage(response.code)))
+            if (response.code != 0) return Result.failure(CommentReadException(response.code, response.message))
             val rawData = response.data ?: return Result.failure(Exception("评论响应缺少数据，请重试"))
             require(continuation == null || continuation.route == mobileRestCommentRoute(rawData)) {
                 "评论分页接口发生变化，请刷新后重试"
@@ -709,7 +709,7 @@ object CommentRepository {
             if (response.code == 0) {
                 Result.success(response.data?.count ?: 0)
             } else {
-                Result.failure(Exception(resolveCommentReadErrorMessage(response.code)))
+                Result.failure(CommentReadException(response.code, response.message))
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -915,9 +915,7 @@ object CommentRepository {
                     return@withContext fallbackGrpcResult
                 }
                 android.util.Log.e("CommentRepo", " getSubComments failed: oid=$oid, type=$type, ${finalResponse.code} - ${finalResponse.message}")
-                val errorMsg = resolveCommentReadErrorMessage(finalResponse.code)
-                    .replace("评论", "回复")
-                Result.failure(Exception(errorMsg))
+                Result.failure(CommentReadException(finalResponse.code, finalResponse.message))
             }
         } catch (e: Exception) {
             if (fallbackGrpcResult != null) {

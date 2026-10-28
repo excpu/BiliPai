@@ -82,6 +82,7 @@ import com.android.purebilibili.feature.video.ui.components.VideoAspectRatio
 import com.android.purebilibili.feature.video.ui.components.AspectRatioMenu
 import com.android.purebilibili.feature.video.ui.components.VideoSettingsPanel
 import com.android.purebilibili.feature.video.ui.components.PlayerEpisodeMenu
+import com.android.purebilibili.feature.video.ui.components.PlayerEpisodeSourceMenu
 import com.android.purebilibili.feature.video.ui.components.resolveCurrentUgcEpisodeLazyListIndex
 import com.android.purebilibili.feature.video.ui.components.LandscapeSidePanel
 import com.android.purebilibili.feature.video.ui.components.landscapeControlCenterGroup
@@ -185,9 +186,9 @@ internal fun shouldShowEpisodeEntryFromVideoData(
     relatedVideosCount: Int,
     hasSeasonEpisodes: Boolean,
     pagesCount: Int,
-    hasFavoritePlaylist: Boolean = false
+    hasExternalPlaylist: Boolean = false
 ): Boolean {
-    return pagesCount > 1 || hasSeasonEpisodes || hasFavoritePlaylist
+    return pagesCount > 1 || hasSeasonEpisodes || hasExternalPlaylist
 }
 
 
@@ -702,8 +703,8 @@ private fun VideoPlayerOverlayContent(
     val pages = state.pages
     val currentPageIndex = state.currentPageIndex
     val onPageSelect = actions.onPageSelect
-    val hasFavoritePlaylist = state.hasFavoritePlaylist
-    val onFavoritePlaylistClick = actions.onFavoritePlaylistClick
+    val hasExternalPlaylist = state.hasExternalPlaylist
+    val onExternalPlaylistClick = actions.onExternalPlaylistClick
     val drawerHazeState = state.drawerHazeState
     val statusBarAmbientFrame = state.statusBarAmbientFrame
     val statusBarBackdropHeight = state.statusBarBackdropHeight
@@ -763,11 +764,13 @@ private fun VideoPlayerOverlayContent(
         }
     }
     var showEpisodeMenu by remember { mutableStateOf(false) }
+    var showEpisodeSourceMenu by remember { mutableStateOf(false) }
     var bottomControlFloatingPanelVisible by remember { mutableStateOf(false) }
     var showCdnDiagnostics by remember { mutableStateOf(false) }
     // 换集后强制关掉分集/菜单等全屏遮罩，避免 Dialog/Sheet 残留挡触摸。
     LaunchedEffect(bvid, cid, isFullscreen) {
         showEpisodeMenu = false
+        showEpisodeSourceMenu = false
         showVideoSettings = false
         showQualityMenu = false
         showSpeedMenu = false
@@ -823,19 +826,23 @@ private fun VideoPlayerOverlayContent(
             PiliEpisodeNavigationEntry(bvid, page.cid, index)
         } else emptyList()
     }
-    val navigationPlaylist = if (hasFavoritePlaylist) {
+    val navigationPlaylist = if (hasExternalPlaylist) {
         com.android.purebilibili.feature.video.player.PlaylistManager.playlist.collectAsStateWithLifecycle().value
     } else emptyList()
-    val navigationOuter = remember(ugcSeason, hasFavoritePlaylist, navigationPlaylist) {
-        if (hasFavoritePlaylist) navigationPlaylist.map { PiliEpisodeNavigationEntry(it.bvid, it.cid) }
-        else ugcSeason?.sections?.flatMap { section ->
+    val externalPlaylistSource by com.android.purebilibili.feature.video.player.PlaylistManager
+        .externalPlaylistSource.collectAsStateWithLifecycle()
+    val navigationExternalPlaylist = remember(hasExternalPlaylist, navigationPlaylist) {
+        if (hasExternalPlaylist) navigationPlaylist.map { PiliEpisodeNavigationEntry(it.bvid, it.cid) } else null
+    }
+    val navigationOuter = remember(ugcSeason, hasExternalPlaylist) {
+        if (hasExternalPlaylist) emptyList() else ugcSeason?.sections?.flatMap { section ->
             section.episodes.map { PiliEpisodeNavigationEntry(it.bvid, it.cid) }
         }.orEmpty()
     }
-    val navigationRelated = remember(relatedVideos) {
-        relatedVideos.map { PiliEpisodeNavigationEntry(it.bvid, 0L) }
+    val navigationRelated = remember(relatedVideos, hasExternalPlaylist) {
+        if (hasExternalPlaylist) emptyList() else relatedVideos.map { PiliEpisodeNavigationEntry(it.bvid, 0L) }
     }
-    val outerReversed = if (hasFavoritePlaylist) false else if (pages.size > 1 && ugcSeason != null) {
+    val outerReversed = if (hasExternalPlaylist) false else if (pages.size > 1 && ugcSeason != null) {
         val sort by remember(context, ugcSeason) {
             SettingsManager.getCollectionSortMode(
                 context, com.android.purebilibili.feature.video.ui.components.resolveCollectionSubscriptionId(ugcSeason),
@@ -864,6 +871,8 @@ private fun VideoPlayerOverlayContent(
     val lifecycleState by lifecycleOwner.lifecycle.currentStateAsState()
     val hostLifecycleStarted = lifecycleState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
     val configuration = LocalConfiguration.current
+    val viewportIsLandscape = playerBoundsInWindow?.let { it.width > it.height }
+        ?: (configuration.screenWidthDp > configuration.screenHeightDp)
     var showInsightDetails by remember(player, bvid, cid) { mutableStateOf(false) }
     val visualWorkActive = com.android.purebilibili.core.ui.rememberVisualWorkActive()
     // The HUD needs only the existing decoder/error summary to decide whether it is visible.
@@ -1141,14 +1150,14 @@ private fun VideoPlayerOverlayContent(
         (state.playerViewportSize.takeIf { it.width > 0 && it.height > 0 }
             ?.let { it.width > it.height }
             ?: (configuration.screenWidthDp > configuration.screenHeightDp))
-    val hasEpisodeEntry = remember(pages, ugcSeason, hasFavoritePlaylist) {
+    val hasEpisodeEntry = remember(pages, ugcSeason, hasExternalPlaylist) {
         shouldShowEpisodeEntryFromVideoData(
             relatedVideosCount = relatedVideos.size,
             hasSeasonEpisodes = ugcSeason?.sections?.any { section ->
                 section.episodes.isNotEmpty()
             } == true,
             pagesCount = pages.size,
-            hasFavoritePlaylist = hasFavoritePlaylist
+            hasExternalPlaylist = hasExternalPlaylist
         )
     }
     val playbackCompletionBehavior by SettingsManager
@@ -1279,7 +1288,7 @@ private fun VideoPlayerOverlayContent(
     }
 
     val playerMenuVisible = bottomControlFloatingPanelVisible || showQualityMenu ||
-        showSpeedMenu || showRatioMenu || showEpisodeMenu ||
+        showSpeedMenu || showRatioMenu || showEpisodeMenu || showEpisodeSourceMenu ||
         showChapterList || showDanmakuSettings || showVideoSettings || showCastDialog ||
         showSponsorSegments || showEnableSponsorPlugin || showPlayerInformation || danmakuComposerVisible ||
         endDrawerVisible || landscapeCommentPanelVisible
@@ -1407,6 +1416,7 @@ private fun VideoPlayerOverlayContent(
             pages = navigationPages,
             outer = navigationOuter,
             related = navigationRelated,
+            externalPlaylist = navigationExternalPlaylist,
             currentBvid = bvid,
             currentCid = cid.takeIf { it > 0 } ?: pages.getOrNull(currentPageIndex)?.cid ?: 0L,
             forward = forward,
@@ -1537,10 +1547,8 @@ private fun VideoPlayerOverlayContent(
         }
 
         // 两条材质路径共用显示策略；仅显式选择常驻时在控制栏收起后保留章节。
-        val chapterViewportIsLandscape = playerBoundsInWindow?.let { it.width > it.height }
-            ?: (configuration.screenWidthDp > configuration.screenHeightDp)
         if (chapterDisplayMode == ChapterDisplayMode.PERSISTENT &&
-            isFullscreen && chapterViewportIsLandscape && (!isVisible || isScreenLocked) &&
+            isFullscreen && viewportIsLandscape && (!isVisible || isScreenLocked) &&
             !danmakuComposerVisible && showViewPointMarkers && viewPoints.isNotEmpty()
         ) {
             com.android.purebilibili.feature.video.ui.overlay.OverlayPersistentChapterBar(
@@ -1556,7 +1564,10 @@ private fun VideoPlayerOverlayContent(
                     .align(Alignment.BottomCenter)
                     .landscapeEndDrawerPadding(endDrawerReservedWidthProvider)
                     // 常驻条贴住播放器底边，仅保留左右安全区，不添加底部间距。
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                    .windowInsetsPadding(
+                        playerControlHorizontalInsets(isFullscreen, !viewportIsLandscape)
+                            .union(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                    )
                     .padding(horizontal = 20.dp),
             )
         }
@@ -1580,6 +1591,9 @@ private fun VideoPlayerOverlayContent(
                     showBatteryLevel = showFullscreenBatteryLevel,
                     showCurrentTime = showFullscreenTime,
                     showInteractiveActions = showFullscreenActionItems,
+                    likeCount = state.likeCount.takeIf { state.engagementCountsKnown },
+                    favoriteCount = state.favoriteCount.takeIf { state.engagementCountsKnown },
+                    commentCount = state.commentCount.takeIf { state.engagementCountsKnown },
                     onBack = onBack,
                     onHomeClick = actions.onHomeClick,
                     moreMenuSource = moreSource,
@@ -1606,7 +1620,7 @@ private fun VideoPlayerOverlayContent(
                     onShareClick = { onShare?.invoke() ?: openVideoShareSheet() },
                     onCastClick = onCastClickAction,
                     showCastButton = playerControlVisibility.showCastButton,
-                    onCommentClick = if (landscapeSidePanelsAvailable) ({
+                    onCommentClick = if (isFullscreen && bvid.isNotBlank()) ({
                         onDismissEndDrawer()
                         onLandscapeCommentClick()
                     }) else null,
@@ -1646,14 +1660,11 @@ private fun VideoPlayerOverlayContent(
                             onActionBoundsChanged = { action, bounds -> actionAnchorBounds[action] = bounds },
                             onActionSourceChanged = { action, source -> actionSources[action] = source },
                             viewportWidthDpOverride = viewportWidthDpOverride,
-                            viewportIsLandscape = playerBoundsInWindow?.let { it.width > it.height }
-                                ?: (configuration.screenWidthDp > configuration.screenHeightDp),
-                            isPlaying = effectiveIsPlaying,
+                            viewportIsLandscape = viewportIsLandscape,
                             progressProvider = progressProvider,
                             isFullscreen = isFullscreen,
                             currentSpeed = currentSpeed,
                             currentRatio = currentAspectRatio,
-                            onPlayPauseClick = { togglePlayPause() },
                             onSeek = commitSeek,
                             onSeekStart = onSeekStart,
                             onSeekDragStart = onSeekDragStart,
@@ -1667,13 +1678,15 @@ private fun VideoPlayerOverlayContent(
                             onPreviousEpisodeClick = { navigateEpisode(forward = false) },
                             onNextEpisodeClick = { navigateEpisode(forward = true) },
                             onEpisodeClick = {
-                                if (pages.size > 1 || ugcSeason?.sections?.any { it.episodes.isNotEmpty() } == true) {
+                                if (hasExternalPlaylist && pages.size > 1) {
+                                    showEpisodeSourceMenu = true
+                                } else if (hasExternalPlaylist) {
+                                    onExternalPlaylistClick()
+                                } else if (pages.size > 1 || ugcSeason?.sections?.any { it.episodes.isNotEmpty() } == true) {
                                     onDismissEndDrawer()
                                     if (landscapeCommentPanelVisible) onLandscapeCommentClick()
                                     showVideoSettings = false
                                     showEpisodeMenu = true
-                                } else if (hasFavoritePlaylist) {
-                                    onFavoritePlaylistClick()
                                 }
                             },
                             hasEpisodeEntry = hasEpisodeEntry,
@@ -1734,7 +1747,7 @@ private fun VideoPlayerOverlayContent(
                 exit = fadeOut(OverlayControlFadeSpec),
                 modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Start))
+                    .windowInsetsPadding(playerControlHorizontalInsets(isFullscreen, !viewportIsLandscape).only(WindowInsetsSides.Start))
                     .padding(start = 4.dp)
             ) {
                 FullscreenLockButton(
@@ -1753,7 +1766,7 @@ private fun VideoPlayerOverlayContent(
                 exit = fadeOut(OverlayControlFadeSpec),
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.End))
+                    .windowInsetsPadding(playerControlHorizontalInsets(isFullscreen, !viewportIsLandscape).only(WindowInsetsSides.End))
                     .padding(end = 4.dp)
             ) {
                 PlayerSideButton(
@@ -1943,19 +1956,16 @@ private fun VideoPlayerOverlayContent(
             }
         }
 
-        // 玻璃横竖屏保留中央播放/暂停，原生继续使用底栏播放按钮。
-        if (com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled) {
-            CenterPlaybackControl(
-                visible = showPlayerChrome &&
-                    (pluginPlaybackStatus.first || player.playbackState == Player.STATE_READY || player.playbackState == Player.STATE_ENDED) &&
-                    centerLoadingUiState == null && !isSeekScrubbing &&
-                    !endDrawerVisible && !landscapeCommentPanelVisible && !showInsightDetails,
-                isPlaying = effectiveIsPlaying,
-                onPlayPause = { togglePlayPause() },
-                diameter = if (isFullscreen) 72.dp else 56.dp,
-                modifier = Modifier.align(Alignment.Center),
-            )
-        }
+        CenterPlaybackControl(
+            visible = showPlayerChrome &&
+                (pluginPlaybackStatus.first || player.playbackState == Player.STATE_READY || player.playbackState == Player.STATE_ENDED) &&
+                centerLoadingUiState == null && !isSeekScrubbing &&
+                !endDrawerVisible && !landscapeCommentPanelVisible && !showInsightDetails,
+            isPlaying = effectiveIsPlaying,
+            onPlayPause = { togglePlayPause() },
+            diameter = if (isFullscreen) 72.dp else 56.dp,
+            viewportTopInset = if (isFullscreen) 0.dp else statusBarBackdropHeight,
+        )
 
         // --- 5.4  缓冲加载指示器 ---
         AnimatedVisibility(
@@ -2383,24 +2393,36 @@ private fun VideoPlayerOverlayContent(
             )
         }
 
+        if (showEpisodeSourceMenu) {
+            PlayerEpisodeSourceMenu(
+                externalPlaylistTitle = com.android.purebilibili.feature.video.screen
+                    .resolveExternalPlaylistQueueTitle(externalPlaylistSource),
+                isFullscreen = isFullscreen,
+                anchorBounds = actionAnchorBounds[PlayerControlAnchor.EPISODES],
+                source = actionSources[PlayerControlAnchor.EPISODES],
+                onDismiss = { showEpisodeSourceMenu = false },
+                onPartsClick = {
+                    onDismissEndDrawer()
+                    if (landscapeCommentPanelVisible) onLandscapeCommentClick()
+                    showVideoSettings = false
+                    showEpisodeMenu = true
+                },
+                onExternalPlaylistClick = onExternalPlaylistClick,
+            )
+        }
+
         if (showEpisodeMenu) {
             PlayerEpisodeMenu(
                 pages = pages,
                 currentPageIndex = currentPageIndex,
-                ugcSeason = ugcSeason,
+                ugcSeason = ugcSeason.takeUnless { hasExternalPlaylist },
                 currentBvid = bvid,
                 currentCid = cid,
                 isFullscreen = isFullscreen,
                 playerBounds = playerBoundsInWindow,
                 cover = coverUrl,
                 isReversed = collectionSession.isReversed,
-                onReverse = collectionSession.onReverse?.let { reverse ->
-                    {
-                        if (hasFavoritePlaylist && pages.size <= 1) {
-                            android.widget.Toast.makeText(context, "当前为播放全部，合集不支持倒序", android.widget.Toast.LENGTH_SHORT).show()
-                        } else reverse()
-                    }
-                },
+                onReverse = collectionSession.onReverse,
                 isSubscribed = collectionSession.isSubscribed,
                 onSubscriptionChange = collectionSession.onSubscriptionChange,
                 onCoverLongPress = contentActions.onSaveCollectionCover,

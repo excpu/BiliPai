@@ -1,5 +1,6 @@
 package com.android.purebilibili.feature.list
 
+import com.android.purebilibili.navigation.tabIndicatorPosition
 import com.android.purebilibili.feature.home.effectiveGridColumnCount
 import com.android.purebilibili.feature.home.effectiveGridColumnCountCompact
 import com.android.purebilibili.feature.home.gridColumnPinchEnabled
@@ -90,11 +91,11 @@ import com.android.purebilibili.core.ui.components.AppLazyColumn as LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import com.android.purebilibili.core.ui.components.AppLazyVerticalGrid as LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
+import com.android.purebilibili.core.ui.components.AppLazyVerticalStaggeredGrid as LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
+import com.android.purebilibili.core.ui.rememberCompatibleStaggeredGridState
 import com.android.purebilibili.core.ui.components.AppHorizontalPager as HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.DisposableEffect // [Fix] Missing import
@@ -275,11 +276,11 @@ fun CommonListScreen(
     val personalListPage = viewModel is HistoryViewModel || viewModel is FavoriteViewModel
     val windowSizeClass = LocalWindowSizeClass.current
     val defaultPersonalColumns = if (personalListPage) 1 else 2
-    val primaryGridState = rememberLazyGridState()
+    val primaryGridState = rememberCompatibleStaggeredGridState()
     val subscribedFolderListState = androidx.compose.foundation.lazy.rememberLazyListState()
     val favoriteFolderListState = androidx.compose.foundation.lazy.rememberLazyListState()
-    val favoritePagerGridStates = remember { mutableStateMapOf<Int, androidx.compose.foundation.lazy.grid.LazyGridState>() }
-    val historyPagerGridStates = remember { mutableStateMapOf<Int, androidx.compose.foundation.lazy.grid.LazyGridState>() }
+    val favoritePagerGridStates = remember { mutableStateMapOf<Int, androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState>() }
+    val historyPagerGridStates = remember { mutableStateMapOf<Int, androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState>() }
 
     // 📱 响应式布局参数
     // Fix: 手机端(Compact)使用较小的最小宽度以保证2列显示 (360dp / 170dp = 2.1 -> 2列)
@@ -658,7 +659,7 @@ fun CommonListScreen(
         }
     }
 
-    val favoriteCategoryGridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    val favoriteCategoryGridState = com.android.purebilibili.core.ui.rememberCompatibleStaggeredGridState()
     val liveCommonListBottomPadding = LocalBottomBarContentPadding.current
     val isBottomBarVisibleForPadding = com.android.purebilibili.core.ui.LocalBottomBarVisible.current
     val bottomOverlayPadding = com.android.purebilibili.core.ui.rememberStickyBottomBarContentPadding(
@@ -1455,7 +1456,7 @@ fun CommonListScreen(
                                 )
                             }
                             val pageGridState = historyPagerGridStates.getOrPut(pageIndex) {
-                                androidx.compose.foundation.lazy.grid.LazyGridState()
+                                com.android.purebilibili.core.ui.createCompatibleStaggeredGridState()
                             }
 
                             val recapHeader: (@Composable () -> Unit)? = if (
@@ -2242,7 +2243,7 @@ fun CommonListScreen(
                                     .padding(horizontal = historyFilterChrome.horizontalPaddingDp.dp),
                                 miuixBackdrop = visibleHeaderBackdrop,
                                 indicatorPositionProvider = {
-                                    historyPagerState.currentPage + historyPagerState.currentPageOffsetFraction
+                                    historyPagerState.tabIndicatorPosition
                                 },
                                 isScrollInProgressProvider = { historyPagerState.isScrollInProgress },
                             )
@@ -2815,7 +2816,7 @@ internal fun CommonListContent(
     pinchBounds: IntRange = 1..1,
     onPinchColumnsChange: (Int) -> Unit = {},
     onPinchColumnsEnd: (Int) -> Unit = {},
-    gridState: androidx.compose.foundation.lazy.grid.LazyGridState? = null,
+    gridState: androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState? = null,
     headerContent: (@Composable () -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -2830,7 +2831,7 @@ internal fun CommonListContent(
     val gridOuterPaddingDp = if (isPersonalList) 12 else cardLayout.outerPaddingDp
     val gridItemSpacingDp = if (isPersonalList) 12 else cardLayout.itemSpacingDp
     val skeletonCoverAspectRatio = cardLayout.coverAspectRatio
-    val resolvedGridState = gridState ?: rememberLazyGridState()
+    val resolvedGridState = gridState ?: rememberCompatibleStaggeredGridState()
     val fixedHeaderInset = resolveCommonListViewportTopPadding(padding.calculateTopPadding())
     val scrollableHeaderInset = if (scrollUnderHeader) fixedHeaderInset else AppSpacingTokens.None
     val viewportModifier = Modifier
@@ -2964,7 +2965,7 @@ internal fun CommonListContent(
                 androidx.compose.runtime.derivedStateOf {
                     val layoutInfo = resolvedGridState.layoutInfo
                     val total = layoutInfo.totalItemsCount
-                    val last = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+                    val last = layoutInfo.visibleItemsInfo.maxOfOrNull { it.index } ?: 0
                     total > 0 && last >= total - 4
                 }
             }
@@ -2988,12 +2989,12 @@ internal fun CommonListContent(
                     (onFavoriteDragSelectionChange == null &&
                         com.android.purebilibili.core.ui.LocalVideoCardLongPressEnabled.current),
             ) {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(columns),
+            LazyVerticalStaggeredGrid(
+                columns = StaggeredGridCells.Fixed(columns),
                 state = resolvedGridState,
                 contentPadding = gridContentPadding,
                 horizontalArrangement = Arrangement.spacedBy(gridItemSpacingDp.dp),
-                verticalArrangement = Arrangement.spacedBy(gridItemSpacingDp.dp),
+                verticalItemSpacing = gridItemSpacingDp.dp,
                 modifier = viewportModifier
                     .homeFeedPinchZoom(
                         enabled = pinchEnabled,
@@ -3010,14 +3011,14 @@ internal fun CommonListContent(
                         enabled = onFavoriteDragSelectionChange != null,
                         onSelectionChange = { onFavoriteDragSelectionChange?.invoke(it) },
                     )
-            ) LazyVerticalGrid@{
+            ) LazyVerticalStaggeredGrid@{
                 // 首屏骨架直接铺在内容网格里：与真实卡片共用同一个 gridState 与同一种
                 // contentPadding / 列数，数据到达时是 item 原地替换，网格本身不重建。
-                // （显式标签：LazyVerticalGrid 是 AppLazyVerticalGrid 的导入别名，避免隐式
+                // （显式标签：LazyVerticalStaggeredGrid 是 AppLazyVerticalStaggeredGrid 的导入别名，避免隐式
                 // 标签名与别名不一致导致 return@ 解析到别处。）
                 if (showInitialSkeleton) {
                     if (headerContent != null) {
-                        item(key = "personal_recap", span = { GridItemSpan(maxLineSpan) }) {
+                        item(key = "personal_recap", span = StaggeredGridItemSpan.FullLine) {
                             headerContent()
                         }
                     }
@@ -3044,10 +3045,10 @@ internal fun CommonListContent(
                             }
                         }
                     }
-                    return@LazyVerticalGrid
+                    return@LazyVerticalStaggeredGrid
                 }
                 if (isHistoryPersonalList && error != null && onRetry != null && !isLoading) {
-                    item(key = "refresh_error", span = { GridItemSpan(maxLineSpan) }) {
+                    item(key = "refresh_error", span = StaggeredGridItemSpan.FullLine) {
                         ListLoadError(
                             message = "刷新失败，已保留现有内容：$error",
                             onRetry = onRetry,
@@ -3056,7 +3057,7 @@ internal fun CommonListContent(
                     }
                 }
                 if (headerContent != null) {
-                    item(key = "personal_recap", span = { GridItemSpan(maxLineSpan) }) {
+                    item(key = "personal_recap", span = StaggeredGridItemSpan.FullLine) {
                         headerContent()
                     }
                 }
@@ -3064,7 +3065,7 @@ internal fun CommonListContent(
                     items = filteredItems,
                     key = { index, _ -> renderKeys[index] },
                     span = { _, item ->
-                        if (item.isCollectionResource) GridItemSpan(columns) else GridItemSpan(1)
+                        if (item.isCollectionResource) StaggeredGridItemSpan.FullLine else StaggeredGridItemSpan.SingleLane
                     }
                 ) { index, video ->
                     AnimatedVideoListItem(
@@ -3284,7 +3285,7 @@ internal fun CommonListContent(
                     }
                 }
                 if (loadMoreError != null && onRetryLoadMore != null) {
-                    item(key = "load_more_error", span = { GridItemSpan(maxLineSpan) }) {
+                    item(key = "load_more_error", span = StaggeredGridItemSpan.FullLine) {
                         ListLoadError(
                             message = "加载更多失败：$loadMoreError",
                             onRetry = onRetryLoadMore,
@@ -3436,7 +3437,7 @@ private fun FavoriteSubscribedFolderList(
         derivedStateOf {
             val layoutInfo = listState.layoutInfo
             val total = layoutInfo.totalItemsCount
-            val lastVisible = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            val lastVisible = layoutInfo.visibleItemsInfo.maxOfOrNull { it.index } ?: 0
             total > 0 && lastVisible >= total - 3
         }
     }
@@ -3536,7 +3537,7 @@ private fun FavoriteSubscribedFolderList(
 }
 
 private sealed interface CommonListScrollState {
-    data class Grid(val state: androidx.compose.foundation.lazy.grid.LazyGridState) : CommonListScrollState
+    data class Grid(val state: androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState) : CommonListScrollState
     data class List(val state: androidx.compose.foundation.lazy.LazyListState) : CommonListScrollState
 }
 

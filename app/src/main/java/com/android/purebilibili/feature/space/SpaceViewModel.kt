@@ -428,6 +428,9 @@ class SpaceViewModel(
         val videoData = videosResult?.data
         val videos = videoData?.list?.vlist ?: emptyList()
         val categories = extractCategories(videos)
+        // UP 主页投稿列表到手就预热横竖屏判定，点击进详情时首帧即进入正确布局。
+        com.android.purebilibili.data.repository.VideoRepository
+            .prefetchVerticalFlags(videos.map { it.bvid })
 
         _uiState.value = SpaceUiState.Success(
             userInfo = userInfo,
@@ -876,7 +879,13 @@ class SpaceViewModel(
                             lastVideoPageLoadFailed = failed,
                         )
                     }
-                    if (ready) { appliedPages = pages.size; currentPage = pages.last().number }
+                    if (ready) {
+                        // 新一页到手就预热横竖屏判定（首屏已在 Success 构建时预热过）。
+                        com.android.purebilibili.data.repository.VideoRepository
+                            .prefetchVerticalFlags(pages.drop(appliedPages).flatMap { it.items }.map { it.bvid })
+                        appliedPages = pages.size
+                        currentPage = pages.last().number
+                    }
                     lastFailed = failed
                 }
             }

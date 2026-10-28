@@ -144,6 +144,9 @@ private val PopupScreenMargin = 16.dp
 /** 锚定菜单向上覆盖源控件的距离。 */
 private val PopupAnchorOverlap = 8.dp
 
+/** 玻璃弹窗的基础背景模糊，供同类浮层共用。 */
+internal val AppGlassPopupBackdropBlur = 12.dp
+
 /**
  * 锚定弹窗的默认最大宽度：与原生菜单一致按窗口宽度自适应，
  * 内容多宽就多宽，仅在超出窗口时钳制；调用方显式传入 maxWidth 时优先。
@@ -1091,7 +1094,7 @@ private fun AppGlassChoicePopupCard(
     // 滑动触发预算降级时仍保留 backdrop 磨砂，不将玻璃切换为不透明底板。
     // 降级只减少采样半径并停用折射；配色与透明度在同一展示中保持一致。
     val blurRadiusPx = with(density) {
-        (if (lowBlurBudget) 6.dp else if (interactivePanel && !themeFrosted) 24.dp else 12.dp).toPx()
+        (if (lowBlurBudget) 6.dp else if (interactivePanel && !themeFrosted) 24.dp else AppGlassPopupBackdropBlur).toPx()
     }
     val refractionHeightPx = with(density) { (tuning.refractionHeight * MenuLensScale).dp.toPx() }
     val refractionAmountPx = with(density) { (tuning.refractionAmount * MenuLensScale).dp.toPx() }

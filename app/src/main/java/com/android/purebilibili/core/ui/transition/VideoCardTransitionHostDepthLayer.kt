@@ -37,7 +37,6 @@ internal fun VideoCardTransitionHostDepthLayer(
     motionTierProvider: () -> MotionTier = { MotionTier.Normal },
     isLightBackgroundProvider: () -> Boolean = { false },
     realtimeBlurEnabledProvider: () -> Boolean = { false },
-    clearSnapshotEnabledProvider: () -> Boolean = { false },
     scaleReductionProvider: () -> Float = { VIDEO_CARD_TRANSITION_BACKGROUND_SCALE_REDUCTION },
     sourceBoundsProvider: () -> Rect? = { null },
     modifier: Modifier = Modifier,
@@ -69,14 +68,13 @@ internal fun VideoCardTransitionHostDepthLayer(
                         displayListStale = snapshotState.displayListStale,
                         motionTier = motionTier,
                         realtimeBlurEnabled = realtimeBlur,
-                        clearSnapshotEnabled = clearSnapshotEnabledProvider(),
                         sourceRendererReady = snapshotState.hasReadySourceRenderer,
                     )
                 ) {
                     return@drawWithContent
                 }
                 val phase = phaseProvider()
-                // SettledHidden 保留来源快照，供返回手势开始时衔接。
+                // SettledHidden：详情盖住时仍保持满糊，手势首帧无「先清晰再糊」跳变。
                 val progress = resolveHostOwnedDepthProgress(
                     exposure = exposure,
                     liveProgress = progressProvider(),
@@ -101,7 +99,7 @@ internal fun VideoCardTransitionHostDepthLayer(
                     }
                     return@drawWithContent
                 }
-                val resolvedFrame = snapshotState.frameCache.resolve(
+                val frame = snapshotState.frameCache.resolve(
                     progress = progress,
                     phase = phase,
                     motionTier = motionTier,
@@ -111,7 +109,6 @@ internal fun VideoCardTransitionHostDepthLayer(
                     deviceCornerRadiusPx = deviceCornerRadiusPx,
                     scaleReduction = scaleReductionProvider(),
                 )
-                val frame = if (realtimeBlur) resolvedFrame else resolvedFrame.withoutDepthEffects()
                 applyVideoCardTransitionSnapshotFrame(
                     contentLayer = contentLayer,
                     snapshotState = snapshotState,
@@ -155,7 +152,6 @@ internal fun shouldPaintHostOwnedDepthLayer(
     displayListStale: Boolean = false,
     motionTier: MotionTier,
     realtimeBlurEnabled: Boolean,
-    clearSnapshotEnabled: Boolean = false,
     sdkInt: Int = Build.VERSION.SDK_INT,
     sourceRendererReady: Boolean = false,
 ): Boolean {
@@ -169,7 +165,7 @@ internal fun shouldPaintHostOwnedDepthLayer(
         return false
     }
     if (motionTier == MotionTier.Reduced) return false
-    if (!realtimeBlurEnabled && !clearSnapshotEnabled) return false
+    if (!realtimeBlurEnabled) return false
     if (sdkInt < Build.VERSION_CODES.S) return false
     return when (exposure) {
         // SettledHidden：详情下预热（须 drawable）。

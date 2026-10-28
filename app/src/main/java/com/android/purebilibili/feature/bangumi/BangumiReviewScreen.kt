@@ -2,6 +2,8 @@
 
 package com.android.purebilibili.feature.bangumi
 
+import com.android.purebilibili.navigation.tabSelectedPage
+import com.android.purebilibili.navigation.tabIndicatorPosition
 import com.android.purebilibili.core.ui.AppContentColors
 
 import android.widget.Toast
@@ -277,13 +279,13 @@ fun BangumiReviewScreen(
                     // Glass indicator fills the measured slot; native geometry keeps its defaults.
                     liquidGlassAdaptIndicatorToLabel = !com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled,
                     items = reviewTypes.map { it.label },
-                    selectedIndex = pagerState.currentPage,
+                    selectedIndex = pagerState.tabSelectedPage,
                     onSelected = { index ->
                         if (index in reviewTypes.indices) scope.launch {
                             if (reduceMotion) pagerState.scrollToPage(index) else animatePagerSelection(pagerState, index)
                         }
                     },
-                    indicatorPositionProvider = { pagerState.currentPage + pagerState.currentPageOffsetFraction },
+                    indicatorPositionProvider = { pagerState.tabIndicatorPosition },
                     isScrollInProgressProvider = { pagerState.isScrollInProgress },
                     // Miuix uses a custom pager gesture; its scroll state supplies the
                     // fallback drag signal instead of Foundation's interaction source.

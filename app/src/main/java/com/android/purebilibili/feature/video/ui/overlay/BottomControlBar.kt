@@ -167,10 +167,8 @@ internal fun resolveSubtitlePanelTrackOptions(trackOptions: List<SubtitleTrackOp
  */
 @Composable
 fun BottomControlBar(
-    isPlaying: Boolean,
     progress: PlayerProgress = PlayerProgress(),
     isFullscreen: Boolean,
-    onPlayPauseClick: () -> Unit,
     onSeek: (Long) -> Unit,
     onToggleFullscreen: () -> Unit,
     modifier: Modifier = Modifier,
@@ -257,7 +255,7 @@ fun BottomControlBar(
         Column(
             modifier = modifier.fillMaxWidth()
                 .semantics { testTagsAsResourceId = true }
-                .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
+                .windowInsetsPadding(playerControlHorizontalInsets(isFullscreen, !viewportIsLandscape))
                 .padding(vertical = PILI_PLAYER_BOTTOM_VERTICAL_PADDING_DP.dp),
         ) {
             val seekInsets = WindowInsets.systemGestures.only(WindowInsetsSides.Horizontal).union(
@@ -299,7 +297,6 @@ fun BottomControlBar(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp).height(PILI_PLAYER_BOTTOM_ROW_HEIGHT_DP.dp)
                     .testTag("player_control_row"),
                 left = {
-                    if (!glass) PlayerPlayPauseButton(isPlaying, onPlayPauseClick)
                     PlayerControlGlassDock(enabled = glass, shape = androidx.compose.foundation.shape.RoundedCornerShape(50)) {
                         ProgressTimeText(
                             positionProvider = displayPosition,
@@ -372,6 +369,7 @@ fun BottomControlBar(
                             icon = if (subtitleControlState.enabled) Icons.Filled.ClosedCaption else Icons.Outlined.ClosedCaptionOff,
                             description = "字幕", width = slotWidth, height = 30.dp,
                             selected = subtitleControlState.enabled,
+                            selectedTint = com.android.purebilibili.core.ui.AppContentColors.accent(),
                             onClick = { localMenu = PlayerControlAnchor.SUBTITLE },
                             modifier = anchor(PlayerControlAnchor.SUBTITLE, "player_subtitle_action"),
                         )

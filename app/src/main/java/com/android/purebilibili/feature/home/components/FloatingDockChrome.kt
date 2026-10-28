@@ -409,6 +409,7 @@ internal fun BackdropEffectScope.homeIndicatorLens(
     shellHeightDp: Float = restHeightDp * 64f / 56f,
     indicatorScaleY: Float = 1f,
     shellScaleY: Float = 1f,
+    chromaticBandHorizontal: Boolean = false,
 ) {
     val gapBandDp = resolveFloatingDockChromaticGapBand(
         indicatorHeight = restHeightDp,
@@ -423,6 +424,7 @@ internal fun BackdropEffectScope.homeIndicatorLens(
         depthEffect = true,
         chromaticAberration = resolveLiquidGlassIndicatorChromaticAberration(tuning),
         chromaticEdgeBand = gapBandDp.dp.toPx(),
+        chromaticBandHorizontal = chromaticBandHorizontal,
     )
 }
 
@@ -437,6 +439,55 @@ internal fun DrawScope.drawHomeIndicatorSurface(
         alpha = 1f - pressed,
     )
     drawRect(Color.Black.copy(alpha = 0.03f * pressed))
+}
+
+/** 横纵 dock 共用同一透镜、色散、表面与阴影。形变和光学遮罩在绘制时读取相同的实时尺寸。 */
+@Composable
+internal fun Modifier.floatingDockIndicatorOptics(
+    backdrop: Backdrop,
+    shape: Shape,
+    width: Dp,
+    height: Dp,
+    shellExtent: Dp,
+    tuning: LiquidGlassTuning,
+    darkTheme: Boolean,
+    progressProvider: () -> Float,
+    scaleXProvider: () -> Float,
+    scaleYProvider: () -> Float,
+    highlightProvider: () -> Highlight?,
+    vertical: Boolean = false,
+    shellScaleProvider: () -> Float = { 1f },
+    idleColor: Color? = null,
+): Modifier {
+    val thickness = if (vertical) width.value else height.value
+    return drawBackdrop(
+        backdrop = backdrop,
+        shape = { shape },
+        effects = {
+            homeIndicatorLens(
+                restHeightDp = thickness,
+                progress = progressProvider(),
+                tuning = tuning,
+                shellHeightDp = shellExtent.value,
+                indicatorScaleY = if (vertical) scaleXProvider() else scaleYProvider(),
+                shellScaleY = shellScaleProvider(),
+                chromaticBandHorizontal = vertical,
+            )
+        },
+        highlight = { highlightProvider() },
+        layerBlock = {
+            this.scaleX = scaleXProvider()
+            this.scaleY = scaleYProvider()
+        },
+        onDrawSurface = { drawHomeIndicatorSurface(progressProvider(), darkTheme, idleColor) },
+    ).innerShadow(shape = shape) {
+        InnerShadow(
+            offset = androidx.compose.ui.unit.DpOffset.Zero,
+            radius = 8.dp * homeIndicatorOpticalScale(thickness) * progressProvider(),
+            color = Color.Black.copy(alpha = 0.15f),
+            alpha = progressProvider(),
+        )
+    }
 }
 
 /**

@@ -5,7 +5,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.withFrameNanos
@@ -38,9 +38,9 @@ internal class FavoriteDragSelection(
 
 /** Runs on the grid, not on individual recycled cards: the original pointer owns the whole gesture. */
 internal fun Modifier.favoriteDragSelection(
-    state: LazyGridState,
+    state: LazyStaggeredGridState,
     contentPadding: PaddingValues,
-    // Render keys match LazyGridItemInfo.key; values are the stable resource selection keys.
+    // Render keys match LazyStaggeredGridItemInfo.key; values are the stable resource selection keys.
     resourceKeys: Map<String, String>,
     selectedKeys: Set<String>,
     enabled: Boolean,

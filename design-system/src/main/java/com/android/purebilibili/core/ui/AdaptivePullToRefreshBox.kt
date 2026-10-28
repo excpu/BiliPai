@@ -149,6 +149,7 @@ fun BoxScope.AdaptivePullToRefreshDefaultIndicator(
                 modifier = indicatorModifier,
                 isRefreshing = isRefreshing,
                 state = state,
+                color = AppContentColors.accent(),
             )
         }
         PresetPrimitiveRenderer.MIUIX_BRIDGED -> {

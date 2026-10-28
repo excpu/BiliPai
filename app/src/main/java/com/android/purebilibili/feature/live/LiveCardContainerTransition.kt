@@ -61,9 +61,12 @@ private fun LiveAvatarCompanionCapture.sourceModifier(hidden: () -> Boolean): Mo
     .onGloballyPositioned(anchor::update)
     .drawWithContent {
         // 快照始终保留原始字形，显隐只作用于列表中的原位绘制。
-        layer.record { this@drawWithContent.drawContent() }
-        anchor.recorded = true
-        if (!hidden()) drawLayer(layer)
+        val hide = hidden()
+        if (!hide || !anchor.recorded) {
+            layer.record { this@drawWithContent.drawContent() }
+            anchor.recorded = true
+        }
+        if (!hide) drawLayer(layer)
     }
 
 /** 每个实际入口持有自己的快照；同一房间的头像与卡片不会共用落点。 */
@@ -77,14 +80,15 @@ internal fun rememberLiveCardContainerTransition(
     onClick: () -> Unit,
     enabled: Boolean = true,
     includeAvatarCompanions: Boolean = false,
+    containerTarget: BiliPaiNavKey? = null,
 ): LiveCardContainerTransition {
     val sources = LocalLiveCardContainerSources.current
     val owner = LocalLiveCardContainerOwner.current
-    if (!enabled || sources == null || owner == null || roomId <= 0) {
+    if (!enabled || sources == null || owner == null || (roomId <= 0 && containerTarget == null)) {
         return LiveCardContainerTransition(Modifier, onClick)
     }
-    val target = BiliPaiNavKey.Live(roomId = roomId.toString(), title = title, uname = hostName)
-    val anchor = remember(roomId, sources, owner) { SettingsContainerAnchor() }
+    val target = containerTarget ?: BiliPaiNavKey.Live(roomId = roomId.toString(), title = title, uname = hostName)
+    val anchor = remember(target, sources, owner) { SettingsContainerAnchor() }
     var selected by remember(anchor) { mutableStateOf(false) }
     val navigationScope by rememberUpdatedState(LocalVideoDetailNavigationTransitionScope.current)
     val nameCapture = if (includeAvatarCompanions) rememberLiveAvatarCompanionCapture() else null
@@ -108,16 +112,27 @@ internal fun rememberLiveCardContainerTransition(
         modifier = Modifier
             .onGloballyPositioned(anchor::update)
             .drawWithContent {
-                layer.record { this@drawWithContent.drawContent() }
-                anchor.recorded = true
-                if (sources.sources[target]?.takeIf { it.anchor === anchor }?.returnInFlight?.invoke() != true) {
+                // 头像飞行期间复用点击时的图层，并隐藏原位头像，避免两份头像同时出现。
+                // 封面卡片继续使用原来的绘制策略；音柱本身仍受页面/视口等可见性门控。
+                val hideAvatar = includeAvatarCompanions && selected &&
+                    navigationScope?.let { it.relativeDepth > 0f || it.isRunning } == true
+                if (!hideAvatar || !anchor.recorded) {
+                    layer.record { this@drawWithContent.drawContent() }
+                    anchor.recorded = true
+                }
+                if (!hideAvatar &&
+                    sources.sources[target]?.takeIf { it.anchor === anchor }?.returnInFlight?.invoke() != true
+                ) {
                     drawLayer(layer)
                 }
             },
         onClick = {
             // 捕获失败时清除旧落点，深链或未完整显示的卡片回退普通导航。
             sources.sources.remove(target)
-            sources.capture(target, owner, anchor, layer, color, radiusPx, radiusPx)
+            sources.capture(
+                target, owner, anchor, layer, color, radiusPx, radiusPx,
+                avatarSource = includeAvatarCompanions,
+            )
             selected = sources.sources[target]?.anchor === anchor
             sources.sources[target]?.takeIf { selected }?.companions = listOfNotNull(
                 nameCapture?.snapshot(sources.hostOrigin),

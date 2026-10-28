@@ -17,6 +17,7 @@ import com.android.purebilibili.data.model.response.BangumiSearchItem
 import com.android.purebilibili.data.model.response.LiveRoomSearchItem
 import com.android.purebilibili.data.model.response.MatchContestInfo
 import com.android.purebilibili.data.repository.SearchRepository
+import com.android.purebilibili.data.repository.VideoRepository
 import com.android.purebilibili.data.repository.SearchOrder
 import com.android.purebilibili.data.repository.SearchDuration
 import com.android.purebilibili.data.repository.SearchLiveOrder
@@ -683,6 +684,8 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
                 val result = SearchRepository.searchAllPage(keyword = keyword, page = number,
                     order = filters.searchOrder, durations = filters.searchDurations, tids = filters.videoTid,
                     pubBegin = filters.pubBegin, pubEnd = filters.pubEnd).getOrThrow()
+                // 综合搜索里的视频卡片同样要预热，否则点击仍会先铺横屏。
+                VideoRepository.prefetchVerticalFlagsForVideos(result.videos)
                 chunk(empty.copy(searchResults = videos(result.videos),
                     upResults = result.ups.filter { it.mid !in blockedMids }.map { up ->
                         up.copy(res = up.res?.filterNot { it.mid in blockedMids }) },
@@ -692,6 +695,8 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
             }
             SearchType.VIDEO -> {
                 val (items, info) = SearchRepository.searchWithDurations(keyword = keyword, page = number, order = filters.searchOrder, durations = filters.searchDurations, tids = filters.videoTid, pubBegin = filters.pubBegin, pubEnd = filters.pubEnd).getOrThrow()
+                // 结果到手就预热横竖屏判定，点击进详情时首帧即进入正确布局。
+                VideoRepository.prefetchVerticalFlagsForVideos(items)
                 chunk(empty.copy(searchResults = videos(items)), info, items.size)
             }
             SearchType.UP -> {

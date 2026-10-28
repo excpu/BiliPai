@@ -244,6 +244,11 @@ fun BangumiPlayerScreen(
     // 创建 ExoPlayer
     val exoPlayer = remember {
         ExoPlayer.Builder(context)
+            .apply {
+                if (com.android.purebilibili.core.store.SettingsManager.getResilientVideoBufferSync(context)) {
+                    setLoadControl(com.android.purebilibili.feature.video.state.createVideoLoadControl(context))
+                }
+            }
             .setRenderersFactory(
                 HiResCompatibleRenderersFactory(context)
                     .setExtensionRendererMode(

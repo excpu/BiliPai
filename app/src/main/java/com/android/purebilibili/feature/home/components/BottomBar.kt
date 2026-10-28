@@ -4504,6 +4504,8 @@ internal fun BoxScope.BiliPaiMiuixBottomBarIndicatorLayer(
     bottomBarMotionSpec: com.android.purebilibili.core.ui.motion.BottomBarMotionSpec,
     isDarkTheme: Boolean,
     swapMotionAxes: Boolean = false,
+    opticalShellExtentDp: Float? = null,
+    indicatorScaleTransformProvider: (() -> BottomBarIndicatorLayerTransform)? = null,
     indicatorAlignment: Alignment = Alignment.CenterStart,
     interactionModifier: Modifier = Modifier,
     wobblePosition: (() -> Float)? = null,
@@ -4551,7 +4553,7 @@ internal fun BoxScope.BiliPaiMiuixBottomBarIndicatorLayer(
                     if (glassEnabled && !isDragging) wobble.velocityWeight else 1f,
                 isDragging = isDragging,
                 dragScaleProgress = indicatorLayerScaleProgress,
-                dragScaleTransform = indicatorLayerScaleTransform,
+                dragScaleTransform = indicatorScaleTransformProvider?.invoke() ?: indicatorLayerScaleTransform,
                 dragScaleTarget = dragScaleTarget,
                 motionSpec = bottomBarMotionSpec,
             )
@@ -4586,7 +4588,7 @@ internal fun BoxScope.BiliPaiMiuixBottomBarIndicatorLayer(
         else liquidWobbleScaleY(indicatorLayerTransform().scaleY, recoilStretch())
     }
     val opticalProgressProvider: () -> Float = {
-        if (wobble.enabled) maxOf(
+        if (glassEnabled) maxOf(
             opticalProgress,
             com.android.purebilibili.core.ui.animation.liquidIndicatorShapeProgress(
                 layerScaleX(), layerScaleY(), dragScaleTarget,
@@ -4597,6 +4599,10 @@ internal fun BoxScope.BiliPaiMiuixBottomBarIndicatorLayer(
         rememberBiliPaiGravityHighlight(
             iosIndicatorSpecular,
             extraDegrees = if (swapMotionAxes) 0f else 90f,
+            width = resolveDockPillHighlightWidthDp(
+                indicatorWidthDp = if (swapMotionAxes) indicatorHeight.value else indicatorWidth.value,
+                indicatorHeightDp = if (swapMotionAxes) indicatorWidth.value else indicatorHeight.value,
+            ).dp,
         )
     } else {
         null
@@ -4634,43 +4640,26 @@ internal fun BoxScope.BiliPaiMiuixBottomBarIndicatorLayer(
             .then(interactionModifier)
             .run {
                 if (indicatorBackdrop != null) {
-                    miuixDrawBackdrop(
+                    floatingDockIndicatorOptics(
                         backdrop = indicatorBackdrop,
-                        shape = { shellShape },
-                        effects = {
-                            if (shouldUseBottomBarIndicatorLens(liquidGlassPreset)) {
-                                homeIndicatorLens(
-                                    restHeightDp = indicatorHeight.value,
-                                    progress = opticalProgressProvider(),
-                                    tuning = liquidGlassTuning,
-                                    indicatorScaleY = layerScaleY(),
-                                )
-                            }
-                        },
-                        highlight = {
+                        shape = shellShape,
+                        width = indicatorWidth,
+                        height = indicatorHeight,
+                        shellExtent = if (swapMotionAxes) {
+                            (opticalShellExtentDp ?: (indicatorWidth.value * 64f / 56f)).dp
+                        } else (indicatorHeight.value * 64f / 56f).dp,
+                        tuning = liquidGlassTuning,
+                        darkTheme = isDarkTheme,
+                        progressProvider = opticalProgressProvider,
+                        scaleXProvider = layerScaleX,
+                        scaleYProvider = layerScaleY,
+                        vertical = swapMotionAxes,
+                        highlightProvider = {
                             if (glassEnabled) pillHighlight?.value?.copy(alpha = effectivePressProgress)
                             else if (isDragging) pillHighlight?.value?.copy(alpha = opticalProgress) else null
                         },
-                        onDrawSurface = {
-                            drawHomeIndicatorSurface(opticalProgressProvider(), isDarkTheme, indicatorIdleSurfaceColor)
-                        },
-                        layerBlock = {
-                            if (effectiveIndicatorEffectsEnabled) {
-                                scaleX = layerScaleX()
-                                scaleY = layerScaleY()
-                            }
-                        }
-                    ).miuixInnerShadow(shape = shellShape) {
-                        MiuixInnerShadow(
-                            offset = if (glassEnabled) androidx.compose.ui.unit.DpOffset.Zero else
-                                androidx.compose.ui.unit.DpOffset(
-                                    0.dp, 8.dp * homeIndicatorOpticalScale(indicatorHeight.value) * opticalProgressProvider(),
-                                ),
-                            radius = 8.dp * homeIndicatorOpticalScale(indicatorHeight.value) * opticalProgressProvider(),
-                            color = OpticalContrastPalette.Shadow.copy(alpha = 0.15f),
-                            alpha = opticalProgressProvider()
-                        )
-                    }
+                        idleColor = indicatorIdleSurfaceColor,
+                    )
                 } else {
                     this
                 }

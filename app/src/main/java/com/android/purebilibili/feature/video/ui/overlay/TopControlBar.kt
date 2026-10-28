@@ -1,5 +1,6 @@
 package com.android.purebilibili.feature.video.ui.overlay
 
+import com.android.purebilibili.feature.video.ui.components.favoriteFolderMenuSource
 import com.android.purebilibili.core.util.HapticType
 import com.android.purebilibili.core.util.rememberHapticFeedback
 import com.android.purebilibili.core.ui.components.appActionWithFeedback
@@ -55,6 +56,7 @@ import com.android.purebilibili.core.ui.components.AppIcon
 import com.android.purebilibili.core.ui.components.AppText
 import com.android.purebilibili.feature.video.ui.components.PiliPlusDanmakuGlyph
 import com.android.purebilibili.feature.video.ui.components.PiliPlusDanmakuSettingsIcon
+import com.android.purebilibili.feature.video.ui.components.PiliPlusDanmakuSendIcon
 import com.android.purebilibili.feature.video.ui.feedback.likeBurstAnchor
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
@@ -77,6 +79,9 @@ fun TopControlBar(
     showBatteryLevel: Boolean = false,
     showCurrentTime: Boolean = true,
     showInteractiveActions: Boolean = true,
+    likeCount: Long? = null,
+    favoriteCount: Long? = null,
+    commentCount: Long? = null,
     onBack: () -> Unit,
     isLiked: Boolean = false,
     likeStatusKnown: Boolean,
@@ -127,6 +132,10 @@ fun TopControlBar(
         isUgc = isUgc,
         showFullscreenActionItems = showInteractiveActions,
     )
+    val visibleCounts = rememberVisibleFullscreenCounts()
+    val showCounts = isFullscreen
+    fun visibleCount(kind: com.android.purebilibili.core.store.FullscreenActionCount, value: Long?): Long? =
+        value.takeIf { showCounts && kind in visibleCounts }
     val context = LocalContext.current
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val lifecycleState by lifecycleOwner.lifecycle.currentStateAsState()
@@ -166,7 +175,7 @@ fun TopControlBar(
     PlayerControlTouchBounds(height = policy.buttonHeightDp.dp) {
         Column(
             modifier = modifier.fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
+                .windowInsetsPadding(playerControlHorizontalInsets(isFullscreen, isPortrait))
                 .playerControlTopSafeArea(isFullscreen, isPortrait, statusBarVisible)
                 .padding(vertical = policy.verticalPaddingDp.dp),
         ) {
@@ -221,7 +230,9 @@ fun TopControlBar(
                         }
                         if (policy.showDanmakuActions) {
                             if (onSendDanmakuClick != null) {
-                                HeaderIcon(Icons.Outlined.Comment, "发弹幕", onSendDanmakuClick)
+                                HeaderButton("发弹幕", onSendDanmakuClick) {
+                                    PiliPlusDanmakuSendIcon(tint = Color.White, size = 20.dp)
+                                }
                             }
                             if (onDanmakuToggle != null) {
                                 val description = if (danmakuEnabled) "关闭弹幕" else "开启弹幕"
@@ -295,7 +306,8 @@ fun TopControlBar(
                 ) {
                     if (onCommentClick != null) {
                         HeaderIcon(Icons.Outlined.Forum, "评论", onCommentClick,
-                            active = commentsVisible, iconSize = 18)
+                            active = commentsVisible, iconSize = 18,
+                            count = visibleCount(com.android.purebilibili.core.store.FullscreenActionCount.COMMENT, commentCount))
                     }
                     if (onRelatedVideosClick != null) {
                         HeaderIcon(Icons.Outlined.VideoLibrary, "相关推荐", onRelatedVideosClick,
@@ -309,6 +321,7 @@ fun TopControlBar(
                                     if (likeStatusKnown) "点赞" else "点赞状态尚未确认",
                                     requireNotNull(likeClick), active = likeStatusKnown && isLiked, iconSize = 18,
                                     gestureModifier = likeGesture, progress = triplePress.progress,
+                                    count = visibleCount(com.android.purebilibili.core.store.FullscreenActionCount.LIKE, likeCount),
                                 )
                             }
                         }
@@ -327,6 +340,8 @@ fun TopControlBar(
                                 if (isFavorited) Icons.Filled.Star else Icons.Outlined.StarBorder,
                                 "收藏", { haptic(HapticType.LIGHT); onFavoriteClick() }, active = isFavorited, iconSize = 18,
                                 onLongClick = onFavoriteLongClick, progress = triplePress.progress,
+                                modifier = Modifier.favoriteFolderMenuSource(),
+                                count = visibleCount(com.android.purebilibili.core.store.FullscreenActionCount.FAVORITE, favoriteCount),
                             )
                         }
                         if (onShareClick != null) HeaderIcon(Icons.Outlined.Share, "分享", onShareClick, iconSize = 18)
@@ -422,18 +437,21 @@ private fun HeaderIcon(
     onLongClick: (() -> Unit)? = null,
     gestureModifier: Modifier? = null,
     progress: Float = 0f,
+    count: Long? = null,
     modifier: Modifier = Modifier,
 ) {
     val progressColor = AppContentColors.accent()
-    HeaderButton(description, onClick, active, onLongClick, gestureModifier, modifier = modifier) {
-        if (progress > 0f) Canvas(Modifier.size(28.dp)) {
-            drawArc(progressColor, -90f, -360f * progress, useCenter = false, style = Stroke(2.dp.toPx()))
+    CountedPlayerAction(count = count, modifier = modifier) {
+        HeaderButton(description, onClick, active, onLongClick, gestureModifier) {
+            if (progress > 0f) Canvas(Modifier.size(28.dp)) {
+                drawArc(progressColor, -90f, -360f * progress, useCenter = false, style = Stroke(2.dp.toPx()))
+            }
+            AppIcon(
+                imageVector = icon, contentDescription = null,
+                tint = if (active) AppContentColors.accent() else Color.White,
+                modifier = Modifier.size(iconSize.dp),
+            )
         }
-        AppIcon(
-            imageVector = icon, contentDescription = null,
-            tint = if (active) AppContentColors.accent() else Color.White,
-            modifier = Modifier.size(iconSize.dp),
-        )
     }
 }
 

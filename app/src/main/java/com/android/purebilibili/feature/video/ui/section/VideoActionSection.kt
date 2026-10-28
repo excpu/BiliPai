@@ -43,6 +43,8 @@ import com.android.purebilibili.core.ui.rememberAppDownloadIcon
 import com.android.purebilibili.core.ui.rememberAppShareIcon
 import com.android.purebilibili.core.ui.rememberAppWatchLaterIcon
 import com.android.purebilibili.core.util.FormatUtils
+import com.android.purebilibili.feature.video.ui.components.FavoriteFolderMenuControl
+import com.android.purebilibili.feature.video.ui.components.favoriteFolderMenuSource
 import com.android.purebilibili.core.util.HapticType
 import com.android.purebilibili.core.util.rememberHapticFeedback
 import com.android.purebilibili.data.model.response.ViewInfo
@@ -314,7 +316,7 @@ fun ActionButtonsRow(
                         onFavoriteLongClick()
                     },
                     horizontalPadding = buttonHorizontalPadding,
-                    modifier = Modifier.favoriteActionAnchor()
+                    modifier = Modifier.favoriteFolderMenuSource(FavoriteFolderMenuControl.DETAIL).favoriteActionAnchor()
                 )
             }
 

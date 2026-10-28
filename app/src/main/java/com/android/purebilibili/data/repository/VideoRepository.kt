@@ -23,7 +23,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -300,6 +302,13 @@ object VideoRepository {
     // Subtitle cache is shared with TV by SubtitleContentRepository.
     private val verticalVideoCache = ConcurrentHashMap<String, Boolean>()
 
+    // 横竖屏判定的预取调度：列表加载后后台并发预热，让详情页在转场开始前就能拿到结论。
+    private val verticalPrefetchScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private const val VERTICAL_PREFETCH_LIMIT = 60
+    // 并发带上限：OkHttp 默认 maxRequestsPerHost=5，所有 pagelist 都打同一主机，
+    // 设成 5 刚好填满并发名额；再高只会进队列排队，没有收益。
+    private const val VERTICAL_PREFETCH_CONCURRENCY = 5
     private val QUALITY_CHAIN = listOf(120, 116, 112, 80, 74, 64, 32, 16)
     private const val PLAY_URL_RISK_COOLDOWN_MS = 120_000L
     @Volatile
@@ -624,7 +633,11 @@ object VideoRepository {
 
     // 首页仅首次请求可消费同一账号会话的预加载，等待期间切号也必须拒绝旧结果。
     suspend fun getHomeVideos(idx: Int = 0): Result<List<VideoItem>> =
-        getHomeFeed(idx).map { it.videos }
+        getHomeFeed(idx).map { page ->
+            // 列表到手就预热横竖屏判定，点击进详情时可直接命中，转场不再先走横屏。
+            prefetchVerticalFlagsForVideos(page.videos)
+            page.videos
+        }
 
     internal suspend fun getHomeFeed(idx: Int = 0): Result<HomeFeedPage> = withContext(Dispatchers.IO) {
         TokenManager.awaitRestore()
@@ -860,20 +873,25 @@ object VideoRepository {
     }
     
     //  [新增] 热门视频（下沉 core-data/VideoCatalogRepository，两端消费同一实现）
-    suspend fun getPopularVideos(page: Int = 1): Result<List<VideoItem>> = VideoCatalogRepository.getPopularVideos(page)
+    suspend fun getPopularVideos(page: Int = 1): Result<List<VideoItem>> =
+        VideoCatalogRepository.getPopularVideos(page).also { prefetchVerticalFlagsForVideos(it.getOrNull().orEmpty()) }
 
-    suspend fun getRankingVideos(rid: Int = 0, type: String = "all"): Result<List<VideoItem>> = VideoCatalogRepository.getRankingVideos(rid, type)
+    suspend fun getRankingVideos(rid: Int = 0, type: String = "all"): Result<List<VideoItem>> =
+        VideoCatalogRepository.getRankingVideos(rid, type).also { prefetchVerticalFlagsForVideos(it.getOrNull().orEmpty()) }
 
-    suspend fun getPreciousVideos(): Result<List<VideoItem>> = VideoCatalogRepository.getPreciousVideos()
+    suspend fun getPreciousVideos(): Result<List<VideoItem>> =
+        VideoCatalogRepository.getPreciousVideos().also { prefetchVerticalFlagsForVideos(it.getOrNull().orEmpty()) }
 
     suspend fun getWeeklyPeriods(): Result<List<PopularSeriesPeriod>> = VideoCatalogRepository.getWeeklyPeriods()
 
     suspend fun getWeeklyPeriod(number: Int): Result<PopularSeriesOneData> = VideoCatalogRepository.getWeeklyPeriod(number)
 
-    suspend fun getWeeklyMustWatchVideos(number: Int? = null): Result<List<VideoItem>> = VideoCatalogRepository.getWeeklyMustWatchVideos(number)
+    suspend fun getWeeklyMustWatchVideos(number: Int? = null): Result<List<VideoItem>> =
+        VideoCatalogRepository.getWeeklyMustWatchVideos(number).also { prefetchVerticalFlagsForVideos(it.getOrNull().orEmpty()) }
 
     //  [新增] 分区视频（按分类 ID 获取视频；下沉后两端消费同一实现）
-    suspend fun getRegionVideos(tid: Int, page: Int = 1): Result<List<VideoItem>> = VideoCatalogRepository.getRegionVideos(tid, page)
+    suspend fun getRegionVideos(tid: Int, page: Int = 1): Result<List<VideoItem>> =
+        VideoCatalogRepository.getRegionVideos(tid, page).also { prefetchVerticalFlagsForVideos(it.getOrNull().orEmpty()) }
     
     //  [新增] 上报播放心跳（记录到历史记录）
     suspend fun reportPlayHeartbeat(
@@ -982,18 +1000,70 @@ object VideoRepository {
         try {
             val lookup = resolveVideoInfoLookupInput(rawBvid = normalizedBvid, aid = aid)
                 ?: return@withContext false
-            val viewResp = if (lookup.bvid.isNotEmpty()) {
-                api.getVideoInfo(lookup.bvid)
+            // 优先走轻量的 /x/player/pagelist（只返回分P + dimension），
+            // 比 x/web-interface/view 快一个数量级，能让详情页更早拿到横竖屏结论。
+            // 失败或没有 bvid 时回退到原接口，行为不退化。
+            val pageDimension = if (lookup.bvid.isNotEmpty()) {
+                runCatching { api.getPageList(lookup.bvid) }.getOrNull()
+                    ?.takeIf { it.code == 0 }
+                    ?.data
+                    ?.firstOrNull()
+                    ?.dimension
             } else {
-                api.getVideoInfoByAid(lookup.aid)
+                null
             }
-            val isVertical = viewResp.data?.dimension?.isVertical == true
+            val isVertical = if (pageDimension != null) {
+                pageDimension.isVertical
+            } else {
+                val viewResp = if (lookup.bvid.isNotEmpty()) {
+                    api.getVideoInfo(lookup.bvid)
+                } else {
+                    api.getVideoInfoByAid(lookup.aid)
+                }
+                viewResp.data?.dimension?.isVertical == true
+            }
             verticalVideoCache[cacheKey] = isVertical
             isVertical
         } catch (_: Exception) {
             false
         }
     }
+
+    /**
+     * 批量预热横竖屏判定：列表加载完成后调用，把视频的尺寸结论写进缓存。
+     * 详情页在转场动画开始前就能命中结论，避免先按横屏渲染再切竖屏。
+     * 请求走轻量的 /x/player/pagelist，并限制并发，避免一次刷出上百个请求。
+     *
+     * 供各列表数据源（首页、搜索、动态、UP 主页、相关推荐…）在拿到列表后调用。
+     */
+    fun prefetchVerticalFlags(bvids: List<String>) {
+        val targets = bvids.asSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .filter { verticalVideoCache[it] == null }
+            .distinct()
+            .take(VERTICAL_PREFETCH_LIMIT)
+            .toList()
+        if (targets.isEmpty()) return
+        com.android.purebilibili.core.util.Logger.d(
+            "VideoRepo",
+            "🔍 prefetch vertical flags: ${targets.size} 条，跳过已缓存 ${bvids.size - targets.size} 条"
+        )
+        verticalPrefetchScope.launch {
+            targets.chunked(VERTICAL_PREFETCH_CONCURRENCY).forEach { chunk ->
+                chunk.map { bvid -> async { runCatching { isVerticalVideo(bvid) } } }.awaitAll()
+            }
+        }
+    }
+
+    /** VideoItem 列表版本，内部转成 bvid 列表。 */
+    fun prefetchVerticalFlagsForVideos(videos: List<VideoItem>) {
+        prefetchVerticalFlags(videos.map { it.bvid })
+    }
+
+    /** 同步读取已预取的判定结果；尚未预取到时返回 null，由调用方回退到列表自带字段。 */
+    fun getCachedVerticalFlag(bvid: String): Boolean? =
+        verticalVideoCache[bvid.trim()]
 
     // [修复] 添加 aid 参数支持，修复移动端推荐流视频播放失败问题
     suspend fun getVideoDetails(
@@ -1511,10 +1581,17 @@ object VideoRepository {
         }
     }
     
-    suspend fun getRelatedVideos(bvid: String): List<RelatedVideo> = VideoCatalogRepository.getRelatedVideos(bvid)
+    suspend fun getRelatedVideos(bvid: String): List<RelatedVideo> =
+        VideoCatalogRepository.getRelatedVideos(bvid).also { related ->
+            // 相关推荐里常混有竖屏视频，提前预热判定，点击时不必等详情页接口。
+            prefetchVerticalFlags(related.map { it.bvid })
+        }
 
     suspend fun getRelatedVideosResult(bvid: String): Result<List<RelatedVideo>> =
-        VideoCatalogRepository.getRelatedVideosResult(bvid)
+        VideoCatalogRepository.getRelatedVideosResult(bvid).also { result ->
+            // 详情页实际走这个入口加载相关推荐，同样要预热，否则点击相关视频仍会先铺横屏。
+            prefetchVerticalFlags(result.getOrNull().orEmpty().map { it.bvid })
+        }
 
     suspend fun getCachedRelatedVideosResult(bvid: String): Result<List<RelatedVideo>>? =
         VideoCatalogRepository.getCachedRelatedVideosResult(bvid)

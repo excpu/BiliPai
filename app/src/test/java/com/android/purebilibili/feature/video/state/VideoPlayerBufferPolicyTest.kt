@@ -7,6 +7,26 @@ import kotlin.test.assertTrue
 class VideoPlayerBufferPolicyTest {
 
     @Test
+    fun resilientPolicyDeepensBufferWithoutIncreasingStartupThreshold() {
+        for (wifi in listOf(true, false)) {
+            val normal = resolvePlayerBufferPolicy(isOnWifi = wifi)
+            val resilient = resolvePlayerBufferPolicy(isOnWifi = wifi, resilient = true)
+            assertEquals(normal.bufferForPlaybackMs, resilient.bufferForPlaybackMs)
+            assertEquals(15_000, resilient.earlyPlaybackMaxBufferMs)
+            assertEquals(20_000, resilient.minBufferMs)
+            assertEquals(50_000, resilient.maxBufferMs)
+            assertEquals(2_500, resilient.bufferForPlaybackAfterRebufferMs)
+            listOf(1f, 2f, 3f).forEach { speed ->
+                val limitUs = resolveEarlyPlaybackBufferLimitUs(
+                    resilient.earlyPlaybackMaxBufferMs, resilient.bufferForPlaybackMs,
+                    resilient.bufferForPlaybackAfterRebufferMs, speed,
+                )
+                assertTrue(limitUs > resilient.bufferForPlaybackAfterRebufferMs * 1_000L * speed)
+            }
+        }
+    }
+
+    @Test
     fun wifiPolicyShouldUseLowerStartupBufferForFasterAutoplay() {
         val policy = resolvePlayerBufferPolicy(isOnWifi = true)
 

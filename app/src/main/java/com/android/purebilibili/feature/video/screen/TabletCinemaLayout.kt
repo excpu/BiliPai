@@ -1,5 +1,7 @@
 package com.android.purebilibili.feature.video.screen
 
+import com.android.purebilibili.navigation.tabSelectedPage
+import com.android.purebilibili.navigation.tabIndicatorPosition
 import com.android.purebilibili.feature.video.ui.components.RelatedVideoList
 
 import com.android.purebilibili.core.ui.AppContentColors
@@ -322,6 +324,7 @@ internal fun TabletCinemaLayout(
                 CinemaStagePlayer(
                     playerState = playerState,
                     uiState = uiState,
+                    commentStateHandle = androidx.compose.runtime.rememberUpdatedState(commentState),
                     playbackActions = playbackActions,
                     engagementActions = engagementActions,
                     engagementState = engagementState,
@@ -460,6 +463,7 @@ internal fun TabletCinemaLayout(
 
 @Composable
 private fun CinemaStagePlayer(
+    commentStateHandle: androidx.compose.runtime.State<com.android.purebilibili.feature.video.viewmodel.CommentUiState>,
     playerState: VideoPlayerState,
     uiState: VideoPlaybackUiState,
     playbackActions: VideoDetailPlaybackActions,
@@ -554,6 +558,8 @@ private fun CinemaStagePlayer(
                     state = VideoPlayerSectionState(
                         playerState = playerState,
                         uiState = uiState,
+                        engagementState = engagementState,
+                        commentStateHandle = commentStateHandle,
                         isFullscreen = false,
                         isInPipMode = isInPipMode,
                         danmakuHostActive = danmakuHostActive,
@@ -626,6 +632,7 @@ private fun CinemaStagePlayer(
                         onSecondCodecChange = onSecondCodecChange,
                         onAudioQualityChange = onAudioQualityChange,
                         onPlaybackSpeedChange = playbackActions.applyPlaybackSpeed,
+                        onAudioLangChange = playbackActions.changeAudioLanguage,
                         onSaveCover = playbackActions.saveCover,
                         onDownloadAudio = playbackActions.downloadAudio,
                         onPlayModeClick = onPlayModeClick,
@@ -1228,10 +1235,10 @@ private fun CinemaSideCurtain(
                             ) {
                                 TabletSecondaryLiquidTabRow(
                                     labels = listOf("评论", "相关推荐"),
-                                    selectedIndex = pagerState.currentPage,
+                                    selectedIndex = pagerState.tabSelectedPage,
                                     onSelected = onTabSelected,
                                     indicatorPositionProvider = {
-                                        pagerState.currentPage + pagerState.currentPageOffsetFraction
+                                        pagerState.tabIndicatorPosition
                                     },
                                     isScrollInProgressProvider = { pagerState.isScrollInProgress },
                                 )
@@ -1475,26 +1482,13 @@ private fun CinemaCommentsPane(
             val repliesError = commentState.repliesError
             if (repliesError != null) {
                 item(key = "cinema_comment_refresh_error") {
-                    Row(
+                    com.android.purebilibili.feature.video.ui.components.VideoCommentLoadError(
+                        message = repliesError,
+                        onRetry = { if (commentState.replies.isNotEmpty() && !commentState.isRepliesEnd) commentActions.loadComments() else commentActions.refreshComments() },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        AppText(
-                            text = repliesError,
-                            color = AppContentColors.error(),
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        AppTextButton(onClick = {
-                            if (commentState.replies.isNotEmpty() && !commentState.isRepliesEnd) {
-                                commentActions.loadComments()
-                            } else commentActions.refreshComments()
-                        }) {
-                            AppText("重试")
-                        }
-                    }
+                            .then(if (commentState.replies.isEmpty() && commentState.voteCard == null) Modifier.fillParentMaxHeight(0.7f) else Modifier),
+                    )
                 }
             }
             items(

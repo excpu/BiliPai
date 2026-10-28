@@ -78,6 +78,7 @@ import com.android.purebilibili.feature.video.ui.components.VideoAspectRatio
 import com.android.purebilibili.feature.video.ui.components.glass.AspectRatioMenu
 import com.android.purebilibili.feature.video.ui.components.glass.VideoSettingsPanel
 import com.android.purebilibili.feature.video.ui.components.PlayerEpisodeMenu
+import com.android.purebilibili.feature.video.ui.components.PlayerEpisodeSourceMenu
 import com.android.purebilibili.feature.video.ui.components.resolveCurrentUgcEpisodeLazyListIndex
 import com.android.purebilibili.feature.video.ui.components.LandscapeSidePanel
 import com.android.purebilibili.feature.video.ui.components.landscapeControlCenterGroup
@@ -181,38 +182,11 @@ internal fun shouldShowEpisodeEntryFromVideoData(
     relatedVideosCount: Int,
     hasSeasonEpisodes: Boolean,
     pagesCount: Int,
-    hasFavoritePlaylist: Boolean = false
+    hasExternalPlaylist: Boolean = false
 ): Boolean {
-    return pagesCount > 1 || hasSeasonEpisodes || hasFavoritePlaylist
+    return pagesCount > 1 || hasSeasonEpisodes || hasExternalPlaylist
 }
 
-internal data class NextEpisodeTarget(
-    val nextPageIndex: Int? = null,
-    val nextBvid: String? = null
-)
-
-internal fun resolveNextEpisodeTarget(
-    pagesCount: Int,
-    currentPageIndex: Int,
-    seasonEpisodeBvids: List<String>,
-    currentBvid: String,
-    relatedBvids: List<String>
-): NextEpisodeTarget? {
-    if (pagesCount > 1 && currentPageIndex in 0 until (pagesCount - 1)) {
-        return NextEpisodeTarget(nextPageIndex = currentPageIndex + 1)
-    }
-    if (seasonEpisodeBvids.isNotEmpty()) {
-        val currentIndex = seasonEpisodeBvids.indexOf(currentBvid)
-        if (currentIndex in 0 until seasonEpisodeBvids.lastIndex) {
-            return NextEpisodeTarget(nextBvid = seasonEpisodeBvids[currentIndex + 1])
-        }
-    }
-    val nextRelated = relatedBvids.firstOrNull { it != currentBvid }
-    if (!nextRelated.isNullOrBlank()) {
-        return NextEpisodeTarget(nextBvid = nextRelated)
-    }
-    return null
-}
 
 internal fun shouldConsumeBackgroundGesturesForEndDrawer(
     endDrawerVisible: Boolean
@@ -746,8 +720,8 @@ private fun VideoPlayerOverlayContent(
     val pages = state.pages
     val currentPageIndex = state.currentPageIndex
     val onPageSelect = actions.onPageSelect
-    val hasFavoritePlaylist = state.hasFavoritePlaylist
-    val onFavoritePlaylistClick = actions.onFavoritePlaylistClick
+    val hasExternalPlaylist = state.hasExternalPlaylist
+    val onExternalPlaylistClick = actions.onExternalPlaylistClick
     val drawerHazeState = state.drawerHazeState
     val statusBarAmbientFrame = state.statusBarAmbientFrame
     val statusBarBackdropHeight = state.statusBarBackdropHeight
@@ -809,11 +783,13 @@ private fun VideoPlayerOverlayContent(
     }
     var showPlaybackOrderSheet by remember { mutableStateOf(false) }
     var showPageSelectorSheet by remember { mutableStateOf(false) }
+    var showEpisodeSourceMenu by remember { mutableStateOf(false) }
     var bottomControlFloatingPanelVisible by remember { mutableStateOf(false) }
     var showCdnDiagnostics by remember { mutableStateOf(false) }
     // 换集后强制关掉分集/菜单等全屏遮罩，避免 Dialog/Sheet 残留挡触摸。
     LaunchedEffect(bvid, cid) {
         showPageSelectorSheet = false
+        showEpisodeSourceMenu = false
         showQualityMenu = false
         showAudioQualityMenu = false
         showSpeedMenu = false
@@ -1136,38 +1112,67 @@ private fun VideoPlayerOverlayContent(
             showOnlineCount = showOnlineCount
         )
     }
-    val hasEpisodeEntry = remember(relatedVideos, ugcSeason) {
+    val hasEpisodeEntry = remember(pages, ugcSeason, hasExternalPlaylist) {
         shouldShowEpisodeEntryFromVideoData(
             relatedVideosCount = relatedVideos.size,
             hasSeasonEpisodes = ugcSeason?.sections?.any { section ->
                 section.episodes.isNotEmpty()
             } == true,
             pagesCount = pages.size,
-            hasFavoritePlaylist = hasFavoritePlaylist
+            hasExternalPlaylist = hasExternalPlaylist
         )
     }
-    val nextEpisodeTarget = remember(
-        pages,
-        currentPageIndex,
-        ugcSeason,
-        bvid,
-        relatedVideos
-    ) {
-        resolveNextEpisodeTarget(
-            pagesCount = pages.size,
-            currentPageIndex = currentPageIndex,
-            seasonEpisodeBvids = ugcSeason?.sections
-                ?.flatMap { section -> section.episodes }
-                ?.map { episode -> episode.bvid }
-                .orEmpty(),
-            currentBvid = bvid,
-            relatedBvids = relatedVideos.map { it.bvid }
-        )
+    val collectionSession = rememberPiliCollectionMenuSession(
+        ugcSeason, bvid, cid, isParts = pages.size > 1,
+    )
+    val navigationPages = remember(pages, bvid) {
+        if (pages.size > 1) pages.mapIndexed { index, page ->
+            PiliEpisodeNavigationEntry(bvid, page.cid, index)
+        } else emptyList()
     }
+    val navigationPlaylist = if (hasExternalPlaylist) {
+        com.android.purebilibili.feature.video.player.PlaylistManager.playlist.collectAsStateWithLifecycle().value
+    } else emptyList()
+    val externalPlaylistSource by com.android.purebilibili.feature.video.player.PlaylistManager
+        .externalPlaylistSource.collectAsStateWithLifecycle()
+    val navigationExternalPlaylist = remember(hasExternalPlaylist, navigationPlaylist) {
+        if (hasExternalPlaylist) navigationPlaylist.map { PiliEpisodeNavigationEntry(it.bvid, it.cid) } else null
+    }
+    val navigationOuter = remember(ugcSeason, hasExternalPlaylist) {
+        if (hasExternalPlaylist) emptyList() else ugcSeason?.sections?.flatMap { section ->
+            section.episodes.map { PiliEpisodeNavigationEntry(it.bvid, it.cid) }
+        }.orEmpty()
+    }
+    val navigationRelated = remember(relatedVideos, hasExternalPlaylist) {
+        if (hasExternalPlaylist) emptyList() else relatedVideos.map { PiliEpisodeNavigationEntry(it.bvid, 0L) }
+    }
+    val outerReversed = if (hasExternalPlaylist) false else if (pages.size > 1 && ugcSeason != null) {
+        val sort by remember(context, ugcSeason) {
+            SettingsManager.getCollectionSortMode(
+                context, com.android.purebilibili.feature.video.ui.components.resolveCollectionSubscriptionId(ugcSeason),
+            )
+        }.collectAsStateWithLifecycle(
+            initialValue = com.android.purebilibili.feature.video.ui.components.CollectionSortMode.ASCENDING,
+        )
+        sort == com.android.purebilibili.feature.video.ui.components.CollectionSortMode.DESCENDING
+    } else collectionSession.isReversed
     val playbackCompletionBehavior by SettingsManager
         .getPlaybackCompletionBehavior(context)
         .collectAsStateWithLifecycle(initialValue = PlaybackCompletionBehavior.CONTINUE_CURRENT_LOGIC
         )
+    val nextEpisodeTarget = resolvePiliEpisodeNavigation(
+        pages = navigationPages,
+        outer = navigationOuter,
+        related = navigationRelated,
+        externalPlaylist = navigationExternalPlaylist,
+        currentBvid = bvid,
+        currentCid = cid.takeIf { it > 0 } ?: pages.getOrNull(currentPageIndex)?.cid ?: 0L,
+        forward = true,
+        reversePages = pages.size > 1 && collectionSession.isReversed,
+        reverseOuter = outerReversed,
+        loop = playbackCompletionBehavior == PlaybackCompletionBehavior.LOOP_PLAYLIST,
+        autoContinue = playbackCompletionBehavior == PlaybackCompletionBehavior.CONTINUE_CURRENT_LOGIC,
+    )
     // The legacy preference key now enables the inline-player Haze status-bar backdrop.
     val immersiveVideoPageStatusBar by SettingsManager
         .getHideVideoPageStatusBar(context)
@@ -1206,7 +1211,7 @@ private fun VideoPlayerOverlayContent(
     val glassPanelVisible = bottomControlFloatingPanelVisible || showQualityMenu ||
         showAudioQualityMenu || showSpeedMenu || showRatioMenu || showDanmakuSettings ||
         showVideoSettings || showChapterList || showCastDialog || showPlaybackOrderSheet ||
-        showPageSelectorSheet || showCdnDiagnostics || danmakuComposerVisible
+        showPageSelectorSheet || showEpisodeSourceMenu || showCdnDiagnostics || danmakuComposerVisible
     val latestPanelVisibility by rememberUpdatedState(actions.onFloatingPanelVisibilityChange)
     LaunchedEffect(glassPanelVisible) { latestPanelVisibility(glassPanelVisible) }
     DisposableEffect(Unit) { onDispose { latestPanelVisibility(false) } }
@@ -1559,6 +1564,9 @@ private fun VideoPlayerOverlayContent(
                         showBatteryLevel = showFullscreenBatteryLevel,
                         showCurrentTime = showFullscreenTime,
                         showInteractiveActions = showFullscreenActionItems,
+                        likeCount = state.likeCount.takeIf { state.engagementCountsKnown },
+                        favoriteCount = state.favoriteCount.takeIf { state.engagementCountsKnown },
+                        commentCount = state.commentCount.takeIf { state.engagementCountsKnown },
                         onBack = onBack,
                         onHomeClick = actions.onHomeClick,
                         // Interactions
@@ -1647,18 +1655,23 @@ private fun VideoPlayerOverlayContent(
                         onDismissEndDrawer()
                         val target = nextEpisodeTarget
                         when {
-                            target?.nextPageIndex != null -> onPageSelect(target.nextPageIndex)
-                            !target?.nextBvid.isNullOrBlank() -> onDrawerVideoClick(target.nextBvid, null)
+                            target?.pageIndex != null -> onPageSelect(target.pageIndex)
+                            target != null -> onDrawerVideoClick(
+                                target.bvid,
+                                com.android.purebilibili.feature.video.screen.buildVideoNavigationOptions(targetCid = target.cid),
+                            )
                         }
                     },
                     hasNextEpisode = nextEpisodeTarget != null,
                     onEpisodeClick = {
-                        if (pages.size > 1) {
+                        if (hasExternalPlaylist && pages.size > 1) {
+                            showEpisodeSourceMenu = true
+                        } else if (hasExternalPlaylist) {
+                            onExternalPlaylistClick()
+                        } else if (pages.size > 1) {
                             showPageSelectorSheet = true
                         } else if (ugcSeason?.sections?.any { it.episodes.isNotEmpty() } == true) {
                             onShowEndDrawer(1)
-                        } else if (hasFavoritePlaylist) {
-                            onFavoritePlaylistClick()
                         } else {
                             onShowEndDrawer(0)
                         }
@@ -2429,6 +2442,20 @@ private fun VideoPlayerOverlayContent(
             )
         }
 
+        if (showEpisodeSourceMenu) {
+            PlayerEpisodeSourceMenu(
+                externalPlaylistTitle = com.android.purebilibili.feature.video.screen
+                    .resolveExternalPlaylistQueueTitle(externalPlaylistSource),
+                isFullscreen = isFullscreen,
+                onDismiss = { showEpisodeSourceMenu = false },
+                onPartsClick = {
+                    onDismissEndDrawer()
+                    showPageSelectorSheet = true
+                },
+                onExternalPlaylistClick = onExternalPlaylistClick,
+            )
+        }
+
         if (showPageSelectorSheet && pages.size > 1) {
             PlayerEpisodeMenu(
                 pages = pages,
@@ -2436,6 +2463,8 @@ private fun VideoPlayerOverlayContent(
                 isFullscreen = isFullscreen,
                 playerBounds = playerBoundsInWindow,
                 cover = coverUrl,
+                isReversed = collectionSession.isReversed,
+                onReverse = collectionSession.onReverse,
                 onDismiss = { showPageSelectorSheet = false },
                 onPageSelect = onPageSelect,
             )

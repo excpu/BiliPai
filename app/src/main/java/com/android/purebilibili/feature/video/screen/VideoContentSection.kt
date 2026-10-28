@@ -1,6 +1,7 @@
 // 文件路径: feature/video/screen/VideoContentSection.kt
 package com.android.purebilibili.feature.video.screen
 
+import com.android.purebilibili.navigation.tabIndicatorPosition
 import com.android.purebilibili.core.ui.motion.AppMotionEasing
 import com.android.purebilibili.feature.video.ui.components.RelatedVideoList
 
@@ -1198,7 +1199,7 @@ internal fun VideoContentSection(
                 isPlayerCollapsed = isPlayerCollapsed,
                 miuixBackdrop = videoContentMiuixBackdrop,
                 indicatorPositionProvider = {
-                    pagerState.currentPage + pagerState.currentPageOffsetFraction
+                    pagerState.tabIndicatorPosition
                 },
                 isScrollInProgressProvider = { pagerState.isScrollInProgress },
                 isPagerDraggingProvider = { nativePagerDragHeld || customPagerDragHeld },
@@ -1729,24 +1730,13 @@ internal fun VideoCommentTab(
             ) {
             if (repliesError != null) {
                 item(key = "video_comment_refresh_error", contentType = "video_comment_error") {
-                    Row(
+                    com.android.purebilibili.feature.video.ui.components.VideoCommentLoadError(
+                        message = repliesError,
+                        onRetry = { if (replies.isNotEmpty() && !isRepliesEnd) onLoadMoreReplies() else onRefreshReplies() },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        AppText(
-                            text = repliesError,
-                            color = AppContentColors.error(),
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        AppTextButton(onClick = {
-                            if (replies.isNotEmpty() && !isRepliesEnd) onLoadMoreReplies() else onRefreshReplies()
-                        }) {
-                            AppText("重试")
-                        }
-                    }
+                            .then(if (replies.isEmpty() && voteCard == null) Modifier.fillParentMaxHeight(0.7f) else Modifier),
+                    )
                 }
             }
             voteCard?.let { card ->

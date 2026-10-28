@@ -459,6 +459,9 @@ class HistoryViewModel(application: Application) : BaseListViewModel(application
                         }
                         presentedHistory = pages.flatMap { it.items }
                             .distinctBy { com.android.purebilibili.feature.list.resolveHistoryRenderKey(it) }
+                        // 历史列表到手就预热横竖屏判定，点击进详情时首帧即进入正确布局。
+                        com.android.purebilibili.data.repository.VideoRepository
+                            .prefetchVerticalFlags(presentedHistory.map { it.videoItem.bvid })
                         publishHistoryItems()
                     }
                     if (!historyCleared || (reloadingClearedHistory && clearRevision == historyClearRevision)) {

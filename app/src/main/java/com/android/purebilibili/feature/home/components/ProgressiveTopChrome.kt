@@ -48,7 +48,9 @@ internal fun shouldUseBiliPaiProgressiveTopBlur(
     enabled: Boolean,
     hasBackdrop: Boolean,
     sdkInt: Int = Build.VERSION.SDK_INT,
-): Boolean = enabled && hasBackdrop && sdkInt >= Build.VERSION_CODES.TIRAMISU
+    blurRadiusDp: Float = BILIPAI_PROGRESSIVE_TOP_BLUR_RADIUS_DP,
+): Boolean = enabled && hasBackdrop && sdkInt >= Build.VERSION_CODES.TIRAMISU &&
+    blurRadiusDp.isFinite() && blurRadiusDp > 0.001f
 
 /** Floating controls need a continuous opaque surface when neither header blur is active. */
 internal fun shouldUseOpaqueTopChromeBackground(
@@ -85,8 +87,11 @@ internal fun Modifier.biliPaiProgressiveTopBlur(
     progressiveCompositeEnabled: Boolean = true,
 ): Modifier {
     if (
-        !shouldUseBiliPaiProgressiveTopBlur(enabled, backdrop != null) ||
-        blurRadiusDp <= 0.001f
+        !shouldUseBiliPaiProgressiveTopBlur(
+            enabled = enabled,
+            hasBackdrop = backdrop != null,
+            blurRadiusDp = blurRadiusDp,
+        )
     ) {
         return this
     }
@@ -198,6 +203,16 @@ internal fun BiliPaiImmersiveTopBar(
     // Local protection is part of the enabled progressive material. With both effects off,
     // preserve the user's plain chrome choice; Haze continues to own its existing scrim.
     val drawProtectionFade = solidFadeActive || (active && !headerBlurActive && readability != null)
+    val protectedFraction = if (readability != null) 0.65f else 0f
+    val fadeBrush = if (drawProtectionFade) {
+        remember(fadeColor, protectedFraction) {
+            androidx.compose.ui.graphics.Brush.verticalGradient(
+                colorStops = com.android.purebilibili.core.ui.blur.ProgressiveFadeDefaults.createStops(
+                    fadeColor, protectedFraction = protectedFraction,
+                ).toTypedArray(),
+            )
+        }
+    } else null
     val opaqueBackground = opaqueBackgroundFallback && shouldUseOpaqueTopChromeBackground(
         progressiveBlurActive = (active || solidFadeActive),
         headerBlurActive = headerBlurActive,
@@ -211,7 +226,9 @@ internal fun BiliPaiImmersiveTopBar(
             )
             .then(modifier),
     ) {
-        if (active) {
+        // 两种特效共用相同绘制边界：先绘制模糊，再叠加渐隐，不增加第二个测量层。
+        // 不改变玻璃开关关闭时的原生布局，也不改变任一特效的独立开关。
+        if (active || drawProtectionFade) {
             androidx.compose.foundation.layout.Box(
                 modifier = Modifier
                     .matchParentSize()
@@ -231,37 +248,11 @@ internal fun BiliPaiImmersiveTopBar(
                     }
                     .biliPaiProgressiveTopBlur(
                         backdrop = backdrop,
-                        enabled = true,
+                        enabled = active,
                         shape = androidx.compose.ui.graphics.RectangleShape,
                         progressiveCompositeEnabled = progressiveCompositeEnabled,
-                    ),
-            )
-        }
-        if (drawProtectionFade) {
-            androidx.compose.foundation.layout.Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .layout { measurable, constraints ->
-                        val extension = resolveProgressiveTopBlurBottomExtension(
-                            enabled = extendBelowBounds,
-                            endFraction = BILIPAI_PROGRESSIVE_TOP_BLUR_DEFAULT_GRADIENT.endFraction,
-                        ).roundToPx()
-                        val extended = constraints.copy(
-                            minHeight = constraints.minHeight + extension,
-                            maxHeight = constraints.maxHeight + extension,
-                        )
-                        val placeable = measurable.measure(extended)
-                        layout(placeable.width, placeable.height - extension) {
-                            placeable.placeRelative(0, 0)
-                        }
-                    }
-                    .background(
-                        androidx.compose.ui.graphics.Brush.verticalGradient(
-                            colorStops = com.android.purebilibili.core.ui.blur.ProgressiveFadeDefaults.createStops(
-                                fadeColor, protectedFraction = if (readability != null) 0.65f else 0f,
-                            ).toTypedArray(),
-                        )
-                    ),
+                    )
+                    .then(if (fadeBrush != null) Modifier.background(fadeBrush) else Modifier),
             )
         }
         val iconBackground = if (opaqueBackground) {

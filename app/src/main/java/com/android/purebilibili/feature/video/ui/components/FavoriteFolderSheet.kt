@@ -1,5 +1,8 @@
 package com.android.purebilibili.feature.video.ui.components
 
+import com.android.purebilibili.core.ui.components.AppGlassMenu
+import com.android.purebilibili.core.ui.components.AppGlassMenuPlacement
+import com.android.purebilibili.core.ui.components.AppGlassMenuSource
 import com.android.purebilibili.core.ui.AppContentColors
 import com.android.purebilibili.core.ui.components.AppText
 
@@ -39,10 +42,13 @@ fun FavoriteFolderSheet(
     onFolderToggle: (FavFolder) -> Unit,
     onSaveClick: () -> Unit,
     onDismissRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+    source: AppGlassMenuSource? = LocalFavoriteFolderMenuAnchor.current?.source,
     onCreateFolder: (String, String, Boolean) -> Unit = { _, _, _ -> }
 ) {
     var showCreateDialog by remember { mutableStateOf(false) }
     val configuration = LocalConfiguration.current
+    val glass = com.android.purebilibili.core.ui.components.appGlassMenuAvailable()
     val sidePanel = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE &&
         configuration.screenWidthDp >= 600
     val maxSheetHeight = (configuration.screenHeightDp.dp * 0.72f)
@@ -59,12 +65,7 @@ fun FavoriteFolderSheet(
         )
     }
 
-    AppModalBottomSheet(
-        onDismissRequest = onDismissRequest,
-        containerColor = MaterialTheme.colorScheme.surface,
-        presentationOverride = if (sidePanel) AppModalPresentation.SideSheet else null,
-        dragHandle = if (sidePanel) null else ({ BottomSheetDefaults.DragHandle() }),
-    ) {
+    val body: @Composable () -> Unit = {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -165,7 +166,8 @@ fun FavoriteFolderSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
-                    .navigationBarsPadding()
+                    // 同窗玻璃宿主已处理系统栏，原生弹层保留原有底部 inset。
+                    .then(if (glass) Modifier else Modifier.navigationBarsPadding())
                     .padding(top = 8.dp, bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -191,6 +193,33 @@ fun FavoriteFolderSheet(
                 }
             }
         }
+    }
+    // 液态玻璃显式选择同窗锚点形变；关闭玻璃继续使用原生底部／侧边弹层。
+    if (AppGlassMenu(
+            expanded = true,
+            modifier = modifier,
+            onDismissRequest = onDismissRequest,
+            title = "添加到收藏夹",
+            placement = if (source?.isAvailable == true) AppGlassMenuPlacement.ANCHOR_END
+                else AppGlassMenuPlacement.CENTER,
+            source = source,
+            minWidth = 0.dp,
+            maxWidth = if (sidePanel) 360.dp else 420.dp,
+            maxHeight = if (sidePanel) (configuration.screenHeightDp - 32).coerceAtLeast(1).dp
+                else maxSheetHeight,
+            interactiveContent = true,
+            showScrollbar = false,
+            useAvailableHeight = true,
+            content = body,
+        )) return
+    AppModalBottomSheet(
+        modifier = modifier,
+        onDismissRequest = onDismissRequest,
+        containerColor = MaterialTheme.colorScheme.surface,
+        presentationOverride = if (sidePanel) AppModalPresentation.SideSheet else null,
+        dragHandle = if (sidePanel) null else ({ BottomSheetDefaults.DragHandle() }),
+    ) {
+        body()
     }
 }
 

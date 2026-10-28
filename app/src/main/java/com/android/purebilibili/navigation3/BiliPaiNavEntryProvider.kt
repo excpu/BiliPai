@@ -88,7 +88,12 @@ internal fun NavEntryBuilder.biliPaiNavEntries(
     entry<BiliPaiNavKey.LiveList>(swipeDismiss = NavSwipeDirection.None, content = content)
     entry<BiliPaiNavKey.LiveSearch>(swipeDismiss = NavSwipeDirection.None, content = content)
     entry<BiliPaiNavKey.LiveArea>(swipeDismiss = NavSwipeDirection.None, content = content)
-    entry<BiliPaiNavKey.LiveAreaDetail>(swipeDismiss = NavSwipeDirection.None, content = content)
+    entry<BiliPaiNavKey.LiveAreaDetail>(
+        transition = settingsBackStack.lastOrNull { it is BiliPaiNavKey.LiveAreaDetail }
+            ?.let(liveContainerTransitions::get) ?: pageTransition,
+        swipeDismiss = NavSwipeDirection.None,
+        content = content,
+    )
     entry<BiliPaiNavKey.LiveMatch>(swipeDismiss = NavSwipeDirection.None, content = content)
     entry<BiliPaiNavKey.MatchInfo>(swipeDismiss = NavSwipeDirection.None, content = content)
     entry<BiliPaiNavKey.LiveFollowing>(swipeDismiss = NavSwipeDirection.None, content = content)

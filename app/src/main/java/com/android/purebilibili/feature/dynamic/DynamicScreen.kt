@@ -1,6 +1,7 @@
 // 文件路径: feature/dynamic/DynamicScreen.kt
 package com.android.purebilibili.feature.dynamic
 
+import com.android.purebilibili.navigation.tabIndicatorPosition
 import com.android.purebilibili.core.ui.components.appActionWithFeedback
 
 import com.android.purebilibili.core.ui.AppContentColors
@@ -356,11 +357,7 @@ fun DynamicScreen(
     )
     val dynamicTabIndicatorPositionProvider = remember(pagerState, visibleTabs) {
         {
-            resolveDynamicPagerIndicatorPosition(
-                currentPage = pagerState.currentPage,
-                currentPageOffsetFraction = pagerState.currentPageOffsetFraction,
-                pageCount = visibleTabs.size
-            )
+            pagerState.tabIndicatorPosition.coerceIn(0f, visibleTabs.lastIndex.coerceAtLeast(0).toFloat())
         }
     }
     val dynamicTabScrollInProgressProvider = remember(pagerState) {

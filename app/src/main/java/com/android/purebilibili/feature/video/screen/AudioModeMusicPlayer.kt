@@ -291,9 +291,13 @@ internal fun AudioModeMusicPlayer(
                 )
             }
         } else {
-            playlist.mapIndexed { index, item ->
+            val occurrences = mutableMapOf<Pair<String, Long>, Int>()
+            playlist.map { item ->
+                val identity = item.bvid to item.cid
+                val occurrence = occurrences.getOrDefault(identity, 0)
+                occurrences[identity] = occurrence + 1
                 MusicQueueItemUi(
-                    stableId = "video:${item.bvid}:$index",
+                    stableId = "video:${item.bvid}:${item.cid}:$occurrence",
                     title = item.title,
                     artist = item.owner,
                     coverUrl = FormatUtils.fixImageUrl(item.cover)
@@ -301,6 +305,7 @@ internal fun AudioModeMusicPlayer(
             }
         }
     }
+    val sleepAfterCurrent by viewModel.sleepAfterCurrent.collectAsStateWithLifecycle()
     val currentIndex = if (playlist.isNotEmpty()) {
         playlistIndex.takeIf { it in queue.indices } ?: 0
     } else if (info.pages.size > 1) {
@@ -423,6 +428,10 @@ internal fun AudioModeMusicPlayer(
         },
         onPrevious = { viewModel.playPreviousAudioModeTrack() },
         onNext = { viewModel.playNextAudioModeTrack() },
+        onQueueMove = if (playlist.isNotEmpty()) PlaylistManager::moveQueueItem else null,
+        onQueueRemove = if (playlist.isNotEmpty()) PlaylistManager::removeQueueItem else null,
+        onQueuePlayNext = if (playlist.isNotEmpty()) PlaylistManager::playQueueItemNext else null,
+        onQueueClear = if (playlist.size > 1) PlaylistManager::clearUpcomingQueue else null,
         onImportToQueue = { importedItems ->
             PlaylistManager.setPlaylist(importedItems)
             importedItems.firstOrNull()?.let { first ->
@@ -498,7 +507,7 @@ internal fun AudioModeMusicPlayer(
             else -> null
         },
         onSleepTimerClick = { showSleepTimerDialog = true },
-        sleepTimerLabel = formatAudioModeSleepTimerButtonLabel(sleepTimerMinutes),
+        sleepTimerLabel = if (sleepAfterCurrent) "播完当前首后停止" else formatAudioModeSleepTimerButtonLabel(sleepTimerMinutes),
         audioQualityLabel = audioQualityPresentation.label,
         audioQualityOptions = successState.availableAudioQualities,
         requestedAudioQuality = successState.requestedAudioQuality,
@@ -643,6 +652,11 @@ internal fun AudioModeMusicPlayer(
     if (showSleepTimerDialog) {
         AudioModeSleepTimerDialog(
             currentMinutes = sleepTimerMinutes,
+            sleepAfterCurrent = sleepAfterCurrent,
+            onSleepAfterCurrent = {
+                viewModel.setSleepAfterCurrent(!sleepAfterCurrent)
+                showSleepTimerDialog = false
+            },
             onDismiss = { showSleepTimerDialog = false },
             onSelectPreset = { minutes ->
                 viewModel.setSleepTimer(minutes)

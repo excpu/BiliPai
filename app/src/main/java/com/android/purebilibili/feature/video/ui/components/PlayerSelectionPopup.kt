@@ -10,6 +10,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -204,39 +206,60 @@ fun PlayerSelectionPopup(
             PlayerListPopupPlacement.ANCHOR_END -> return
         }
         val origin = remember { mutableStateOf(Offset.Zero) }
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .onGloballyPositioned { origin.value = it.positionInWindow() },
+        // 这层 fillMaxSize 只是为了拿窗口原点来做绝对定位，但调用方把本组件放在底栏的
+        // Column 里，直接 fillMaxSize 会把 Column 撑到整屏高（198 -> 1260），导致
+        // align(BottomStart) 的底栏跑到顶部。用 Popup 承载后，fillMaxSize 只作用于 Popup
+        // 自己的全屏窗口，不再参与父容器的测量。
+        Popup(
+            onDismissRequest = onDismissRequest,
+            properties = PopupProperties(
+                focusable = false,
+                dismissOnBackPress = true,
+                dismissOnClickOutside = true,
+                clippingEnabled = true,
+            )
         ) {
             Box(
                 modifier = Modifier
-                    .align(AbsoluteAlignment.TopLeft)
-                    .absoluteOffset {
-                        IntOffset(
-                            (target.left - origin.value.x).roundToInt(),
-                            (target.top - origin.value.y).roundToInt(),
-                        )
-                    }
-                    .size(
-                        width = with(density) { target.width.coerceAtLeast(0).toDp() },
-                        height = with(density) { target.height.coerceAtLeast(0).toDp() },
-                    ),
+                    .fillMaxSize()
+                    .onGloballyPositioned { origin.value = it.positionInWindow() },
             ) {
-                DropdownMenu(
-                    expanded = true,
-                    onDismissRequest = onDismissRequest,
-                    modifier = menuModifier,
-                    scrollState = scrollState,
+                Box(
+                    modifier = Modifier
+                        .align(AbsoluteAlignment.TopLeft)
+                        .absoluteOffset {
+                            IntOffset(
+                                (target.left - origin.value.x).roundToInt(),
+                                (target.top - origin.value.y).roundToInt(),
+                            )
+                        }
+                        .size(
+                            width = with(density) { target.width.coerceAtLeast(0).toDp() },
+                            height = with(density) { target.height.coerceAtLeast(0).toDp() },
+                        ),
                 ) {
-                    if (showTitle) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleSmall,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        )
+                    DropdownMenu(
+                        expanded = true,
+                        onDismissRequest = onDismissRequest,
+                        modifier = menuModifier,
+                        scrollState = scrollState,
+                        // 播放器浮层内的菜单不要抢焦点：focusable = true 会让窗口重新分发
+                        // insets，全屏页里依赖 BottomStart 对齐的底栏会被压到顶部。
+                        properties = PopupProperties(
+                            focusable = false,
+                            dismissOnBackPress = true,
+                            dismissOnClickOutside = true,
+                        ),
+                    ) {
+                        if (showTitle) {
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            )
+                        }
+                        content()
                     }
-                    content()
                 }
             }
         }

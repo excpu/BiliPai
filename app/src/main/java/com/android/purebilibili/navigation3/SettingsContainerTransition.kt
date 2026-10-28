@@ -159,37 +159,43 @@ internal class SettingsContainerTransition(
                         scope.settle?.phase == NavSettlePhase.Commit),
                     springDriven = hasOpened && scope.settle?.phase != NavSettlePhase.Cancel,
                 )
+                // 头像入口按自身尺寸提前交接，不能沿用设置行的整页内容放大。
+                // 两种材质共用此入口；直播封面卡片与设置容器保留原有时机和缩放。
+                val avatarFrame = if (source.avatarSource) {
+                    resolveLiveAvatarContainerContentFrame(frame.bounds.width / source.bounds.width)
+                } else null
+                val contentAlpha = avatarFrame?.contentAlpha ?: frame.contentAlpha
+                val sourceAlpha = avatarFrame?.sourceAlpha ?: (1f - frame.contentAlpha)
+                val sourceScale = avatarFrame?.sourceScale ?: (frame.bounds.width / source.bounds.width)
                 val top = CornerRadius(source.topRadius * frame.cornerFraction)
                 val bottom = CornerRadius(source.bottomRadius * frame.cornerFraction)
                 val path = Path().apply {
                     addRoundRect(RoundRect(frame.bounds, top, top, bottom, bottom))
                 }
                 clipPath(path) {
-                    drawRect(lerp(source.color, pageColor, frame.contentAlpha), frame.bounds.topLeft, frame.bounds.size)
+                    drawRect(lerp(source.color, pageColor, contentAlpha), frame.bounds.topLeft, frame.bounds.size)
                     // 源行与目标页共用一个透明度时钟；目标页出现后不残留源文字和图标。
-                    val sourceAlpha = 1f - frame.contentAlpha
                     if (sourceAlpha > 0f) {
                         if (sourceAlpha < 1f) {
                             drawContext.canvas.saveLayer(frame.bounds, Paint().apply { alpha = sourceAlpha })
                         }
                         // 仅重放当前行自己的图层，避免递归采集整页或玻璃背景。
                         translate(frame.bounds.left, frame.bounds.top) {
-                            val factor = frame.bounds.width / source.bounds.width
-                            scale(factor, factor, pivot = Offset.Zero) { drawLayer(source.layer) }
+                            scale(sourceScale, sourceScale, pivot = Offset.Zero) { drawLayer(source.layer) }
                         }
                         if (sourceAlpha < 1f) drawContext.canvas.restore()
                     }
-                    if (frame.contentAlpha > 0f) {
-                        drawContext.canvas.saveLayer(destination, Paint().apply { alpha = frame.contentAlpha })
+                    if (contentAlpha > 0f) {
+                        drawContext.canvas.saveLayer(destination, Paint().apply { alpha = contentAlpha })
                         // 页面按原始大小渲染，容器边界移动而不是反复测量页面。
                         translate(frame.bounds.left, frame.bounds.top) { this@drawWithContent.drawContent() }
                         drawContext.canvas.restore()
                     }
                 }
                 // 昵称与直播标记位于圆形主容器之外，在同一飞行层按主容器几何移动，避免被圆形裁掉。
-                val companionAlpha = 1f - frame.contentAlpha
+                val companionAlpha = sourceAlpha
                 if (companionAlpha > 0f && source.companions.isNotEmpty()) {
-                    val factor = frame.bounds.width / source.bounds.width
+                    val factor = sourceScale
                     if (companionAlpha < 1f) {
                         drawContext.canvas.saveLayer(destination, Paint().apply { alpha = companionAlpha })
                     }

@@ -121,6 +121,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.android.purebilibili.data.model.response.BgmInfo
 import com.android.purebilibili.data.model.CommentFraudStatus
+import com.android.purebilibili.data.repository.VideoRepository
 import com.android.purebilibili.data.repository.resolveCommentFraudLightMessage
 import com.android.purebilibili.data.repository.shouldShowCommentFraudResultDialog
 import androidx.core.view.WindowInsetsCompat
@@ -606,7 +607,9 @@ internal fun VideoDetailScreenStateHolder(
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val shareInfo = (uiState as? VideoPlaybackUiState.Success)?.info
+    val favoriteFolderMenuAnchor = com.android.purebilibili.feature.video.ui.components.rememberFavoriteFolderMenuAnchor()
     androidx.compose.runtime.CompositionLocalProvider(
+        com.android.purebilibili.feature.video.ui.components.LocalFavoriteFolderMenuAnchor provides favoriteFolderMenuAnchor,
         com.android.purebilibili.feature.share.LocalReplyShareContext provides shareInfo?.let {
             com.android.purebilibili.feature.share.ReplyShareContext(
                 url = "https://www.bilibili.com/video/${it.bvid}", title = it.title, cover = it.pic,
@@ -1003,6 +1006,9 @@ internal fun VideoDetailScreenStateHolder(
                             targetCid = resolvedCid,
                         ),
                         startInFullscreen = relatedNavStartInFullscreen.value,
+                        // 相关推荐列表加载时已预热过判定，这里同步取缓存，
+                        // 让新详情页首帧直接进入正确布局，不再先铺横屏。
+                        isVertical = VideoRepository.getCachedVerticalFlag(targetBvid),
                     )
 
                     // 先摘掉父详情壳 sharedBounds，再 push，避免相关卡嵌套在父壳内吃不到 morph。
@@ -3686,6 +3692,7 @@ internal fun VideoDetailScreenStateHolder(
             subtitleDisplayModePreferenceOverride = subtitleDisplayModeOverride,
             onSubtitleDisplayModePreferenceOverrideChange = { subtitleDisplayModeOverride = it },
             fullscreenExtras = ContinuousPlayerFullscreenExtras(
+                commentStateHandle = commentStateHandle,
                 danmakuComposerVisible = showDanmakuDialog && isFullscreenMode,
                 onDismissDanmakuComposer = viewModel::hideDanmakuSendDialog,
                 onSendDanmakuComposer = viewModel::sendDanmaku,
@@ -3732,10 +3739,8 @@ internal fun VideoDetailScreenStateHolder(
                 onTriple = engagementViewModel::doTripleAction,
                 onRelatedVideoClick = navigateToRelatedVideo,
                 onPageSelect = playbackActions.switchPage,
-                hasFavoritePlaylist = isExternalPlaylist &&
-                    externalPlaylistSource == ExternalPlaylistSource.FAVORITE &&
-                    playlistItems.size > 1,
-                onFavoritePlaylistClick = { showExternalPlaylistQueueSheet = true },
+                hasExternalPlaylist = shouldShowExternalPlaylistQueueBar,
+                onExternalPlaylistClick = { showExternalPlaylistQueueSheet = true },
                 onLandscapeCommentClick = {
                     landscapeCommentPanelVisible = !landscapeCommentPanelVisible
                 },

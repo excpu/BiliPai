@@ -1,5 +1,6 @@
 package com.android.purebilibili.feature.profile
 
+import com.android.purebilibili.navigation.tabIndicatorPosition
 import com.android.purebilibili.data.model.AccountLedgerKind
 import com.android.purebilibili.core.ui.motion.AppMotionEasing
 import com.android.purebilibili.core.ui.AppContentColors
@@ -144,9 +145,8 @@ import com.android.purebilibili.core.ui.AppTopBar
 import com.android.purebilibili.core.ui.AppTopBarStyle
 import com.android.purebilibili.feature.home.components.BiliPaiImmersiveTopBar
 import com.android.purebilibili.feature.home.components.shouldUseBiliPaiProgressiveTopBlur
-import top.yukonga.miuix.kmp.blur.LayerBackdrop
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
+import com.android.purebilibili.core.ui.blur.ChromeBackdropSource
+import com.android.purebilibili.core.ui.blur.rememberChromeBackdropSource
 import com.android.purebilibili.core.ui.AppSplitLayout
 import com.android.purebilibili.core.ui.TopReadabilityChrome
 import com.android.purebilibili.core.ui.globalWallpaperAwareBackground
@@ -687,6 +687,7 @@ private fun ProfileScreenContent(
         is ProfileUiState.Error -> {
             // 🔧 [新增] 离线/错误状态 - 显示错误信息并提供重试和离线缓存入口
             AppScaffold(
+                topBarIconBackdropSource = profileProgressiveChrome.source,
                 containerColor = MaterialTheme.colorScheme.background,
                 topBar = {
                     BiliPaiImmersiveTopBar(
@@ -727,7 +728,7 @@ private fun ProfileScreenContent(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .profileProgressiveBackdrop(profileProgressiveChrome.backdrop)
+                        .profileProgressiveBackdrop(profileProgressiveChrome)
                         .globalWallpaperAwareBackground(MaterialTheme.colorScheme.background)
                         .padding(padding)
                         .padding(32.dp),
@@ -802,6 +803,7 @@ private fun ProfileScreenContent(
             }
 
             AppScaffold(
+                topBarIconBackdropSource = profileProgressiveChrome.source,
                 modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
                 containerColor = MaterialTheme.colorScheme.background,
                 // [Immersive] Mobile hides default TopBar, Tablet keeps it
@@ -863,7 +865,7 @@ private fun ProfileScreenContent(
                         .fillMaxSize()
                         .then(
                             if (windowSizeClass.shouldUseSplitLayout) {
-                                Modifier.profileProgressiveBackdrop(profileProgressiveChrome.backdrop)
+                                Modifier.profileProgressiveBackdrop(profileProgressiveChrome)
                             } else {
                                 Modifier
                             }
@@ -1574,7 +1576,7 @@ private fun ProfileSpaceContent(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .profileProgressiveBackdrop(progressiveTopChrome.backdrop)
+                    .profileProgressiveBackdrop(progressiveTopChrome)
                     .then(if (hazeState != null) Modifier.hazeSourceCompat(hazeState) else Modifier)
                     .globalWallpaperAwareBackground(colorScheme.surface),
             ) {
@@ -2559,7 +2561,7 @@ private fun ProfileSpaceTabs(
         options = tabs.map { AppSegmentOption(it.tab, it.title) },
         selectedValue = tabs[selectedIndex].tab,
         onSelectionChange = onTabSelected,
-        indicatorPositionProvider = { pagerState.currentPage + pagerState.currentPageOffsetFraction },
+        indicatorPositionProvider = { pagerState.tabIndicatorPosition },
         isScrollInProgressProvider = { pagerState.isScrollInProgress },
         scrollable = false,
         dragSelectionEnabled = tabs.size > 1,
@@ -3805,9 +3807,12 @@ private fun ProfileAccountFieldDialog(
 }
 
 private data class ProfileProgressiveTopChrome(
-    val backdrop: LayerBackdrop?,
+    val source: ChromeBackdropSource?,
     val enabled: Boolean,
-)
+) {
+    val backdrop: top.yukonga.miuix.kmp.blur.Backdrop?
+        get() = source?.takeIf { it.isReady }?.backdrop
+}
 
 @Composable
 private fun rememberProfileProgressiveTopChrome(): ProfileProgressiveTopChrome {
@@ -3816,12 +3821,13 @@ private fun rememberProfileProgressiveTopChrome(): ProfileProgressiveTopChrome {
         enabled = themeConfig.progressiveTopBlurEnabled,
         hasBackdrop = true,
     ) && !isLowBlurBudgetForced()
-    val backdrop = if (enabled) rememberLayerBackdrop() else null
-    return remember(backdrop, enabled) { ProfileProgressiveTopChrome(backdrop, enabled) }
+    val source = if (enabled) rememberChromeBackdropSource() else null
+    return remember(source, enabled) { ProfileProgressiveTopChrome(source, enabled) }
 }
 
-private fun Modifier.profileProgressiveBackdrop(backdrop: LayerBackdrop?): Modifier {
-    return if (backdrop != null) then(Modifier.layerBackdrop(backdrop)) else this
+private fun Modifier.profileProgressiveBackdrop(chrome: ProfileProgressiveTopChrome): Modifier {
+    // 录制不依赖就绪状态，消费者只在首次录制完成后读取背景。
+    return then(chrome.source?.modifier ?: Modifier)
 }
 
 @Composable
@@ -4129,7 +4135,7 @@ private fun MobileProfileContent(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .profileProgressiveBackdrop(progressiveTopChrome.backdrop)
+                    .profileProgressiveBackdrop(progressiveTopChrome)
                     .then(if (hazeState != null) Modifier.hazeSourceCompat(hazeState) else Modifier)
                     .globalWallpaperAwareBackground(MaterialTheme.colorScheme.surface),
             ) {

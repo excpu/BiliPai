@@ -142,7 +142,7 @@ internal fun rememberBangumiChannelPagerState(
     val pager = rememberPagerState(initialPage = channel.ordinal) { channels.size }
     val latestChannelSelected by rememberUpdatedState(onChannelSelected)
     LaunchedEffect(channel, enabled) {
-        if (enabled && pager.currentPage != channel.ordinal) pager.animateScrollToPage(channel.ordinal)
+        if (enabled && pager.currentPage != channel.ordinal) com.android.purebilibili.navigation.animatePagerSelection(pager, channel.ordinal)
     }
     LaunchedEffect(pager, enabled) {
         if (!enabled) return@LaunchedEffect

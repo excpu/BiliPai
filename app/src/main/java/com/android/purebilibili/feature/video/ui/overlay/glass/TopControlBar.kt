@@ -1,6 +1,7 @@
 // File: feature/video/ui/overlay/TopControlBar.kt
 package com.android.purebilibili.feature.video.ui.overlay.glass
 
+import com.android.purebilibili.feature.video.ui.components.favoriteFolderMenuSource
 import com.android.purebilibili.core.util.HapticType
 import com.android.purebilibili.core.util.rememberHapticFeedback
 
@@ -177,6 +178,9 @@ fun TopControlBar(
     showBatteryLevel: Boolean = false,
     showCurrentTime: Boolean = true,
     showInteractiveActions: Boolean = true,
+    likeCount: Long? = null,
+    favoriteCount: Long? = null,
+    commentCount: Long? = null,
     onBack: () -> Unit,
     onHomeClick: (() -> Unit)? = null,
     // Interactions
@@ -200,6 +204,10 @@ fun TopControlBar(
     onActionDockBoundsChanged: (androidx.compose.ui.geometry.Rect) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val visibleCounts = rememberVisibleFullscreenCounts()
+    val showCounts = isFullscreen
+    fun visibleCount(kind: com.android.purebilibili.core.store.FullscreenActionCount, value: Long?): Long? =
+        value.takeIf { showCounts && kind in visibleCounts }
     val context = LocalContext.current
     val displayCutoutInsets = WindowInsets.displayCutout
     val haptic = rememberHapticFeedback(com.android.purebilibili.core.ui.AppHapticScene.VIDEO_ACTIONS)
@@ -456,6 +464,7 @@ fun TopControlBar(
                                 glassEnabled = isFullscreen || glassControls,
                                 icon = if (likeStatusKnown && isLiked) Icons.Rounded.ThumbUp else Icons.Outlined.ThumbUp,
                                 contentDescription = if (likeStatusKnown) "点赞" else "点赞状态尚未确认",
+                                count = visibleCount(com.android.purebilibili.core.store.FullscreenActionCount.LIKE, likeCount),
                                 isActive = likeStatusKnown && isLiked,
                                 onClick = { haptic(HapticType.LIGHT); onLikeClick() },
                                 buttonSizeDp = layoutPolicy.buttonSizeDp,
@@ -493,6 +502,8 @@ fun TopControlBar(
                                 glassEnabled = isFullscreen || glassControls,
                                 icon = favoriteIcon,
                                 contentDescription = if (isFavorited) "已收藏，管理收藏夹" else "收藏",
+                                modifier = Modifier.favoriteFolderMenuSource(),
+                                count = visibleCount(com.android.purebilibili.core.store.FullscreenActionCount.FAVORITE, favoriteCount),
                                 isActive = isFavorited,
                                 onClick = { haptic(HapticType.LIGHT); onFavoriteClick() },
                                 buttonSizeDp = layoutPolicy.buttonSizeDp,
@@ -541,6 +552,7 @@ fun TopControlBar(
                         glassEnabled = isFullscreen || glassControls,
                         icon = Icons.Outlined.Comment,
                         contentDescription = "评论区",
+                        count = visibleCount(com.android.purebilibili.core.store.FullscreenActionCount.COMMENT, commentCount),
                         isActive = false,
                         onClick = onCommentClick,
                         buttonSizeDp = layoutPolicy.buttonSizeDp,
@@ -950,19 +962,23 @@ private fun ActionIcon(
     iconSizeDp: Int = 24,
     enabled: Boolean = true,
     glassEnabled: Boolean = false,
+    count: Long? = null,
+    modifier: Modifier = Modifier,
 ) {
-    PlayerControlGlassDock(enabled = glassEnabled && enabled, shape = androidx.compose.foundation.shape.CircleShape) {
-        AppIconButton(
-            onClick = onClick,
-            enabled = enabled,
-            modifier = Modifier.size(buttonSizeDp.dp)
-        ) {
-            AppIcon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                tint = if (!enabled) Color.White.copy(alpha = 0.38f) else if (isActive) AppContentColors.accent() else Color.White,
-                modifier = Modifier.size(iconSizeDp.dp)
-            )
+    CountedPlayerAction(count = count, modifier = modifier) {
+        PlayerControlGlassDock(enabled = glassEnabled && enabled, shape = androidx.compose.foundation.shape.CircleShape) {
+            AppIconButton(
+                onClick = onClick,
+                enabled = enabled,
+                modifier = Modifier.size(buttonSizeDp.dp)
+            ) {
+                AppIcon(
+                    imageVector = icon,
+                    contentDescription = contentDescription,
+                    tint = if (!enabled) Color.White.copy(alpha = 0.38f) else if (isActive) AppContentColors.accent() else Color.White,
+                    modifier = Modifier.size(iconSizeDp.dp)
+                )
+            }
         }
     }
 }

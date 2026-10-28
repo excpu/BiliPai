@@ -211,7 +211,6 @@ private fun AppElasticTabIndicator(
     if (tabSlots.isEmpty()) return
     val animateIndicator = !com.android.purebilibili.core.ui.LocalSystemReduceMotion.current &&
         indicatorPositionProvider == null
-    val followPosition = indicatorPositionProvider?.invoke()
     val safeIndex = selectedTabIndex.coerceIn(tabSlots.indices)
     val previousIndex = remember { mutableIntStateOf(selectedTabIndex) }
     val movingRight = remember(safeIndex) { safeIndex >= previousIndex.intValue }
@@ -219,7 +218,7 @@ private fun AppElasticTabIndicator(
     val targetWidth = if (matchContentSize) target.contentWidth else target.width
     val targetLeft = target.left + (target.width - targetWidth) / 2f
     val targetRight = targetLeft + targetWidth
-    val animatedLeft by animateDpAsState(
+    val animatedLeft = animateDpAsState(
         targetValue = targetLeft,
         animationSpec = if (!animateIndicator) snap() else tween(
             durationMillis = APP_TAB_INDICATOR_DURATION_MILLIS,
@@ -227,7 +226,7 @@ private fun AppElasticTabIndicator(
         ),
         label = "appTabIndicatorLeft",
     )
-    val animatedRight by animateDpAsState(
+    val animatedRight = animateDpAsState(
         targetValue = targetRight,
         animationSpec = if (!animateIndicator) snap() else tween(
             durationMillis = APP_TAB_INDICATOR_DURATION_MILLIS,
@@ -238,29 +237,29 @@ private fun AppElasticTabIndicator(
     SideEffect {
         previousIndex.intValue = safeIndex
     }
-    val left: Dp
-    val right: Dp
-    if (followPosition != null) {
-        val bounds = resolveElasticTabIndicatorBounds(
-            position = followPosition,
-            tabLeftsDp = tabSlots.map { it.left.value },
-            tabWidthsDp = tabSlots.map { it.width.value },
-            contentWidthsDp = tabSlots.map { it.contentWidth.value },
-            matchContentSize = matchContentSize,
-        )
-        left = bounds.leftDp.dp
-        right = (bounds.leftDp + bounds.widthDp).dp
-    } else {
-        left = animatedLeft
-        right = animatedRight
-    }
+    val tabLefts = remember(tabSlots) { tabSlots.map { it.left.value } }
+    val tabWidths = remember(tabSlots) { tabSlots.map { it.width.value } }
+    val contentWidths = remember(tabSlots) { tabSlots.map { it.contentWidth.value } }
     val indicatorModifier = Modifier
-        // Legacy TabRow measures the indicator slot to the full row. Recreate Material's
-        // indicator host contract so the elastic line stays pinned above the bottom divider.
         .fillMaxWidth()
         .wrapContentSize(Alignment.BottomStart)
-        .offset(x = left)
-        .width((right - left).coerceAtLeast(0.dp))
+        .tabIndicatorBounds {
+            val followPosition = indicatorPositionProvider?.invoke()
+            if (followPosition != null) {
+                resolveElasticTabIndicatorBounds(
+                    position = followPosition,
+                    tabLeftsDp = tabLefts,
+                    tabWidthsDp = tabWidths,
+                    contentWidthsDp = contentWidths,
+                    matchContentSize = matchContentSize,
+                )
+            } else {
+                ElasticTabIndicatorBounds(
+                    leftDp = animatedLeft.value.value,
+                    widthDp = (animatedRight.value - animatedLeft.value).coerceAtLeast(0.dp).value,
+                )
+            }
+        }
     if (primary) {
         TabRowDefaults.PrimaryIndicator(
             modifier = indicatorModifier,

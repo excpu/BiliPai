@@ -20,7 +20,6 @@ import com.android.purebilibili.core.ui.AppThemeConfig
 import com.android.purebilibili.core.ui.LocalAppThemeConfig
 import com.android.purebilibili.feature.video.ui.overlay.BottomControlBar
 import com.android.purebilibili.feature.video.ui.overlay.PlayerProgress
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -50,14 +49,13 @@ class BottomControlBarUiRegressionTest {
                     MaterialTheme { MiuixTheme {
                         Box(Modifier.width(width.value.dp)) {
                             BottomControlBar(
-                                isPlaying = true,
                                 progress = PlayerProgress(500, 3000),
                                 isFullscreen = fullscreen.value,
                                 viewportIsLandscape = landscape.value,
                                 viewportWidthDpOverride = width.value,
                                 hasEpisodeEntry = episodes.value,
                                 currentQualityLabel = "720P",
-                                onPlayPauseClick = {}, onSeek = {}, onToggleFullscreen = {},
+                                onSeek = {}, onToggleFullscreen = {},
                             )
                         }
                     } }
@@ -73,11 +71,11 @@ class BottomControlBarUiRegressionTest {
                             fullscreen.value = isFullscreen; width.value = widthDp
                             episodes.value = true; glass.value = false
                         }
-                        rule.onAllNodesWithTag("player_play_pause").assertCountEquals(1)
+                        rule.onNodeWithTag("player_play_pause").assertDoesNotExist()
                         rule.onNodeWithTag("player_episode_action").assertIsDisplayed()
                         rule.onNodeWithTag("player_more_actions").assertDoesNotExist()
                         rule.onNodeWithTag("player_danmaku_toggle").assertDoesNotExist()
-                        val tags = mutableListOf("player_play_pause", "player_previous_episode", "player_next_episode", "player_episode_action")
+                        val tags = mutableListOf("player_previous_episode", "player_next_episode", "player_episode_action")
                         if (isFullscreen || widthDp >= 500) {
                             rule.onNodeWithTag("player_ratio_action").assertIsDisplayed()
                             rule.onNodeWithTag("player_quality_action").assertIsDisplayed()
@@ -93,9 +91,10 @@ class BottomControlBarUiRegressionTest {
                             assertTrue("Actions must not overlap at $widthDp dp", left.right <= right.left + 1f)
                         }
                         rule.runOnIdle { glass.value = true }
-                        before.forEach { (tag, bounds) ->
-                            val actual = rule.onNodeWithTag(tag).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-                            assertEquals("Glass moved $tag", bounds, actual)
+                        rule.onNodeWithTag("player_play_pause").assertDoesNotExist()
+                        val glassBounds = tags.map { rule.onNodeWithTag(it).assertIsDisplayed().fetchSemanticsNode().boundsInRoot }
+                        glassBounds.zipWithNext().forEach { (left, right) ->
+                            assertTrue("Glass actions must not overlap at $widthDp dp", left.right <= right.left + 1f)
                         }
                         rule.runOnIdle { episodes.value = false }
                         rule.onNodeWithTag("player_episode_action").assertDoesNotExist()

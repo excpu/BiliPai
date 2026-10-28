@@ -231,19 +231,15 @@ class MiuixVideoCardNavTransitionTest {
         val entering = resolveVideoHeroNavMotion(spec, false)
         val returning = resolveVideoHeroNavMotion(spec, true)
         assertEquals(360, (entering.programmatic as NavSettleSpec.Tween).durationMillis)
-        assertEquals(spec.commitStiffness, (returning.programmatic as NavSettleSpec.Spring).stiffness)
-        assertEquals(spec.commitStiffness, (returning.commit as NavSettleSpec.Spring).stiffness)
-        assertTrue(!(returning.commit as NavSettleSpec.Spring).clampOvershoot)
+        assertEquals(299, (returning.programmatic as NavSettleSpec.Tween).durationMillis)
+        assertEquals(spec.returnDurationMillis, (returning.commit as NavSettleSpec.Tween).durationMillis)
+        assertTrue((returning.commit as NavSettleSpec.Tween).matchReleaseVelocity)
         assertEquals(spec.cancelStiffness, (returning.cancel as NavSettleSpec.Spring).stiffness)
         val follow = resolveVideoHeroNavMotion(spec, true, gestureTranslationEnabled = true)
         assertTrue((follow.cancel as NavSettleSpec.Tween).matchReleaseVelocity)
-        val followCommit = follow.commit as NavSettleSpec.Spring
-        assertEquals(1f, followCommit.dampingRatio)
-        assertTrue(followCommit.clampOvershoot)
-        assertTrue(followCommit.stiffness > spec.commitStiffness)
         val reduced = resolveVideoHeroNavMotion(resolveVideoHeroMotionSpec(360, reducedMotion = true), true)
-        assertEquals(1f, (reduced.commit as NavSettleSpec.Spring).dampingRatio)
-        assertEquals(0.82f, (returning.programmatic as NavSettleSpec.Spring).dampingRatio)
+        assertTrue(!(reduced.commit as NavSettleSpec.Tween).matchReleaseVelocity)
+        assertTrue(!(returning.programmatic as NavSettleSpec.Tween).matchReleaseVelocity)
     }
 
     @Test

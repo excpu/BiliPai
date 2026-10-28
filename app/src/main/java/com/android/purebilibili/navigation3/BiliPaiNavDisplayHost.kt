@@ -233,7 +233,7 @@ internal fun BiliPaiNavDisplayHost(
     }
     val liveContainerTransitions = if (!liveContainerEnabled) emptyMap() else
         availableLiveContainerTransitions.filterKeys { target ->
-            target is BiliPaiNavKey.Live && isSettingsContainerBoundary(
+            (target is BiliPaiNavKey.Live || target is BiliPaiNavKey.LiveAreaDetail) && isSettingsContainerBoundary(
                 enabled = true,
                 backStack = stackSnapshot,
                 target = target,
@@ -517,6 +517,11 @@ internal fun BiliPaiNavDisplayHost(
     ) {
         if (!cardMorphAvailable) return@LaunchedEffect
         fun finishCardReturn() {
+            videoCardClock.landingFeedback.publish(
+                sourceKey = sourceMetadata.sourceKey,
+                sourceLayout = sourceMetadata.sourceLayout,
+                committedReturn = videoCardClock.phase == VideoCardTransitionBackgroundPhase.RETURNING,
+            )
             videoCardClock.followNavigationDriver(VideoCardTransitionSettleState.Idle)
             videoCardTransitionProgress.clear()
         }
@@ -579,9 +584,6 @@ internal fun BiliPaiNavDisplayHost(
     val transitionMotionTier = if (reduceMotion) MotionTier.Reduced else MotionTier.Normal
     // Card depth blur and generic Miuix return blur have separate user controls.
     val effectiveVideoCardBlurEnabled = videoTransitionRealtimeBlurEnabled
-    // 仅液态玻璃首页使用清晰冻结层；原生路径及播放器来源保持原有绘制方式。
-    val clearHomeSnapshotEnabled = com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled &&
-        !effectiveVideoCardBlurEnabled && sourceMetadata.sourceRoute?.substringBefore('?') == "home"
     val videoCardProgressProvider = remember(
         cardMorphAvailable,
         videoCardClock,
@@ -681,7 +683,6 @@ internal fun BiliPaiNavDisplayHost(
         transitionMotionTier,
         isLightBackground,
         effectiveVideoCardBlurEnabled,
-        clearHomeSnapshotEnabled,
     ) {
         VideoCardTransitionBackgroundState(
             progressProvider = videoCardProgressProvider,
@@ -699,7 +700,6 @@ internal fun BiliPaiNavDisplayHost(
             motionTierProvider = { transitionMotionTier },
             isLightBackgroundProvider = { isLightBackground },
             realtimeBlurEnabledProvider = { effectiveVideoCardBlurEnabled },
-            clearSnapshotEnabledProvider = { clearHomeSnapshotEnabled },
         )
     }
     val videoCardLayoutWidthProvider = remember(videoCardTransitionProgress) {
@@ -875,7 +875,6 @@ internal fun BiliPaiNavDisplayHost(
             motionTierProvider = { transitionMotionTier },
             isLightBackgroundProvider = { isLightBackground },
             realtimeBlurEnabledProvider = { effectiveVideoCardBlurEnabled },
-            clearSnapshotEnabledProvider = { clearHomeSnapshotEnabled },
             sourceBoundsProvider = { sourceMetadata.sourceBounds },
             // A detached source has no navigation entry to transform. Apply exactly the same
             // covered-page geometry to this fallback; inner snapshot effects remain unscaled.

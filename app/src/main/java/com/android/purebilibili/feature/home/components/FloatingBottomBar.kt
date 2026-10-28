@@ -630,10 +630,12 @@ fun FloatingBottomBar(
     // Navigation capsules share the shell's rounded contour, inset by the current
     // resting margin. Derive the radius again as the dock changes size.
     val indicatorShape = if (geometryMode != FloatingBottomBarGeometryMode.Segmented) {
-        val restingInset = ((shellHeight - fittedIndicatorHeight) / 2).coerceAtLeast(0.dp)
         RoundedCornerShape(
-            (shellHeight / 2 - restingInset)
-                .coerceIn(0.dp, minOf(fittedIndicatorWidth, fittedIndicatorHeight) / 2),
+            resolveFloatingDockIndicatorCornerRadiusDp(
+                shellThicknessDp = shellHeight.value,
+                indicatorThicknessDp = fittedIndicatorHeight.value,
+                indicatorSlotExtentDp = fittedIndicatorWidth.value,
+            ).dp,
         )
     } else {
         pillShape
@@ -1622,53 +1624,35 @@ fun FloatingBottomBar(
                             }
                         }
                         .clearAndSetSemantics {}
-                        .drawBackdrop(
+                        .floatingDockIndicatorOptics(
                             backdrop = combinedBackdrop,
-                            shape = { indicatorShape },
-                            effects = {
-                                val progress = indicatorOpticalProgressProvider()
+                            shape = indicatorShape,
+                            width = fittedIndicatorWidth,
+                            height = fittedIndicatorHeight,
+                            shellExtent = shellHeight,
+                            tuning = liquidGlassTuning,
+                            darkTheme = isInDark,
+                            progressProvider = indicatorOpticalProgressProvider,
+                            scaleXProvider = indicatorScaleXProvider,
+                            scaleYProvider = indicatorScaleYProvider,
+                            shellScaleProvider = {
                                 val shellWidth = totalWidthPx.coerceAtLeast(1f)
-                                val shellHeightPx = shellHeight.toPx().coerceAtLeast(1f)
+                                val shellHeightPx = with(density) { shellHeight.toPx().coerceAtLeast(1f) }
                                 val shellBloom = 1f + pressBloomPx / shellWidth * dampedDragAnimation.pressProgress
                                 val dragY = abs(interactiveHighlight?.offset?.y ?: 0f)
-                                val shellStretch = (4.dp.toPx() / shellHeightPx) * (dragY / shellWidth) *
-                                    (shellHeightPx / shellWidth).coerceAtMost(1f) * DOCK_SHELL_ELASTIC_GAIN
-                                homeIndicatorLens(
-                                    restHeightDp = fittedIndicatorHeight.value,
-                                    progress = progress,
-                                    tuning = liquidGlassTuning,
-                                    shellHeightDp = shellHeight.value,
-                                    indicatorScaleY = indicatorScaleYProvider(),
-                                    shellScaleY = if (drawShell && !inheritDeformation) {
-                                        shellBloom + shellStretch.coerceAtMost(DOCK_SHELL_MAX_EXTRA_STRETCH)
-                                    } else 1f,
-                                )
+                                val shellStretch = (with(density) { 4.dp.toPx() } / shellHeightPx) *
+                                    (dragY / shellWidth) * (shellHeightPx / shellWidth).coerceAtMost(1f) * DOCK_SHELL_ELASTIC_GAIN
+                                if (drawShell && !inheritDeformation) {
+                                    shellBloom + shellStretch.coerceAtMost(DOCK_SHELL_MAX_EXTRA_STRETCH)
+                                } else 1f
                             },
-                            highlight = {
+                            highlightProvider = {
                                 if (isLiquidGlassMode || indicatorHighlightFromDrag) {
                                     pillHighlight?.value?.copy(alpha = if (isLiquidGlassMode) dampedDragAnimation.pressProgress else indicatorOpticalProgressProvider())
                                 } else null
                             },
-                            layerBlock = {
-                                scaleY = indicatorScaleYProvider()
-                                scaleX = indicatorScaleXProvider()
-                            },
-                            onDrawSurface = {
-                                drawHomeIndicatorSurface(
-                                    indicatorOpticalProgressProvider(),
-                                    isInDark,
-                                    indicatorIdleSurfaceColorOverride,
-                                )
-                            },
+                            idleColor = indicatorIdleSurfaceColorOverride,
                         )
-                        .innerShadow(shape = indicatorShape) {
-                            InnerShadow(
-                                offset = androidx.compose.ui.unit.DpOffset.Zero,
-                                radius = 8.dp * homeIndicatorOpticalScale(fittedIndicatorHeight.value) * indicatorOpticalProgressProvider(),
-                                color = Color.Black.copy(alpha = 0.15f),
-                                alpha = indicatorOpticalProgressProvider(),
-                            )
-                        }
                         .height(fittedIndicatorHeight)
                         .then(indicatorWidthModifier)
                 )

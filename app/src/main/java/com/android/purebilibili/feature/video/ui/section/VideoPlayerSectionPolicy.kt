@@ -554,31 +554,6 @@ internal fun resolveVideoPlayerDanmakuSettingsScope(
     )
 }
 
-/**
- * Portrait-only surface mode for detail player danmaku.
- * Landscape fullscreen always stays on the video viewport so horizontal playback is unchanged.
- */
-internal fun shouldUseScreenTopDanmakuSurface(
-    portraitDisplayAreaMode: com.android.purebilibili.core.store.PortraitDanmakuDisplayAreaMode,
-    isLandscapeFullscreen: Boolean
-): Boolean {
-    if (isLandscapeFullscreen) return false
-    return portraitDisplayAreaMode ==
-        com.android.purebilibili.core.store.PortraitDanmakuDisplayAreaMode.SCREEN_TOP
-}
-
-internal fun resolveDanmakuLayerTopOffsetPx(
-    isFullscreen: Boolean,
-    statusBarHeightPx: Int,
-    useScreenTopSurface: Boolean = false
-): Int {
-    // Screen-top mode can sit under status bar when chrome is hidden; keep a small inset.
-    if (useScreenTopSurface && isFullscreen) {
-        return statusBarHeightPx.coerceAtLeast(0)
-    }
-    return 0
-}
-
 internal fun resolveHorizontalSeekDeltaMs(
     isFullscreen: Boolean,
     fullscreenSwipeSeekEnabled: Boolean,

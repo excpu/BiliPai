@@ -25,8 +25,11 @@ class SpaceScreenStructureTest {
         assertFalse(chrome.contains("SpaceContentTabs("))
         assertTrue(source.contains("shouldPinSpaceContentTabs(spaceThemeConfig.progressiveTopBlurEnabled)"))
         assertTrue(source.contains("if (pinContentTabs) {"))
-        assertTrue(source.contains("stickyHeader(key = \"space_tabs\")"))
-        assertTrue(source.contains("else item(key = \"space_tabs\""))
+        assertFalse(source.contains("stickyHeader("))
+        assertTrue(source.contains("item(key = \"space_tabs\", span = StaggeredGridItemSpan.FullLine)"))
+        assertTrue(source.contains("shouldShowSpacePinnedTabs("))
+        assertTrue(source.contains("if (tabsPinned) {"))
+        assertTrue(source.contains("pinnedTabsContent()"))
         assertTrue(source.contains("fusionEnabled = !collapseAsUnit"))
         assertFalse(chrome.contains("spaceChromeSource?.modifier"))
         val capture = source.indexOf(".then(spaceChromeSource?.modifier ?: Modifier)")
@@ -290,7 +293,7 @@ class SpaceScreenStructureTest {
         assertTrue(header.contains("resolveSpaceBannerMetrics("))
         assertFalse(header.contains("LocalConfiguration.current"))
         assertTrue(header.contains(".widthIn(max = 480.dp)"))
-        assertTrue(dynamicItems.contains("span = { GridItemSpan(1) }"))
+        assertTrue(dynamicItems.contains("span = { StaggeredGridItemSpan.SingleLane }"))
         assertTrue(source.contains("modifier = boundedListModifier"))
     }
 

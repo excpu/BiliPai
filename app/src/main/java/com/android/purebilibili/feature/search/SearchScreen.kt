@@ -1,6 +1,9 @@
 // 文件路径: feature/search/SearchScreen.kt
 package com.android.purebilibili.feature.search
 
+import com.android.purebilibili.feature.home.resolveIsVerticalForNavigation
+import com.android.purebilibili.navigation.tabSelectedPage
+import com.android.purebilibili.navigation.tabIndicatorPosition
 import com.android.purebilibili.feature.home.effectiveGridColumnCount
 import com.android.purebilibili.feature.home.effectiveGridColumnCountCompact
 import com.android.purebilibili.feature.home.gridColumnPinchEnabled
@@ -86,12 +89,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import com.android.purebilibili.core.ui.components.AppLazyColumn as LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyGridState
-import com.android.purebilibili.core.ui.components.AppLazyVerticalGrid as LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import com.android.purebilibili.core.ui.components.AppLazyVerticalStaggeredGrid as LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -668,7 +669,7 @@ fun SearchScreen(
     onBack: () -> Unit,
     onOpenTrending: () -> Unit,
     onNavigateSearchTarget: (BilibiliNavigationTarget) -> Boolean,
-    onVideoClick: (String, Long, String) -> Unit,
+    onVideoClick: (String, Long, String, Boolean) -> Unit,
     onWebClick: (String, String) -> Unit,
     onUpClick: (Long) -> Unit,  //  点击UP主跳转到空间
     onBangumiClick: (Long) -> Unit, //  点击番剧/影视跳转详情
@@ -723,8 +724,8 @@ fun SearchScreen(
     val resultStateKey = remember(state.searchSessionId, state.searchType) {
         state.searchSessionId to state.searchType
     }
-    val resultGridState = rememberSaveable(resultStateKey, saver = LazyGridState.Saver) {
-        LazyGridState()
+    val resultGridState = rememberSaveable(resultStateKey, saver = com.android.purebilibili.core.ui.CompatibleStaggeredGridStateSaver) {
+        com.android.purebilibili.core.ui.createCompatibleStaggeredGridState()
     }
     val resultListState = rememberSaveable(resultStateKey, saver = LazyListState.Saver) {
         LazyListState()
@@ -1700,9 +1701,9 @@ fun SearchScreen(
                         val pageGridState = rememberSaveable(
                             pageResultState.query,
                             targetSearchType.value,
-                            saver = LazyGridState.Saver
+                            saver = com.android.purebilibili.core.ui.CompatibleStaggeredGridStateSaver
                         ) {
-                            LazyGridState()
+                            com.android.purebilibili.core.ui.createCompatibleStaggeredGridState()
                         }
                         val pageListState = rememberSaveable(
                             pageResultState.query,
@@ -1736,7 +1737,7 @@ fun SearchScreen(
                                     current.currentPage to shouldLoadMoreSearchVideos(
                                         itemCount = itemCount,
                                         lastVisibleItemIndex = activePageGridState.layoutInfo
-                                            .visibleItemsInfo.lastOrNull()?.index ?: -1,
+                                            .visibleItemsInfo.maxOfOrNull { it.index } ?: -1,
                                         hasMoreResults = current.hasMoreResults,
                                         isSearching = current.isSearching,
                                         isLoadingMore = current.isLoadingMore,
@@ -1941,8 +1942,8 @@ fun SearchScreen(
                                             }
                                         )
                                         .then(if (searchHazeEnabled) Modifier.hazeSourceCompat(state = hazeState) else Modifier)
-                                LazyVerticalGrid(
-                                    columns = GridCells.Fixed(effectiveSearchGridColumns),
+                                LazyVerticalStaggeredGrid(
+                                    columns = StaggeredGridCells.Fixed(effectiveSearchGridColumns),
                                     state = activePageGridState,
                                     contentPadding = PaddingValues(
                                         top = resultTopPadding,
@@ -1951,12 +1952,12 @@ fun SearchScreen(
                                         end = searchGridCardLayout.outerPaddingDp.dp
                                     ),
                                     horizontalArrangement = searchGridHorizontalArrangement,
-                                    verticalArrangement = Arrangement.spacedBy(searchGridCardLayout.itemSpacingDp.dp),
+                                    verticalItemSpacing = searchGridCardLayout.itemSpacingDp.dp,
                                     modifier = videoGridModifier
                         ) {
                                 if (targetSearchType == SearchType.ALL) {
                                     pageResultState.matchResults.firstOrNull()?.let { featuredMatch ->
-                                        item(key = "all_match_${featuredMatch.id}", span = { GridItemSpan(maxLineSpan) }) {
+                                        item(key = "all_match_${featuredMatch.id}", span = StaggeredGridItemSpan.FullLine) {
                                             MatchSearchResultCard(
                                                 item = featuredMatch,
                                                 appearance = genericResultCardAppearance,
@@ -1969,7 +1970,7 @@ fun SearchScreen(
                                         }
                                     }
                                     if (pageResultState.upResults.isNotEmpty()) {
-                                        itemsIndexed(pageResultState.upResults, key = { _, up -> "all_up_${up.mid}" }, span = { _, _ -> GridItemSpan(maxLineSpan) }) { _, up ->
+                                        itemsIndexed(pageResultState.upResults, key = { _, up -> "all_up_${up.mid}" }, span = { _, _ -> StaggeredGridItemSpan.FullLine }) { _, up ->
                                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                                 UpSearchResultCard(
                                                     upItem = up,
@@ -2020,7 +2021,7 @@ fun SearchScreen(
                                                                             position = relatedIndex,
                                                                             resultSection = "creator_related"
                                                                         )
-                                                                        onVideoClick(target.bvid, 0L, video.pic)
+                                                                        onVideoClick(target.bvid, 0L, video.pic, video.resolveIsVerticalForNavigation())
                                                                     }
                                                                     is SearchResultNavigationTarget.Course -> onCheeseClick?.invoke(target.seasonId, target.epId)
                                                                         ?: onBangumiClick(target.seasonId)
@@ -2035,7 +2036,7 @@ fun SearchScreen(
                                         }
                                     }
                                     if (pageResultState.matchResults.isNotEmpty()) {
-                                        itemsIndexed(pageResultState.matchResults.drop(1), key = { _, item -> "all_match_${item.id}" }, span = { _, _ -> GridItemSpan(maxLineSpan) }) { _, item ->
+                                        itemsIndexed(pageResultState.matchResults.drop(1), key = { _, item -> "all_match_${item.id}" }, span = { _, _ -> StaggeredGridItemSpan.FullLine }) { _, item ->
                                             MatchSearchResultCard(
                                                 item = item,
                                                 appearance = genericResultCardAppearance,
@@ -2048,7 +2049,7 @@ fun SearchScreen(
                                         }
                                     }
                                     if (pageResultState.bangumiResults.isNotEmpty()) {
-                                        itemsIndexed(pageResultState.bangumiResults, key = { _, item -> "all_bangumi_${item.seasonId}" }, span = { _, _ -> GridItemSpan(maxLineSpan) }) { _, item ->
+                                        itemsIndexed(pageResultState.bangumiResults, key = { _, item -> "all_bangumi_${item.seasonId}" }, span = { _, _ -> StaggeredGridItemSpan.FullLine }) { _, item ->
                                             BangumiSearchResultCard(
                                                 item = item,
                                                 appearance = genericResultCardAppearance,
@@ -2117,7 +2118,7 @@ fun SearchScreen(
                                                     ) {
                                                         is SearchResultNavigationTarget.Video -> {
                                                             com.android.purebilibili.core.util.AnalyticsHelper.logSearchResultClick(position = index)
-                                                            onVideoClick(target.bvid, 0, video.pic)
+                                                            onVideoClick(target.bvid, 0, video.pic, video.resolveIsVerticalForNavigation())
                                                         }
                                                         is SearchResultNavigationTarget.Course -> {
                                                             if (onCheeseClick != null) {
@@ -2138,7 +2139,7 @@ fun SearchScreen(
 
                                     // [新增] 空状态提示 (提示可能被屏蔽)
                                     if (!pageResultState.isSearching && pageResultState.totalCount == 0 && pageResultState.error == null && pageEmptyStateCopy != null) {
-                                        item(span = { GridItemSpan(maxLineSpan) }) {
+                                        item(span = StaggeredGridItemSpan.FullLine) {
                                             Box(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
@@ -2158,7 +2159,7 @@ fun SearchScreen(
 
                                     //  [新增] 加载更多指示器
                                     if (pagePresentation.footer == SearchResultFooterMode.LOADING || pagePresentation.footer == SearchResultFooterMode.ERROR) {
-                                        item(span = { GridItemSpan(maxLineSpan) }) {
+                                        item(span = StaggeredGridItemSpan.FullLine) {
                                             Box(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
@@ -2179,7 +2180,7 @@ fun SearchScreen(
 
                                     //  [新增] 已加载全部提示
                                     if (pagePresentation.footer == SearchResultFooterMode.END) {
-                                        item(span = { GridItemSpan(maxLineSpan) }) {
+                                        item(span = StaggeredGridItemSpan.FullLine) {
                                             AppText(
                                                 text = stringResource(R.string.search_all_loaded_count, pageResultState.totalCount),
                                                 modifier = Modifier
@@ -3531,7 +3532,7 @@ private fun SearchResultTypeTabRow(
     if (tabs.isEmpty()) return
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
-    val selectedIndex = pagerState.currentPage.coerceIn(0, tabs.lastIndex)
+    val selectedIndex = pagerState.tabSelectedPage.coerceIn(0, tabs.lastIndex)
     val tabLabels = tabs.map { type ->
         resolveSearchTypeTabLabel(type.displayName, counts[type])
     }
@@ -3572,7 +3573,7 @@ private fun SearchResultTypeTabRow(
             // Glide with the indicator (page + fraction) while the pager is moving; settle when idle.
             focusPosition = {
                 if (useScrollableRail) {
-                    pagerState.currentPage + pagerState.currentPageOffsetFraction
+                    pagerState.tabIndicatorPosition
                 } else {
                     0f
                 }
@@ -3605,7 +3606,7 @@ private fun SearchResultTypeTabRow(
             tapPressRefractionEnabled = !useScrollableRail,
             dragSelectionEnabled = tabs.size > 1,
             indicatorPositionProvider = {
-                pagerState.currentPage + pagerState.currentPageOffsetFraction
+                pagerState.tabIndicatorPosition
             },
             isScrollInProgressProvider = { pagerState.isScrollInProgress },
             externalPagerMotionEffectsEnabled = true,

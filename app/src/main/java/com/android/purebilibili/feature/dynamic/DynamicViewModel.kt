@@ -1047,6 +1047,13 @@ class DynamicViewModel(application: Application) : AndroidViewModel(application)
                         updateDynamicTimelinePage(current, requestType) { page ->
                             var next = page
                             if (hasNewPages) {
+                                // 新一页动态到手就预热其中的视频卡判定，点击进详情时首帧即正确布局。
+                                com.android.purebilibili.data.repository.VideoRepository
+                                    .prefetchVerticalFlags(
+                                        pages.drop(appliedPages)
+                                            .flatMap { it.page.items }
+                                            .mapNotNull { it.modules.module_dynamic?.major?.archive?.bvid }
+                                    )
                                 pages.drop(appliedPages).forEachIndexed { index, chunk ->
                                     next = resolveDynamicTimelinePageAfterSuccess(
                                         next, reconcileDynamicPageItems(

@@ -17,9 +17,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.lazy.grid.GridCells
-import com.android.purebilibili.core.ui.components.AppLazyVerticalGrid as LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import com.android.purebilibili.core.ui.components.AppLazyVerticalStaggeredGrid as LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.MaterialTheme
@@ -334,8 +334,8 @@ fun FavoriteCategoryRoute(
     onTopicClick: (Long) -> Unit,
     onWebClick: (String, String) -> Unit,
     onCheeseClick: ((Long) -> Unit)? = null,
-    gridState: androidx.compose.foundation.lazy.grid.LazyGridState =
-        androidx.compose.foundation.lazy.grid.rememberLazyGridState(),
+    gridState: androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState =
+        com.android.purebilibili.core.ui.rememberCompatibleStaggeredGridState(),
     viewModel: FavoriteCategoryViewModel = viewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -368,7 +368,7 @@ private fun FavoriteCategoryContent(
     state: FavoriteCategoryUiState,
     query: String,
     contentPadding: androidx.compose.foundation.layout.PaddingValues,
-    gridState: androidx.compose.foundation.lazy.grid.LazyGridState,
+    gridState: androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState,
     onPgcStatusSelected: (FavoritePgcStatus) -> Unit,
     onPublishedNotesSelected: (Boolean) -> Unit,
     onRetry: () -> Unit,
@@ -523,7 +523,7 @@ private fun FavoriteCategoryFilterRow(
 @Composable
 private fun FavoriteCategoryGrid(
     state: FavoriteCategoryUiState,
-    gridState: androidx.compose.foundation.lazy.grid.LazyGridState,
+    gridState: androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState,
     topPadding: androidx.compose.ui.unit.Dp,
     bottomPadding: androidx.compose.ui.unit.Dp,
     onLoadMore: () -> Unit,
@@ -538,9 +538,9 @@ private fun FavoriteCategoryGrid(
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val columns = resolveFavoriteCategoryColumnCount(state.section, maxWidth.value)
-        LazyVerticalGrid(
+        LazyVerticalStaggeredGrid(
             state = gridState,
-            columns = GridCells.Fixed(columns),
+            columns = StaggeredGridCells.Fixed(columns),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
                 start = AppSpacingTokens.Medium,
                 end = AppSpacingTokens.Medium,
@@ -548,7 +548,7 @@ private fun FavoriteCategoryGrid(
                 bottom = bottomPadding + AppSpacingTokens.Medium,
             ),
             horizontalArrangement = Arrangement.spacedBy(AppSpacingTokens.Medium),
-            verticalArrangement = Arrangement.spacedBy(AppSpacingTokens.Medium),
+            verticalItemSpacing = AppSpacingTokens.Medium,
         ) {
             itemsIndexed(state.items, key = { _, item -> "${item.section}_${item.id}" }) { index, item ->
                 if (index == state.items.lastIndex && state.hasMore && !state.isLoadingMore) {

@@ -13,6 +13,16 @@ class SettingsContainerMotionPolicyTest {
     private val page = Rect(0f, 0f, 400f, 900f)
 
     @Test
+    fun liveAreaIconReturnsOnlyToItsCapturedCategorySession() {
+        val owner = BiliPaiNavKey.LiveArea
+        val target = BiliPaiNavKey.LiveAreaDetail(2, 86, "英雄联盟", openId = 10L)
+        assertTrue(isSettingsContainerBoundary(true, listOf(owner, target), target, owner))
+        assertFalse(isSettingsContainerBoundary(false, listOf(owner, target), target, owner))
+        assertFalse(isSettingsContainerBoundary(true, listOf(owner, target.copy(openId = 11L)), target, owner))
+        assertFalse(isSettingsContainerBoundary(true, listOf(BiliPaiNavKey.LiveList, target), target, owner))
+    }
+
+    @Test
     fun navigationSpringPassesThroughLandingAndSettlesWithoutASecondImpulse() {
         val animation = TargetBasedAnimation(
             animationSpec = containerReturnSpringSpec(),

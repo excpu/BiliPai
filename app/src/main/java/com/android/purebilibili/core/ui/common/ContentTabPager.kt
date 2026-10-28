@@ -26,7 +26,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 
-/** One continuous position drives both page content and the existing native/glass tab renderer. */
+/** Page content may skip distant tabs; native/glass rails retain independent continuous motion. */
 @Composable
 internal fun rememberContentTabPager(
     pageCount: Int,

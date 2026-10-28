@@ -2,6 +2,16 @@ Third-party source notices
 
 Source and copyright notices consolidated from implementation comments.
 
+Image preview and original-file saving behavior reference:
+PiliPlus, revision 3d0aed958b3b7e59c39c121196f189f429719904 (GPL-3.0).
+https://github.com/bggRGjQaUbCoE/PiliPlus
+lib/common/widgets/image_viewer/gallery_viewer.dart
+lib/common/widgets/image_viewer/image.dart
+lib/utils/image_utils.dart
+lib/pages/common/reply_controller.dart (comment restriction codes and input behavior)
+The Android region decoder and Compose integration are implemented locally.
+The upstream license is retained in artwork/third-party/piliplus/LICENSE.
+
 app/src/main/java/com/android/purebilibili/feature/profile/ProfileAvatarExpansion.kt
 /*
  * Pull-down avatar expansion adapted from NextAlone/Nagram ProfileActivity.java,

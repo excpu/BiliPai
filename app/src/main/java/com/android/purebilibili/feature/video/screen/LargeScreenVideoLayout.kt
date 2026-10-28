@@ -159,6 +159,7 @@ internal fun LargeScreenVideoLayout(
                 playerContent = playerContent,
                 playerState = playerState,
                 uiState = uiState,
+                commentStateHandle = commentStateHandle,
                 engagementState = engagementState,
                 bvid = bvid,
                 coverUrl = coverUrl,
@@ -451,6 +452,7 @@ internal fun LargeScreenVideoLayout(
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun LargeScreenPlayerHost(
+    commentStateHandle: androidx.compose.runtime.State<com.android.purebilibili.feature.video.viewmodel.CommentUiState>,
     modifier: Modifier,
     playerContent: (@Composable (Modifier) -> Unit)? = null,
     playerState: VideoPlayerState,
@@ -546,6 +548,8 @@ private fun LargeScreenPlayerHost(
                 state = VideoPlayerSectionState(
                     playerState = playerState,
                     uiState = uiState,
+                    engagementState = engagementState,
+                    commentStateHandle = commentStateHandle,
                     isLiked = engagementState.isLiked,
                     isDisliked = engagementState.isDisliked,
                     likeStatusKnown = engagementState.likeStatusKnown,
@@ -620,6 +624,7 @@ private fun LargeScreenPlayerHost(
                     onSecondCodecChange = onSecondCodecChange,
                     onAudioQualityChange = onAudioQualityChange,
                     onPlaybackSpeedChange = playbackActions.applyPlaybackSpeed,
+                    onAudioLangChange = playbackActions.changeAudioLanguage,
                     onSaveCover = playbackActions.saveCover,
                     onDownloadAudio = playbackActions.downloadAudio,
                     onPlayModeClick = onPlayModeClick,

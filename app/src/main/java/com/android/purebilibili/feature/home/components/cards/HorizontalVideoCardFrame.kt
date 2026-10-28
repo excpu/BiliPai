@@ -44,9 +44,12 @@ internal fun HorizontalVideoCardFrame(
     coverAspectRatio: Float = com.android.purebilibili.core.ui.videoCardCoverAspectRatio(),
     stacked: Boolean = false,
     compactPartition: Boolean = false,
+    allowPortraitCover: Boolean = false,
 ) {
     // MD3、Miuix 和玻璃共用布局；封面保持所选比例。
-    val effectiveAspectRatio = coverAspectRatio.takeIf { it.isFinite() && it > 1f }
+    val effectiveAspectRatio = coverAspectRatio.takeIf {
+        it.isFinite() && if (allowPortraitCover) it > 0f else it > 1f
+    }
         ?: HORIZONTAL_VIDEO_CARD_COVER_ASPECT_RATIO
     val resolvedMinimumHeight = resolveHorizontalVideoCardMinimumHeightDp(LocalDensity.current.fontScale, effectiveAspectRatio).dp
     val infoPadding = if (compactPartition) 4.dp else HORIZONTAL_VIDEO_CARD_INFO_PADDING_DP.dp

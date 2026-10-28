@@ -1,5 +1,7 @@
 package com.android.purebilibili.core.ui.renderer.material3
 
+import com.android.purebilibili.core.ui.components.ElasticTabIndicatorBounds
+import com.android.purebilibili.core.ui.components.tabIndicatorBounds
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
@@ -109,24 +111,22 @@ fun <T> AppTonalPillTabRow(
         }
     } else emptyList()
 
-    val animatedPosition by animateFloatAsState(
+    val animatedPosition = animateFloatAsState(
         targetValue = selectedIndex.toFloat(),
         animationSpec = if (!com.android.purebilibili.core.ui.LocalComponentMotionEnabled.current ||
             indicatorPositionProvider != null) snap() else spring(),
         label = "tonalPillTabPosition",
     )
-    val followPosition = indicatorPositionProvider?.invoke()
-    val pillPosition = followPosition ?: animatedPosition
 
-    fun pillBounds(lefts: List<Dp>, widths: List<Dp>): Pair<Dp, Dp> {
+    fun pillBounds(lefts: List<Dp>, widths: List<Dp>): ElasticTabIndicatorBounds {
         val bounds = resolveElasticTabIndicatorBounds(
-            position = pillPosition,
+            position = indicatorPositionProvider?.invoke() ?: animatedPosition.value,
             tabLeftsDp = lefts.map { it.value },
             tabWidthsDp = widths.map { it.value },
             contentWidthsDp = widths.map { it.value },
             matchContentSize = false,
         )
-        return bounds.leftDp.dp to bounds.widthDp.dp
+        return bounds
     }
 
     val pillColor = selectedContainerColor ?: colorScheme.secondaryContainer
@@ -168,14 +168,13 @@ fun <T> AppTonalPillTabRow(
                     } else rowScrollState.scrollTo(target)
                 }
             }
-            val (pillLeft, pillWidth) = pillBounds(lefts, widths)
             Box(
                 modifier = Modifier.width(viewportWidth).height(height)
                     .horizontalScroll(rowScrollState, enabled = scrollable)
                     .selectableGroup(),
             ) {
                 Box(
-                    modifier = Modifier.offset(x = pillLeft).width(pillWidth).fillMaxHeight()
+                    modifier = Modifier.tabIndicatorBounds { pillBounds(lefts, widths) }.fillMaxHeight()
                         .clip(pillShape).background(pillColor),
                 )
                 Row(modifier = Modifier.height(height).padding(horizontal = padding)) {

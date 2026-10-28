@@ -25,6 +25,12 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
 import com.android.purebilibili.core.ui.LocalGlobalWallpaperBackdropVisible
+import com.android.purebilibili.core.ui.AppScaffold
+import com.android.purebilibili.core.ui.AppThemeConfig
+import com.android.purebilibili.core.ui.LocalAppThemeConfig
+import com.android.purebilibili.core.theme.AppUiStyle
+import com.android.purebilibili.core.theme.LocalAppUiStyle
+import com.android.purebilibili.core.ui.components.LocalAppTopBarIconBackdrop
 import com.android.purebilibili.core.ui.blur.rememberChromeBackdropSource
 import com.android.purebilibili.core.ui.blur.ChromeBackdropSource
 import com.android.purebilibili.core.ui.wallpaper.LocalGlobalWallpaperBackdropSource
@@ -32,6 +38,9 @@ import com.android.purebilibili.core.ui.wallpaper.sharedGlobalWallpaperBackgroun
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertNull
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
@@ -43,6 +52,57 @@ import top.yukonga.miuix.kmp.blur.drawBackdrop
 class ChromeBackdropSourceUiRegressionTest {
     @get:Rule
     val composeRule = createComposeRule()
+
+    @Test
+    fun scaffoldReusesPageSourceAndRestoresFallbackAndNativeIconScope() {
+        assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+        val glass = mutableStateOf(true)
+        val shareSource = mutableStateOf(true)
+        lateinit var pageSource: ChromeBackdropSource
+        var iconBackdrop: top.yukonga.miuix.kmp.blur.Backdrop? = null
+        composeRule.setContent {
+            val source = rememberChromeBackdropSource()
+            SideEffect { pageSource = source }
+            CompositionLocalProvider(
+                LocalAppUiStyle provides AppUiStyle.MATERIAL3,
+                LocalAppThemeConfig provides AppThemeConfig(
+                    headerBlurEnabled = false,
+                    liquidGlassEnabled = glass.value,
+                ),
+                LocalGlobalWallpaperBackdropVisible provides false,
+            ) {
+                AppScaffold(
+                    topBarIconBackdropSource = source.takeIf { shareSource.value },
+                    topBar = {
+                        val backdrop = LocalAppTopBarIconBackdrop.current
+                        SideEffect { iconBackdrop = backdrop }
+                        Box(Modifier.size(40.dp))
+                    },
+                ) { _ ->
+                    Box(Modifier.size(80.dp).then(source.modifier).background(Color.Red))
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.runOnIdle {
+            assertSame(pageSource.backdrop, iconBackdrop)
+            shareSource.value = false
+        }
+        composeRule.waitForIdle()
+        composeRule.runOnIdle {
+            assertNotNull(iconBackdrop)
+            assertNotSame(pageSource.backdrop, iconBackdrop)
+            shareSource.value = true
+            glass.value = false
+        }
+        composeRule.waitForIdle()
+        composeRule.runOnIdle {
+            assertNull(iconBackdrop)
+            glass.value = true
+        }
+        composeRule.waitForIdle()
+        composeRule.runOnIdle { assertSame(pageSource.backdrop, iconBackdrop) }
+    }
 
     @Test
     fun visibleSourceUpdatesWithoutDrawingChildrenTwice() = verifySource()

@@ -1352,6 +1352,11 @@ fun AppNavigation(
             useRecordedCardSource: Boolean = true,
             pendingTransitionSession: VideoCardTransitionSession? = null,
         ) {
+            // 统一兜底：调用方没有显式给出竖屏结论时，用列表预取缓存补全。
+            // 这样所有入口（首页/搜索/历史/UP/动态/赛事/收藏…）都不必逐个传参。
+            val navigationVertical = initialVertical ||
+                com.android.purebilibili.data.repository.VideoRepository
+                    .getCachedVerticalFlag(bvid) == true
             val transitionSession = pendingTransitionSession ?: captureVideoCardNavigationSession(
                 bvid = bvid,
                 sourceRoute = sourceRoute,
@@ -1368,7 +1373,7 @@ fun AppNavigation(
             if (!skipPortraitStoryResolution) {
                 resolvePortraitStoryNavigationSeed(
                     directPortraitStoryEntry = playerInteractionSettings.directPortraitStoryEntry,
-                    isVerticalVideo = initialVertical,
+                    isVerticalVideo = navigationVertical,
                     startAudio = startAudio,
                     bvid = bvid,
                     cid = cid,
@@ -1393,7 +1398,7 @@ fun AppNavigation(
                         startAudio = startAudio,
                         autoPortrait = autoPortrait,
                         resumePositionMs = resumePositionMs,
-                        initialVertical = initialVertical,
+                        initialVertical = navigationVertical,
                         directPortraitEntry = directPortraitEntry,
                         sourceRoute = sourceRoute,
                         skipPortraitStoryResolution = skipPortraitStoryResolution,
@@ -1426,7 +1431,7 @@ fun AppNavigation(
                 autoPortrait = autoPortrait || morphDirectPortrait,
                 fullscreen = fullscreen,
                 resumePositionMs = resumePositionMs,
-                initialVertical = initialVertical || morphDirectPortrait,
+                initialVertical = navigationVertical || morphDirectPortrait,
                 directPortraitEntry = morphDirectPortrait,
             )
             if (
@@ -2672,6 +2677,9 @@ fun AppNavigation(
                                 cid = cid,
                                 coverUrl = "",
                                 resumePositionMs = resumePositionMs,
+                                // UP 主页投稿列表已预取过判定，命中则首帧直接进竖屏。
+                                initialVertical = com.android.purebilibili.data.repository.VideoRepository
+                                    .getCachedVerticalFlag(bvid) ?: false,
                                 sourceRoute = spaceKey.toLegacyRoute()
                             )
                         },
@@ -3268,6 +3276,9 @@ fun AppNavigation(
                                     bvid = bvid,
                                     cid = 0L,
                                     coverUrl = "",
+                                    // 动态里的视频同样优先用预取缓存，命中则首帧直接进竖屏。
+                                    initialVertical = com.android.purebilibili.data.repository.VideoRepository
+                                        .getCachedVerticalFlag(bvid) ?: false,
                                     sourceRoute = ScreenRoutes.Dynamic.route
                                 )
                             },
@@ -3386,11 +3397,12 @@ fun AppNavigation(
                                         onNavigateSearchTarget = { target ->
                                             openBilibiliNativeTargetInNavigation3(target)
                                         },
-                                        onVideoClick = { bvid, cid, coverUrl ->
+                                        onVideoClick = { bvid, cid, coverUrl, isVertical ->
                                             navigateToVideoInNavigation3(
                                                 bvid = bvid,
                                                 cid = cid,
                                                 coverUrl = coverUrl,
+                                                initialVertical = isVertical,
                                                 sourceRoute = ScreenRoutes.Search.route
                                             )
                                         },
@@ -3829,11 +3841,15 @@ fun AppNavigation(
                                     val startInFullscreen =
                                         com.android.purebilibili.feature.video.screen
                                             .resolveVideoNavigationStartInFullscreen(options)
+                                    // 列表阶段预取到的横竖屏结论，直接用于新详情页首帧布局。
+                                    val isVertical = com.android.purebilibili.feature.video.screen
+                                        .resolveVideoNavigationIsVertical(options)
                                     navigateToVideoInNavigation3(
                                         bvid = vid,
                                         cid = targetCid,
                                         coverUrl = coverUrl,
                                         fullscreen = startInFullscreen,
+                                        initialVertical = isVertical ?: false,
                                         sourceRoute = "video/${videoKey.bvid}"
                                     )
                                 },
@@ -4253,6 +4269,7 @@ fun AppNavigation(
                         BiliPaiNavEntryContentRole.LIVE_AREA ->
                             com.android.purebilibili.feature.live.LiveAreaScreen(
                                 onBack = { performSystemBackAction() },
+                                onAreaContainerClick = { target -> pushNavigation3Key(target) },
                                 onAreaClick = { parentAreaId, areaId, title ->
                                     pushNavigation3Key(
                                         BiliPaiNavKey.LiveAreaDetail(
@@ -4551,12 +4568,14 @@ fun AppNavigation(
                                         onAudioModeExit()
                                     }
                                 }
-                                val initialLoadRequest = resolveAudioModeInitialLoadRequest(
+                                val initialLoadRequest = rememberAudioModeInitialLoadRequest(
                                     key = audioModeKey,
-                                    hasDisplayState =
+                                    playbackOwner = viewModel,
+                                    hasDisplayState = {
                                         viewModel.uiState.value is
                                             com.android.purebilibili.feature.video.viewmodel.VideoPlaybackUiState.Success &&
                                             viewModel.currentPlayer != null
+                                    },
                                 )
                                 val renderAudioPlayer: @Composable (String, Long) -> Unit = { bvid, cid ->
                                     com.android.purebilibili.feature.video.screen.AudioModeScreen(
@@ -4596,6 +4615,9 @@ fun AppNavigation(
                                         coverUrl = cover,
                                         sourceRoute = ScreenRoutes.Partition.route
                                     )
+                                },
+                                onBangumiSeasonClick = { seasonId ->
+                                    pushNavigation3Route(ScreenRoutes.BangumiDetail.createRoute(seasonId))
                                 },
                                 onBangumiClick = { initialType ->
                                     pushNavigation3Route(ScreenRoutes.Bangumi.createRoute(initialType))

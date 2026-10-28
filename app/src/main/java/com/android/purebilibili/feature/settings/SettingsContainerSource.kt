@@ -42,6 +42,8 @@ internal class SettingsContainerSource(
     val color: Color,
     val topRadius: Float,
     val bottomRadius: Float,
+    // 头像只作短程内容交接，容器仍展开到页面；设置行与直播封面保留整块缩放。
+    val avatarSource: Boolean = false,
 ) {
     var companions: List<SettingsContainerCompanion> = emptyList()
     var returnInFlight: () -> Boolean = { false }
@@ -88,6 +90,7 @@ internal class SettingsContainerSources {
         color: Color,
         topRadius: Float,
         bottomRadius: Float,
+        avatarSource: Boolean = false,
     ) {
         val coordinates = anchor.coordinates ?: return
         if (!coordinates.isAttached || !anchor.recorded || hostSize == IntSize.Zero) return
@@ -101,6 +104,7 @@ internal class SettingsContainerSources {
         ) ?: return
         sources[target] = SettingsContainerSource(
             anchor, layer, owner, bounds, hostSize, hostOrigin, color, topRadius, bottomRadius,
+            avatarSource = avatarSource,
         )
     }
 }

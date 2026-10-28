@@ -964,24 +964,13 @@ internal fun VideoCommentMainList(
                     }
                     if (repliesError != null) {
                         item(key = "comment_refresh_error") {
-                            Row(
+                            com.android.purebilibili.feature.video.ui.components.VideoCommentLoadError(
+                                message = repliesError,
+                                onRetry = { if (state.replies.isNotEmpty() && !state.isRepliesEnd) viewModel.loadComments() else onRefresh() },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                AppText(
-                                    text = repliesError,
-                                    color = AppContentColors.error(),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                AppTextButton(onClick = {
-                                    if (state.replies.isNotEmpty() && !state.isRepliesEnd) viewModel.loadComments() else onRefresh()
-                                }) {
-                                    AppText("重试")
-                                }
-                            }
+                                    .then(if (state.replies.isEmpty() && state.voteCard == null) Modifier.fillParentMaxHeight(0.7f) else Modifier),
+                            )
                         }
                     }
                     if (

@@ -39,7 +39,7 @@ class ReusableLiquidGlassBackdropStructureTest {
             .substringBefore("HorizontalPager(")
 
         assertTrue(segmentedControlSource.contains("indicatorPositionProvider = {"))
-        assertTrue(segmentedControlSource.contains("pagerState.currentPage + pagerState.currentPageOffsetFraction"))
+        assertTrue(segmentedControlSource.contains("pagerState.tabIndicatorPosition"))
         assertTrue(segmentedControlSource.contains("preferInlineContentStyle = false"))
         assertTrue(source.contains("HorizontalPager("))
         assertTrue(source.indexOf("HorizontalPager(") > source.indexOf("BottomBarLiquidSegmentedControl("))

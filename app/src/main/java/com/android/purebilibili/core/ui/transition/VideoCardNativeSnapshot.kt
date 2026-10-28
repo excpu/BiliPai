@@ -164,6 +164,7 @@ internal fun Modifier.recordNativeVideoCardLayer(
     bvid: String = "",
     sourceRoute: String?,
     enabled: Boolean = true,
+    landingFeedbackEnabled: Boolean = false,
 ): Modifier {
     if (!enabled) return this
     val bgState = LocalVideoCardTransitionBackgroundState.current
@@ -176,7 +177,12 @@ internal fun Modifier.recordNativeVideoCardLayer(
             bgState.isReturnGestureInProgressProvider() || bgState.isGestureRestoreInProgressProvider()
         }
     }
-    return this.drawWithContent {
+    return videoCardLandingFeedback(
+        layer = layer,
+        bvid = bvid,
+        sourceRoute = sourceRoute,
+        enabled = landingFeedbackEnabled,
+    ).drawWithContent {
         // Read the latch in draw. Waiting for recomposition after a click can otherwise
         // overwrite the frozen first-click card after OPENING has hidden its info band.
         val isSharedMorphSourceCard = isRecordedNativeCardSource(
@@ -300,6 +306,7 @@ internal fun rememberNativeVideoCardSnapshotController(
             bvid = bvid,
             sourceRoute = sourceRoute,
             enabled = enabled,
+            landingFeedbackEnabled = true,
         ),
         coverOverlayModifier = Modifier.recordNativeVideoCardLayer(
             layer = coverOverlayLayer,

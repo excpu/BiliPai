@@ -1,5 +1,7 @@
 package com.android.purebilibili.feature.audio.screen
 
+import com.android.purebilibili.navigation.tabSelectedPage
+import com.android.purebilibili.navigation.tabIndicatorPosition
 import com.android.purebilibili.core.ui.AppContentColors
 
 import com.android.purebilibili.navigation.animatePagerSelection
@@ -257,7 +259,7 @@ internal fun ListenVideoScreen(
                 // Glass indicator fills the measured slot; native geometry keeps its defaults.
                 liquidGlassAdaptIndicatorToLabel = !com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled,
                 items = sectionLabels,
-                selectedIndex = pagerState.currentPage,
+                selectedIndex = pagerState.tabSelectedPage,
                 onSelected = { index ->
                     scope.launch { animatePagerSelection(pagerState, index) }
                 },
@@ -274,7 +276,7 @@ internal fun ListenVideoScreen(
                 dragSelectionEnabled = sectionLabels.size > 1,
                 tapPressRefractionEnabled = true,
                 indicatorPositionProvider = {
-                    pagerState.currentPage + pagerState.currentPageOffsetFraction
+                    pagerState.tabIndicatorPosition
                 },
                 isScrollInProgressProvider = { pagerState.isScrollInProgress },
                 externalPagerMotionEffectsEnabled = true,

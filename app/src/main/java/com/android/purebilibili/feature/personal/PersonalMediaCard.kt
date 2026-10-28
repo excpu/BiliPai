@@ -73,6 +73,7 @@ internal fun PersonalMediaCardFrame(
     stacked: Boolean = false,
     enabled: Boolean = true,
     coverAspectRatio: Float = com.android.purebilibili.core.ui.videoCardCoverAspectRatio(),
+    allowPortraitCover: Boolean = false,
     supportingContent: (@Composable () -> Unit)? = null,
     overlineContent: (@Composable () -> Unit)? = null,
     coverOverlayContent: (@Composable BoxScope.() -> Unit)? = null,
@@ -111,17 +112,26 @@ internal fun PersonalMediaCardFrame(
                             coverOverlayContent?.invoke(this)
                         }
                     }
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Column(
-                            modifier = Modifier.weight(1f).padding(AppSpacingTokens.Small),
-                            verticalArrangement = Arrangement.spacedBy(AppSpacingTokens.ExtraSmall),
-                        ) {
-                            overlineContent?.invoke()
-                            headlineContent()
+                    // 多列的标题占满信息区；底部操作只与辅助信息并排。
+                    // 玻璃和原生材质共用此布局，单列仍使用原有横向卡片。
+                    Column(
+                        modifier = Modifier.padding(AppSpacingTokens.Small),
+                        verticalArrangement = Arrangement.spacedBy(AppSpacingTokens.ExtraSmall),
+                    ) {
+                        overlineContent?.invoke()
+                        headlineContent()
+                        if (trailingContent == null) {
                             supportingContent?.invoke()
-                        }
-                        trailingContent?.let { content ->
-                            Row(modifier = Modifier.padding(end = AppSpacingTokens.Small), content = content)
+                        } else {
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(AppSpacingTokens.ExtraSmall),
+                                ) {
+                                    supportingContent?.invoke()
+                                }
+                                trailingContent()
+                            }
                         }
                     }
                 }
@@ -132,6 +142,7 @@ internal fun PersonalMediaCardFrame(
                     coverOverlayModifier = coverOverlayModifier,
                     coverOverlayContent = coverOverlayContent,
                     coverAspectRatio = coverAspectRatio,
+                    allowPortraitCover = allowPortraitCover,
                     infoContent = {
                         overlineContent?.invoke()
                         androidx.compose.material3.ProvideTextStyle(

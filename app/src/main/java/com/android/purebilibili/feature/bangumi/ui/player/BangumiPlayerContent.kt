@@ -3,6 +3,8 @@
 // 文件路径: feature/bangumi/ui/player/BangumiPlayerContent.kt
 package com.android.purebilibili.feature.bangumi.ui.player
 
+import com.android.purebilibili.navigation.tabSelectedPage
+import com.android.purebilibili.navigation.tabIndicatorPosition
 import com.android.purebilibili.feature.video.viewmodel.CommentSubjectKey
 import com.android.purebilibili.feature.video.viewmodel.resolveReplyCount
 import com.android.purebilibili.core.ui.AppContentColors
@@ -140,7 +142,7 @@ fun BangumiPlayerContent(
     val scope = rememberCoroutineScope()
     val selectionBackdrop = rememberLayerBackdrop()
     val indicatorPositionProvider = remember(pagerState) {
-        { pagerState.currentPage + pagerState.currentPageOffsetFraction }
+        { pagerState.tabIndicatorPosition }
     }
     val subReplyState by commentViewModel.subReplyState.collectAsStateWithLifecycle()
     val subReplyCoveredBlurProgress = remember(currentEpisode.id) { mutableFloatStateOf(0f) }
@@ -202,7 +204,7 @@ fun BangumiPlayerContent(
             tabs = tabs,
             measurementLabels = if (commentsOnly) listOf(commentMeasurementTitle) else listOf("简介", commentMeasurementTitle),
             replyCount = displayedReplyCount ?: 0,
-            selectedTabIndex = pagerState.currentPage,
+            selectedTabIndex = pagerState.tabSelectedPage,
             onTabSelected = { index ->
                 scope.launch { animatePagerSelection(pagerState, index) }
             },

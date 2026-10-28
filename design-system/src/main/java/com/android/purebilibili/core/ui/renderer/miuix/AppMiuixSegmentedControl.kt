@@ -1,5 +1,6 @@
 package com.android.purebilibili.core.ui.renderer.miuix
 
+import com.android.purebilibili.core.ui.components.tabIndicatorBounds
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
@@ -583,12 +584,11 @@ private fun <T> AppMiuixSizedTabs(
     val density = LocalDensity.current
     val scrollState = rememberScrollState()
     val motionEnabled = com.android.purebilibili.core.ui.LocalComponentMotionEnabled.current
-    val animatedPosition by animateFloatAsState(
+    val animatedPosition = animateFloatAsState(
         targetValue = selectedIndex.toFloat(),
         animationSpec = if (!motionEnabled || indicatorPositionProvider != null) snap() else spring(),
         label = "miuixTabPosition",
     )
-    val position = indicatorPositionProvider?.invoke() ?: animatedPosition
     val inactiveBackground = if (nativeStyle) scheme.surface else if (shouldUseOpaqueMiuixTabBackdrop(true, LocalImmersiveTopChromeActive.current)) {
         AppSurfaceTokens.groupedListContainer()
     } else Color.Transparent
@@ -637,13 +637,8 @@ private fun <T> AppMiuixSizedTabs(
                 if (motionEnabled) scrollState.animateScrollTo(target) else scrollState.scrollTo(target)
             }
         }
-        val bounds = resolveElasticTabIndicatorBounds(
-            position = position,
-            tabLeftsDp = lefts.map { it.value },
-            tabWidthsDp = widths.map { it.value },
-            contentWidthsDp = widths.map { it.value },
-            matchContentSize = false,
-        )
+        val indicatorLefts = remember(lefts) { lefts.map { it.value } }
+        val indicatorWidths = remember(widths) { widths.map { it.value } }
         Box(
             modifier = Modifier
                 // 放得下时整组居中；溢出时视口靠起始边，保留逐项宽度与横向滚动。
@@ -673,8 +668,15 @@ private fun <T> AppMiuixSizedTabs(
             }
             Box(
                 Modifier
-                    .offset(x = bounds.leftDp.dp)
-                    .width(bounds.widthDp.dp)
+                    .tabIndicatorBounds {
+                        resolveElasticTabIndicatorBounds(
+                            position = indicatorPositionProvider?.invoke() ?: animatedPosition.value,
+                            tabLeftsDp = indicatorLefts,
+                            tabWidthsDp = indicatorWidths,
+                            contentWidthsDp = indicatorWidths,
+                            matchContentSize = false,
+                        )
+                    }
                     .height(height)
                     .adaptiveSquircleBackground(tabColors.selectedBackgroundColor, cornerRadius),
             )

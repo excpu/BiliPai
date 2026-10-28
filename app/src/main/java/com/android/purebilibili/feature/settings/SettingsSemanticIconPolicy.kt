@@ -156,6 +156,7 @@ internal enum class SettingsIconRole {
     BATTERY_STATUS,
     TIME_STATUS,
     PLAYER_ACTIONS,
+    PLAYER_ACTION_COUNTS,
     PRIVACY_CONTENT_AUTHENTICATION,
     PLAYER_STATS,
     PLAYER_DIAGNOSTIC_LOGS,
@@ -218,6 +219,7 @@ internal enum class SettingsIconRole {
     PLAYER_COLLAPSE_PAUSE,
     BOTTOM_BAR_SEARCH,
     DATA_SAVER_COVER_QUALITY,
+    RESILIENT_VIDEO_BUFFER,
     SEGMENT_LOADING_COMPATIBILITY,
     NOTIFICATION_SCOPE_MESSAGE,
     NOTIFICATION_SCOPE_REPLY,
@@ -318,7 +320,7 @@ internal fun resolveSettingsMaterialSymbolResource(role: SettingsIconRole): Int 
     SettingsIconRole.AUDIO_MODE_ENTRY -> R.drawable.ms_library_music_24
     SettingsIconRole.AUDIO_TITLE_AUTO_HIDE -> R.drawable.ms_bottom_panel_close_24
     SettingsIconRole.LOUDNESS_NORMALIZATION -> R.drawable.ms_instant_mix_24
-    SettingsIconRole.AUDIO_SPECTRUM -> R.drawable.ms_bar_chart_24
+    SettingsIconRole.AUDIO_SPECTRUM -> R.drawable.ic_settings_cover_pulse_24
     SettingsIconRole.STARTUP_RESUME -> R.drawable.ms_resume_24
     SettingsIconRole.NEXT_VIDEO_HINT -> R.drawable.ms_preview_24
     SettingsIconRole.VIDEO_CONTENT_NOTICE -> R.drawable.ms_report_24
@@ -390,6 +392,7 @@ internal fun resolveSettingsMaterialSymbolResource(role: SettingsIconRole): Int 
     SettingsIconRole.CLEAN_SCREENSHOT -> R.drawable.ms_screenshot_monitor_24
     SettingsIconRole.BATTERY_STATUS -> R.drawable.ms_battery_full_24
     SettingsIconRole.TIME_STATUS -> R.drawable.ms_access_time_24
+    SettingsIconRole.PLAYER_ACTION_COUNTS -> R.drawable.ic_settings_action_counts_24
     SettingsIconRole.PLAYER_ACTIONS -> R.drawable.ms_more_horiz_24
     SettingsIconRole.PRIVACY_CONTENT_AUTHENTICATION -> R.drawable.ms_verified_24
     SettingsIconRole.PLAYER_STATS -> R.drawable.ms_insert_chart_outlined_24
@@ -453,6 +456,7 @@ internal fun resolveSettingsMaterialSymbolResource(role: SettingsIconRole): Int 
     SettingsIconRole.PLAYER_COLLAPSE_PAUSE -> R.drawable.ms_pause_24
     SettingsIconRole.BOTTOM_BAR_SEARCH -> R.drawable.ms_search_fill_24
     SettingsIconRole.DATA_SAVER_COVER_QUALITY -> R.drawable.ms_wifi_24
+    SettingsIconRole.RESILIENT_VIDEO_BUFFER -> R.drawable.ic_settings_resilient_buffer_24
     SettingsIconRole.SEGMENT_LOADING_COMPATIBILITY -> R.drawable.ms_cloud_download_24
     SettingsIconRole.NOTIFICATION_SCOPE_MESSAGE -> R.drawable.ms_mail_24
     SettingsIconRole.NOTIFICATION_SCOPE_REPLY -> R.drawable.ms_reply_24

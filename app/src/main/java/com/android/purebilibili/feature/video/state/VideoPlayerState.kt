@@ -89,8 +89,8 @@ internal data class PlayerBufferPolicy(
     val earlyPlaybackMaxBufferMs: Int
 )
 
-internal fun resolvePlayerBufferPolicy(isOnWifi: Boolean): PlayerBufferPolicy {
-    return if (isOnWifi) {
+internal fun resolvePlayerBufferPolicy(isOnWifi: Boolean, resilient: Boolean = false): PlayerBufferPolicy {
+    val normal = if (isOnWifi) {
         PlayerBufferPolicy(
             minBufferMs = 10000,
             maxBufferMs = 40000,
@@ -107,6 +107,12 @@ internal fun resolvePlayerBufferPolicy(isOnWifi: Boolean): PlayerBufferPolicy {
             earlyPlaybackMaxBufferMs = 2000
         )
     }
+    return if (!resilient) normal else normal.copy(
+        minBufferMs = maxOf(normal.minBufferMs, 20_000),
+        maxBufferMs = maxOf(normal.maxBufferMs, 50_000),
+        bufferForPlaybackAfterRebufferMs = maxOf(normal.bufferForPlaybackAfterRebufferMs, 2_500),
+        earlyPlaybackMaxBufferMs = maxOf(normal.earlyPlaybackMaxBufferMs, 15_000),
+    )
 }
 
 /** 前段限流必须覆盖按倍速折算后的起播及恢复门槛，并留出测量余量。 */
@@ -220,6 +226,28 @@ private class FirstQuarterAwareLoadControl(
 
     override fun shouldStartPlayback(parameters: LoadControl.Parameters): Boolean =
         delegate.shouldStartPlayback(parameters)
+}
+
+/** 新播放器按当前网络和缓冲偏好创建；复用中的播放器保持现有配置。 */
+internal fun createVideoLoadControl(context: Context): LoadControl {
+    val policy = resolvePlayerBufferPolicy(
+        isOnWifi = NetworkUtils.isWifi(context),
+        resilient = SettingsManager.getResilientVideoBufferSync(context),
+    )
+    return FirstQuarterAwareLoadControl(
+        delegate = androidx.media3.exoplayer.DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                policy.minBufferMs,
+                policy.maxBufferMs,
+                policy.bufferForPlaybackMs,
+                policy.bufferForPlaybackAfterRebufferMs,
+            )
+            .setPrioritizeTimeOverSizeThresholds(true)
+            .build(),
+        earlyPlaybackMaxBufferMs = policy.earlyPlaybackMaxBufferMs,
+        bufferForPlaybackMs = policy.bufferForPlaybackMs,
+        bufferForPlaybackAfterRebufferMs = policy.bufferForPlaybackAfterRebufferMs,
+    )
 }
 
 internal fun shouldReuseMiniPlayerAtEntry(
@@ -1073,7 +1101,8 @@ fun rememberVideoPlayerState(
             val stopPlaybackOnExit = SettingsManager.getStopPlaybackOnExitSync(context)
             val audioFocusEnabled = SettingsManager.getAudioFocusEnabledSync(context)
             val bufferPolicy = resolvePlayerBufferPolicy(
-                isOnWifi = NetworkUtils.isWifi(context)
+                isOnWifi = NetworkUtils.isWifi(context),
+                resilient = SettingsManager.getResilientVideoBufferSync(context),
             )
             Logger.d(
                 "VideoPlayerState",
@@ -1097,22 +1126,9 @@ fun rememberVideoPlayerState(
             ExoPlayer.Builder(context)
                 .setRenderersFactory(renderersFactory)
                 .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
-                // 前 1/4 仅保留很短的前向缓冲，确认继续观看后再按常规策略快速预缓冲。
+                // 前 1/4 使用当前缓冲偏好，之后按常规阈值预缓冲。
                 .setLoadControl(
-                    FirstQuarterAwareLoadControl(
-                        delegate = androidx.media3.exoplayer.DefaultLoadControl.Builder()
-                            .setBufferDurationsMs(
-                                bufferPolicy.minBufferMs,
-                                bufferPolicy.maxBufferMs,
-                                bufferPolicy.bufferForPlaybackMs,
-                                bufferPolicy.bufferForPlaybackAfterRebufferMs
-                            )
-                            .setPrioritizeTimeOverSizeThresholds(true)
-                            .build(),
-                        earlyPlaybackMaxBufferMs = bufferPolicy.earlyPlaybackMaxBufferMs,
-                        bufferForPlaybackMs = bufferPolicy.bufferForPlaybackMs,
-                        bufferForPlaybackAfterRebufferMs = bufferPolicy.bufferForPlaybackAfterRebufferMs,
-                    )
+                    createVideoLoadControl(context)
                 )
                 //  [性能优化] 快速 Seek：跳转到最近的关键帧而非精确位置
                 .setSeekParameters(
@@ -1160,8 +1176,11 @@ fun rememberVideoPlayerState(
         .getPlaybackCompletionBehavior(context)
         .collectAsStateWithLifecycle(initialValue = PlaybackCompletionBehavior.CONTINUE_CURRENT_LOGIC
         )
-    LaunchedEffect(player, playbackCompletionBehavior) {
-        player.repeatMode = resolvePlaybackCompletionRepeatMode(playbackCompletionBehavior)
+    val isInAudioMode by viewModel.isInAudioMode.collectAsStateWithLifecycle()
+    val sleepAfterCurrent by viewModel.sleepAfterCurrent.collectAsStateWithLifecycle()
+    LaunchedEffect(player, playbackCompletionBehavior, isInAudioMode, sleepAfterCurrent) {
+        // 听视频使用自己的队列模式处理播完，不能让全局单曲循环提前截获结束事件。
+        player.repeatMode = resolvePlaybackCompletionRepeatMode(playbackCompletionBehavior, isInAudioMode || sleepAfterCurrent)
     }
 
     val sessionActivityPendingIntent = remember(context, bvid) {

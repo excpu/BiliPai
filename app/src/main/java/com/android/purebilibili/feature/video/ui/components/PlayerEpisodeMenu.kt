@@ -46,6 +46,37 @@ import com.android.purebilibili.data.model.response.UgcSeason
 import com.android.purebilibili.feature.home.components.cards.VideoCardCoverDurationText
 import kotlinx.coroutines.launch
 
+/** Keep current-video parts separate from a surrounding watch-later/favorite/UP queue. */
+@Composable
+fun PlayerEpisodeSourceMenu(
+    externalPlaylistTitle: String,
+    onDismiss: () -> Unit,
+    onPartsClick: () -> Unit,
+    onExternalPlaylistClick: () -> Unit,
+    isFullscreen: Boolean = false,
+    anchorBounds: IntRect? = null,
+    source: com.android.purebilibili.core.ui.components.AppGlassMenuSource? = null,
+) {
+    PlayerSelectionPopup(
+        title = "选集",
+        showTitle = false,
+        placement = if (anchorBounds != null) PlayerListPopupPlacement.ANCHOR_END
+            else if (isFullscreen) PlayerListPopupPlacement.END_BOTTOM else PlayerListPopupPlacement.CENTER,
+        anchorBounds = anchorBounds,
+        source = source,
+        onDismissRequest = onDismiss,
+    ) {
+        PlayerSelectionItem(
+            index = 0, optionCount = 2, text = "分P选集", selected = false,
+            onClick = { onDismiss(); onPartsClick() },
+        )
+        PlayerSelectionItem(
+            index = 1, optionCount = 2, text = externalPlaylistTitle, selected = false,
+            onClick = { onDismiss(); onExternalPlaylistClick() },
+        )
+    }
+}
+
 /** One bounded lazy viewport in the native page/detail region in every player mode. */
 @Composable
 fun PlayerEpisodeMenu(
@@ -191,6 +222,21 @@ internal fun PanelAction(icon: ImageVector, label: String, onClick: () -> Unit) 
     }
 }
 
+@Composable
+internal fun playerPanelSafeWindowBounds(): IntRect {
+    val density = LocalDensity.current
+    val direction = LocalLayoutDirection.current
+    val size = LocalWindowInfo.current.containerSize
+    val insets = WindowInsets.safeDrawing
+    val left = insets.getLeft(density, direction).coerceIn(0, size.width)
+    val top = insets.getTop(density).coerceIn(0, size.height)
+    return IntRect(
+        left, top,
+        (size.width - insets.getRight(density, direction)).coerceIn(left, size.width),
+        (size.height - insets.getBottom(density)).coerceIn(top, size.height),
+    )
+}
+
 /** Ordinary native page surface, independent of the application's Miuix/glass setting. */
 @Composable
 internal fun PlayerDetailPanel(title: String, isFullscreen: Boolean, playerBounds: IntRect?,
@@ -199,13 +245,8 @@ internal fun PlayerDetailPanel(title: String, isFullscreen: Boolean, playerBound
     draggable: Boolean = false,
     content: @Composable ColumnScope.(requestDismiss: () -> Unit) -> Unit) {
     val density = LocalDensity.current
-    val direction = LocalLayoutDirection.current
     val size = LocalWindowInfo.current.containerSize
-    val insets = WindowInsets.safeDrawing
-    val left = insets.getLeft(density, direction).coerceIn(0, size.width)
-    val top = insets.getTop(density).coerceIn(0, size.height)
-    val safe = IntRect(left, top, (size.width - insets.getRight(density, direction)).coerceIn(left, size.width),
-        (size.height - insets.getBottom(density)).coerceIn(top, size.height))
+    val safe = playerPanelSafeWindowBounds()
     val landscape = size.width > size.height
     val compactMaxHeight = if (compactHeight) with(density) { episodeSheetMaxHeight().roundToPx() } else null
     val bounds = resolvePlayerPanelBounds(safe, playerBounds, isFullscreen, landscape,

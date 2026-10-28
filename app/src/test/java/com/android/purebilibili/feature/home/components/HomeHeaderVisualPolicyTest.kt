@@ -26,6 +26,19 @@ import org.junit.Test
 
 class HomeHeaderVisualPolicyTest {
     @Test
+    fun `native protection clears when progressive header controls are fully hidden`() {
+        assertEquals(0f, resolveHomeNativeTopProtectionAlpha(false, true, 0f), 0.0001f)
+        assertEquals(0f, resolveHomeNativeTopProtectionAlpha(false, false, 0f), 0.0001f)
+    }
+
+    @Test
+    fun `native protection follows control reveal without changing glass treatment`() {
+        assertEquals(0.48f, resolveHomeNativeTopProtectionAlpha(false, true, 0.5f), 0.0001f)
+        assertEquals(0.5f, resolveHomeNativeTopProtectionAlpha(false, false, 0.5f), 0.0001f)
+        assertEquals(0f, resolveHomeNativeTopProtectionAlpha(true, true, 0.5f), 0.0001f)
+    }
+
+    @Test
     fun `native top protection stays solid without blur and readable with ordinary blur`() {
         assertEquals(1f, resolveHomeNativeTopProtectionAlpha(false, false), 0.0001f)
         assertEquals(0.96f, resolveHomeNativeTopProtectionAlpha(false, true), 0.0001f)

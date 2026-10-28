@@ -383,6 +383,8 @@ private fun AudioModeInitialState(
 @Composable
 internal fun AudioModeSleepTimerDialog(
     currentMinutes: Int?,
+    sleepAfterCurrent: Boolean = false,
+    onSleepAfterCurrent: (() -> Unit)? = null,
     onDismiss: () -> Unit,
     onSelectPreset: (Int?) -> Unit,
     onConfirmCustom: (Int) -> Unit
@@ -407,12 +409,17 @@ internal fun AudioModeSleepTimerDialog(
                     color = AppContentColors.secondaryText(),
                     style = MaterialTheme.typography.bodySmall
                 )
+                if (onSleepAfterCurrent != null) {
+                    AppTextButton(onClick = onSleepAfterCurrent) {
+                        AppText(if (sleepAfterCurrent) "取消播完当前首后停止" else "播完当前首后停止")
+                    }
+                }
                 Row(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     presetOptions.forEach { minutes ->
-                        val isSelected = currentMinutes == minutes
+                        val isSelected = !sleepAfterCurrent && currentMinutes == minutes
                         AppSurface(
                             onClick = { onSelectPreset(minutes) },
                             shape = AppShapes.container(ContainerLevel.Card),

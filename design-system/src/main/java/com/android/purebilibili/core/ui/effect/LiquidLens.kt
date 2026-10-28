@@ -33,6 +33,8 @@ fun BackdropEffectScope.lens(
     /** 仅供玻璃弹窗的局部轮廓使用；默认仍按原生组件的完整尺寸和圆角采样。 */
     outlineBounds: Rect? = null,
     outlineRadius: Float? = null,
+    /** 纵向 dock 显式切到左右外溢带；默认仍沿用横向 dock 的上下外溢带。 */
+    chromaticBandHorizontal: Boolean = false,
 ) {
     if (!isRuntimeShaderSupported()) return
     if (refractionHeight <= 0f || refractionAmount <= 0f) return
@@ -86,6 +88,7 @@ fun BackdropEffectScope.lens(
         setFloatUniform("refractionAmount", -scaledRefractionAmount)
         setFloatUniform("depthEffect", if (depthEffect) 1f else 0f)
         if (dispersionEnabled) {
+            setFloatUniform("chromaticBandHorizontal", if (chromaticBandHorizontal) 1f else 0f)
             setFloatUniform("chromaticAberration", chromaticAberration)
             setFloatUniform("chromaticEdgeBand", chromaticEdgeBand?.coerceAtLeast(0f)?.div(sf) ?: -1f)
         }
@@ -185,6 +188,7 @@ uniform float refractionAmount;
 uniform float depthEffect;
 uniform float chromaticAberration;
 uniform float chromaticEdgeBand;
+uniform float chromaticBandHorizontal;
 
 $ROUNDED_RECT_SDF
 
@@ -208,11 +212,12 @@ half4 main(float2 coord) {
     float2 grad = normalize(gradSdRoundedRect(centeredCoord, halfSize, gradRadius) + depthEffect * normalize(centeredCoord));
 
     float2 refractedCoord = coord + d * grad;
-    // Ordinary lenses retain their original spectral weighting. Dock indicators
-    // opt into dispersion only where the enlarged pill exceeds the track vertically.
+    // 普通透镜保留原光谱权重；dock 指示器只在选定轴超出轨道的区域色散。
     float dispersionWeight = (centeredCoord.x * centeredCoord.y) / (halfSize.x * halfSize.y);
     if (chromaticEdgeBand >= 0.0) {
-        float edgeDistance = halfSize.y - abs(centeredCoord.y);
+        float edgeDistance = chromaticBandHorizontal > 0.5
+            ? halfSize.x - abs(centeredCoord.x)
+            : halfSize.y - abs(centeredCoord.y);
         // A fixed local-pixel feather makes subpixel bands fade in from zero.
         // Shrinking feather with the band made the outermost pixel jump straight
         // to full dispersion for any positive band (and degenerate at zero).

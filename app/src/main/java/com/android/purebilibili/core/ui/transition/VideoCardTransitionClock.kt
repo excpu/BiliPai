@@ -35,6 +35,7 @@ import kotlin.math.roundToInt
  */
 @Stable
 internal class VideoCardTransitionClock {
+    val landingFeedback = VideoCardLandingFeedbackState()
 
     private var navigationDepthProvider: (() -> Float?)? = null
     private var navigationSettleState: VideoCardTransitionSettleState? by mutableStateOf(null)
@@ -166,6 +167,7 @@ internal class VideoCardTransitionClock {
         sharedMorphActive && sharedMorphFraction != null
 
     fun beginOpening(sourceRoute: String?) {
+        landingFeedback.clear()
         this.sourceRoute = sourceRoute
         phase = VideoCardTransitionBackgroundPhase.OPENING
         gestureBackProgress = null
