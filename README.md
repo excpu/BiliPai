@@ -6,6 +6,8 @@
 
 **原生、纯净、可扩展的第三方 BiliBili Android 客户端**
 
+这是从原项目的 Fork 版本，添加了自定义CDN输入功能，方便本地多线程代理的使用，已经修复了一些自己使用时遇到的BUG。其余和原版一样
+
 [简体中文](README.md) · [English](README_EN.md)
 
 <img src="https://img.shields.io/badge/Source-0.6.4-007AFF?style=flat-square" alt="Source 0.6.4" />

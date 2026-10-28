@@ -47,6 +47,20 @@ class LargeScreenVideoLayoutPolicyTest {
     }
 
     @Test
+    fun landscapePlayerColumnAvoidsStatusBar() {
+        val source = java.io.File(
+            "app/src/main/java/com/android/purebilibili/feature/video/screen/LargeScreenVideoLayout.kt"
+        ).takeIf { it.exists() } ?: java.io.File(
+            "src/main/java/com/android/purebilibili/feature/video/screen/LargeScreenVideoLayout.kt"
+        )
+        val text = source.readText()
+        val landscapeStart = text.indexOf("LargeScreenVideoLayoutMode.Landscape -> {")
+        assertTrue(landscapeStart >= 0)
+        val landscapeBranch = text.substring(landscapeStart, minOf(text.length, landscapeStart + 600))
+        assertTrue(landscapeBranch.contains(".statusBarsPadding()"))
+    }
+
+    @Test
     fun collectionGetsOwnColumnOnlyWhenEachPaneIsAtLeast280dp() {
         assertFalse(
             shouldUseDedicatedCollectionColumn(

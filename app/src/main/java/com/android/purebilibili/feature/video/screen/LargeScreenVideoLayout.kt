@@ -378,7 +378,10 @@ internal fun LargeScreenVideoLayout(
                     Box(
                         modifier = Modifier
                             .width(metrics.playerWidthDp.dp)
-                            .fillMaxHeight(),
+                            .fillMaxHeight()
+                            // 横屏分栏时状态栏仍可见，左侧播放器需要整体下移避让，
+                            // 否则视频顶部会被状态栏遮挡（沉浸式下 inset 为 0，不受影响）。
+                            .statusBarsPadding(),
                     ) {
                         Column(modifier = Modifier.fillMaxSize()) {
                             player(
