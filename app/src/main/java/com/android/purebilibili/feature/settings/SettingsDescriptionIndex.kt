@@ -162,8 +162,6 @@ internal val settingsStaticDescriptionIndex: Map<String, String> = mapOf(
     "playback.seek_forward_seconds" to "调整右侧双击快进幅度",
     "playback.swipe_seek_use_relative_duration" to "关闭时使用固定秒数，不受视频长短影响，需要精确调整时建议保持关闭；开启时按视频总时长比例快进快退，视频越长跳转越大",
     "playback.swipe_seek_relative_percent" to "灵敏度为 1 时，横向拖过整个播放器宽度可调整视频总时长的所选比例：25%、50%、90%、100%；各播放场景共用，忽略固定秒数及横屏精细调节开关",
-    "playback.swipe_seek_velocity_enabled" to "开启后横滑快进会判断滑动速度：慢滑仍是精确微调，快速甩动时同样的距离跳转更多；关闭时快进幅度只与拖动距离有关，滑多快都一样",
-    "playback.swipe_seek_velocity_max_gain" to "甩动时的最大放大倍率，倍率随滑动速度连续上升；数值越大越快的手势跳得越远，慢滑不受影响",
     "playback.set_system_brightness_enabled" to "依赖“滑动调亮度和音量”开关；亮度手势会同时修改当前画面和设备系统亮度；关闭时只临时调整当前播放画面；开启需要系统授权",
     "playback.show_fullscreen_action_items" to "横屏顶部显示点赞/投币/分享等快捷操作；关闭后隐藏横屏顶部互动按钮，保留返回与更多入口",
     "playback.show_fullscreen_battery_level" to "在横屏左上角展示电池图标和电量百分比",

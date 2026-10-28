@@ -2137,8 +2137,6 @@ private fun PlaybackFullscreenGestureSettingsSection(
     val fullscreenSwipeSeekSeconds = playerConfiguration.fullscreenSwipeSeekSeconds
     val swipeSeekUseRelativeDuration = playerConfiguration.swipeSeekUseRelativeDuration
     val swipeSeekRelativePercent = playerConfiguration.swipeSeekRelativePercent
-    val swipeSeekVelocityEnabled = playerConfiguration.swipeSeekVelocityEnabled
-    val swipeSeekVelocityMaxGain = playerConfiguration.swipeSeekVelocityMaxGain
     val doubleTapSeekEnabled = playerConfiguration.doubleTapSeekEnabled
     val seekForwardSeconds = playerConfiguration.seekForwardSeconds
     val seekBackwardSeconds = playerConfiguration.seekBackwardSeconds
@@ -2601,43 +2599,6 @@ SettingsItemAnchor("playback.fullscreen_swipe_seek_seconds") {
             },
         )
 }
-        }
-        AppPreferenceDivider()
-        SettingsItemAnchor("playback.swipe_seek_velocity_enabled") {
-            AppSwitchPreference(
-                title = settingItemTitle("playback.swipe_seek_velocity_enabled"),
-                subtitle = if (swipeSeekVelocityEnabled) {
-                    "已开启：慢滑仍可精确微调，快速甩动最多放大 ${formatSwipeSeekVelocityGain(swipeSeekVelocityMaxGain)}"
-                } else {
-                    "关闭时快进幅度只与拖动距离有关，滑多快都一样；开启后滑得越快跳转越多"
-                },
-                checked = swipeSeekVelocityEnabled,
-                onCheckedChange = { enabled ->
-                    scope.launch {
-                        SettingsManager.setSwipeSeekVelocityEnabled(context, enabled)
-                    }
-                }
-            )
-        }
-        if (swipeSeekVelocityEnabled) {
-            AppPreferenceDivider()
-            SettingsItemAnchor("playback.swipe_seek_velocity_max_gain") {
-                SettingsSingleChoicePreference(
-                    title = settingItemTitle("playback.swipe_seek_velocity_max_gain"),
-                    subtitle = "甩动时的最大放大倍率；倍率随滑动速度连续上升，慢滑不会受影响",
-                    options = listOf(
-                        AppSegmentOption(2f, "2倍"),
-                        AppSegmentOption(3f, "3倍"),
-                        AppSegmentOption(4f, "4倍")
-                    ),
-                    selectedValue = swipeSeekVelocityMaxGain,
-                    onSelectionChange = { gain ->
-                        scope.launch {
-                            SettingsManager.setSwipeSeekVelocityMaxGain(context, gain)
-                        }
-                    }
-                )
-            }
         }
         AppPreferenceDivider()
         val autoRotateEnabled by remember(context) { com.android.purebilibili.core.store.SettingsManager.getAutoRotateEnabled(context) }.collectAsStateWithLifecycle(initialValue = false)
@@ -3215,12 +3176,6 @@ SettingsItemAnchor("playback.bottom_progress_behavior") {
         }
     }
 
-}
-
-/** 设置副标题里的倍率展示，统一去掉多余小数（3f -> "3倍"，2.5f -> "2.5倍"）。 */
-private fun formatSwipeSeekVelocityGain(gain: Float): String {
-    val tenths = (gain.coerceIn(1f, 4f) * 10f).roundToInt()
-    return if (tenths % 10 == 0) "${tenths / 10}倍" else "${tenths / 10}.${tenths % 10}倍"
 }
 
 @Composable

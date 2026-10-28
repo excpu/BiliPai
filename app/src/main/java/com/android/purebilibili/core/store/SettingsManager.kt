@@ -1157,10 +1157,6 @@ data class PlayerInteractionSettings(
     val fullscreenSwipeSeekSeconds: Int = 15,
     val swipeSeekUseRelativeDuration: Boolean = false,
     val swipeSeekRelativePercent: Int = 90,
-    /** 横滑快进速度判断：滑得越快每像素换算的秒数越多。默认关闭以保持原手感。 */
-    val swipeSeekVelocityEnabled: Boolean = false,
-    /** 速度判断的最大倍率上限（1f..4f）。 */
-    val swipeSeekVelocityMaxGain: Float = 3f,
     val fullscreenSwipeSeekEnabled: Boolean = true,
     val fullscreenGestureReverse: Boolean = false,
     val hideVideoPageStatusBar: Boolean = false,
@@ -2019,10 +2015,6 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
             swipeSeekUseRelativeDuration = preferences[KEY_SWIPE_SEEK_USE_RELATIVE_DURATION] ?: false,
             swipeSeekRelativePercent = normalizeSwipeSeekRelativePercent(
                 preferences[KEY_SWIPE_SEEK_RELATIVE_PERCENT] ?: 90
-            ),
-            swipeSeekVelocityEnabled = preferences[KEY_SWIPE_SEEK_VELOCITY_ENABLED] ?: false,
-            swipeSeekVelocityMaxGain = normalizeSwipeSeekVelocityMaxGain(
-                preferences[KEY_SWIPE_SEEK_VELOCITY_MAX_GAIN] ?: 3f
             ),
             fullscreenSwipeSeekEnabled = preferences[KEY_FULLSCREEN_SWIPE_SEEK_ENABLED] ?: true,
             fullscreenGestureReverse = preferences[KEY_FULLSCREEN_GESTURE_REVERSE] ?: false,
@@ -7575,8 +7567,6 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
     private val KEY_SWIPE_SEEK_USE_RELATIVE_DURATION =
         booleanPreferencesKey("swipe_seek_use_relative_duration")
     private val KEY_SWIPE_SEEK_RELATIVE_PERCENT = intPreferencesKey("swipe_seek_relative_percent")
-    private val KEY_SWIPE_SEEK_VELOCITY_ENABLED = booleanPreferencesKey("swipe_seek_velocity_enabled")
-    private val KEY_SWIPE_SEEK_VELOCITY_MAX_GAIN = floatPreferencesKey("swipe_seek_velocity_max_gain")
     private val KEY_FULLSCREEN_GESTURE_REVERSE = booleanPreferencesKey("fullscreen_gesture_reverse")
     private val KEY_HIDE_VIDEO_PAGE_STATUS_BAR = booleanPreferencesKey("hide_video_page_status_bar")
     private val KEY_PORTRAIT_LETTERBOX_AMBIENT_HAZE =
@@ -7788,32 +7778,6 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
         SWIPE_SEEK_RELATIVE_PERCENT_OPTIONS.minByOrNull { option ->
             abs(option.toLong() - percent.toLong())
         } ?: 90
-
-    // --- 横滑快进速度判断（默认关闭） ---
-    fun getSwipeSeekVelocityEnabled(context: Context): Flow<Boolean> =
-        context.settingsDataStore.data.map { preferences ->
-            preferences[KEY_SWIPE_SEEK_VELOCITY_ENABLED] ?: false
-        }
-
-    suspend fun setSwipeSeekVelocityEnabled(context: Context, enabled: Boolean) {
-        context.settingsDataStore.edit { preferences ->
-            preferences[KEY_SWIPE_SEEK_VELOCITY_ENABLED] = enabled
-        }
-    }
-
-    fun getSwipeSeekVelocityMaxGain(context: Context): Flow<Float> =
-        context.settingsDataStore.data.map { preferences ->
-            normalizeSwipeSeekVelocityMaxGain(preferences[KEY_SWIPE_SEEK_VELOCITY_MAX_GAIN] ?: 3f)
-        }
-
-    suspend fun setSwipeSeekVelocityMaxGain(context: Context, gain: Float) {
-        context.settingsDataStore.edit { preferences ->
-            preferences[KEY_SWIPE_SEEK_VELOCITY_MAX_GAIN] = normalizeSwipeSeekVelocityMaxGain(gain)
-        }
-    }
-
-    private fun normalizeSwipeSeekVelocityMaxGain(gain: Float): Float =
-        gain.takeIf { it.isFinite() }?.let { it.coerceIn(1f, 4f) } ?: 3f
 
     private fun isLargeScreenOrFoldableConfiguration(context: Context): Boolean {
         return context.isLargeScreenOrFoldableConfiguration()
@@ -9002,8 +8966,6 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
             IntShareablePreferenceDefinition(KEY_INLINE_SWIPE_SEEK_SECONDS, SettingsShareSection.GESTURE),
             BooleanShareablePreferenceDefinition(KEY_FULLSCREEN_SWIPE_SEEK_ENABLED, SettingsShareSection.GESTURE),
             IntShareablePreferenceDefinition(KEY_FULLSCREEN_SWIPE_SEEK_SECONDS, SettingsShareSection.GESTURE),
-            BooleanShareablePreferenceDefinition(KEY_SWIPE_SEEK_VELOCITY_ENABLED, SettingsShareSection.GESTURE),
-            FloatShareablePreferenceDefinition(KEY_SWIPE_SEEK_VELOCITY_MAX_GAIN, SettingsShareSection.GESTURE),
             BooleanShareablePreferenceDefinition(KEY_FULLSCREEN_GESTURE_REVERSE, SettingsShareSection.GESTURE),
             BooleanShareablePreferenceDefinition(KEY_AUTO_ENTER_FULLSCREEN, SettingsShareSection.GESTURE),
             BooleanShareablePreferenceDefinition(KEY_AUTO_EXIT_FULLSCREEN, SettingsShareSection.GESTURE),
