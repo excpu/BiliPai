@@ -1035,6 +1035,8 @@ private fun VideoPlayerSectionContent(
     val fullscreenSwipeSeekSeconds = playerInteractionSettings.fullscreenSwipeSeekSeconds
     val swipeSeekUseRelativeDuration = playerInteractionSettings.swipeSeekUseRelativeDuration
     val swipeSeekRelativePercent = playerInteractionSettings.swipeSeekRelativePercent
+    val swipeSeekVelocityEnabled = playerInteractionSettings.swipeSeekVelocityEnabled
+    val swipeSeekVelocityMaxGain = playerInteractionSettings.swipeSeekVelocityMaxGain
     val fullscreenSwipeSeekEnabled = playerInteractionSettings.fullscreenSwipeSeekEnabled
     val fullscreenGestureReverse = playerInteractionSettings.fullscreenGestureReverse
     val autoEnterFullscreenEnabled = playerInteractionSettings.autoEnterFullscreenEnabled
@@ -1616,6 +1618,11 @@ private fun VideoPlayerSectionContent(
     // 记录累计拖动距离
     var totalDragDistanceY by remember { mutableFloatStateOf(0f) }
     var totalDragDistanceX by remember { mutableFloatStateOf(0f) }
+    // 速度判断后的「加权虚拟距离」，只用于 seek 幅度换算；方向判定仍用原始 totalDragDistanceX。
+    var weightedSeekDragDistanceX by remember { mutableFloatStateOf(0f) }
+    // 当前生效的速度倍率，用于在 seek 反馈上告诉用户「这次滑得快」。
+    var seekVelocityGain by remember { mutableFloatStateOf(1f) }
+    val seekVelocityEstimator = remember { SeekVelocityEstimator() }
     // 上滑/下滑进入全屏的拖动跟随提示进度 0..1；手势结束后由 gestureMode 复位渲染。
     var swipeToFullscreenHintFraction by remember { mutableFloatStateOf(0f) }
     // 记录手势起点 X（用于锁定分区，避免拖动过程横向漂移导致误判）
@@ -1883,6 +1890,9 @@ private fun VideoPlayerSectionContent(
         isLongPressing = true
         totalDragDistanceY = 0f
         totalDragDistanceX = 0f
+        weightedSeekDragDistanceX = 0f
+        seekVelocityGain = 1f
+        seekVelocityEstimator.reset()
         longPressSpeedStartedAtMs = android.os.SystemClock.elapsedRealtime()
         longPressSpeedStartX = startOffset?.x ?: -1f
         longPressSpeedStartY = startOffset?.y ?: -1f
@@ -2413,6 +2423,8 @@ private fun VideoPlayerSectionContent(
                 fullscreenSwipeSeekSeconds,
                 swipeSeekUseRelativeDuration,
                 swipeSeekRelativePercent,
+                swipeSeekVelocityEnabled,
+                swipeSeekVelocityMaxGain,
                 fullscreenGestureReverse,
                 bottomGestureExclusionHeightDp,
                 gestureSeekFallbackDurationMs,
@@ -2429,6 +2441,9 @@ private fun VideoPlayerSectionContent(
                     seekCancelPending = false
                     gestureMode = VideoGestureMode.None
                     dragStartX = -1f
+                    weightedSeekDragDistanceX = 0f
+                    seekVelocityGain = 1f
+                    seekVelocityEstimator.reset()
                 }
                 if (!isInPipMode) {
                     var portraitFullscreenTriggered = false
@@ -2498,6 +2513,9 @@ private fun VideoPlayerSectionContent(
                                 dragStartX = offset.x
                                 totalDragDistanceY = 0f
                                 totalDragDistanceX = 0f
+                                weightedSeekDragDistanceX = 0f
+                                seekVelocityGain = 1f
+                                seekVelocityEstimator.reset()
 
                                 startVolumeStep = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
                                 startPosition = resolveGestureSeekStartPositionMs(
@@ -2803,11 +2821,25 @@ private fun VideoPlayerSectionContent(
                                         playbackDurationMs = playerState.player.duration,
                                         fallbackDurationMs = gestureSeekFallbackDurationMs
                                     )
+                                    // 速度判断：把本次位移按当前速度倍率加权后再累加，
+                                    // 慢滑保持精确微调，快甩成倍放大跳转幅度。
+                                    val seekContainerWidthPx = size.width.toFloat()
+                                    val seekDrag = accumulateVelocityWeightedSeekDrag(
+                                        weightedDragDistanceX = weightedSeekDragDistanceX,
+                                        dragAmountX = dragAmount.x,
+                                        uptimeMs = change.uptimeMillis,
+                                        containerWidthPx = seekContainerWidthPx,
+                                        velocityEstimator = seekVelocityEstimator,
+                                        velocityEnabled = swipeSeekVelocityEnabled,
+                                        velocityMaxGain = swipeSeekVelocityMaxGain
+                                    )
+                                    weightedSeekDragDistanceX = seekDrag.weightedDragDistanceX
+                                    seekVelocityGain = seekDrag.velocityGain
                                     val seekDelta = resolveHorizontalSeekDeltaMs(
                                         isFullscreen = isFullscreen,
                                         fullscreenSwipeSeekEnabled = fullscreenSwipeSeekEnabled,
-                                        totalDragDistanceX = totalDragDistanceX,
-                                        containerWidthPx = size.width.toFloat(),
+                                        totalDragDistanceX = weightedSeekDragDistanceX,
+                                        containerWidthPx = seekContainerWidthPx,
                                         fullscreenSwipeSeekSeconds = fullscreenSwipeSeekSeconds,
                                         inlineSwipeSeekSeconds = inlineSwipeSeekSeconds,
                                         gestureSensitivity = gestureSensitivity,
@@ -5264,6 +5296,7 @@ private fun VideoPlayerSectionContent(
             isPortraitFullscreen = isPortraitFullscreen,
             seekTargetTime = seekTargetTime,
             startPosition = startPosition,
+            seekVelocityGain = seekVelocityGain,
             modifier = Modifier
                 .align(Alignment.Center)
                 .zIndex(120f),

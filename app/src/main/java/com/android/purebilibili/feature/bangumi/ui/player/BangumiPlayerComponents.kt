@@ -385,6 +385,11 @@ fun BangumiPlayerView(
     var gestureMode by remember { mutableStateOf(BangumiGestureMode.None) }
     var gestureValue by remember { mutableFloatStateOf(0f) }
     var dragDelta by remember { mutableFloatStateOf(0f) }
+    // 速度判断后的加权距离，仅用于 seek 幅度换算；方向判定仍用原始 dragDelta。
+    var weightedSeekDragDelta by remember { mutableFloatStateOf(0f) }
+    val seekVelocityEstimator = remember {
+        com.android.purebilibili.feature.video.ui.section.SeekVelocityEstimator()
+    }
     var startVolumeStep by remember { mutableIntStateOf(0) }
     var totalVolumeDragDistanceY by remember { mutableFloatStateOf(0f) }
     var seekPreviewPosition by remember { mutableLongStateOf(0L) }
@@ -487,6 +492,8 @@ fun BangumiPlayerView(
                             totalDragDistanceX = 0f
                             totalDragDistanceY = 0f
                             dragDelta = 0f
+                            weightedSeekDragDelta = 0f
+                            seekVelocityEstimator.reset()
                             totalVolumeDragDistanceY = 0f
                             seekPreviewPosition = currentPosition
                             seekGestureStartPosition = currentPosition
@@ -496,6 +503,8 @@ fun BangumiPlayerView(
                             if (gestureMode == BangumiGestureMode.Seek && kotlin.math.abs(dragDelta) > 20f) {
                                 exoPlayer.seekTo(seekPreviewPosition)
                             }
+                            weightedSeekDragDelta = 0f
+                            seekVelocityEstimator.reset()
                             if (!isScreenLocked && gestureMode == BangumiGestureMode.SwipeToFullscreen &&
                                 shouldTriggerFullscreenBySwipe(
                                     isFullscreen = isFullscreen,
@@ -508,7 +517,11 @@ fun BangumiPlayerView(
                             }
                             gestureMode = BangumiGestureMode.None
                         },
-                        onDragCancel = { gestureMode = BangumiGestureMode.None },
+                        onDragCancel = {
+                            weightedSeekDragDelta = 0f
+                            seekVelocityEstimator.reset()
+                            gestureMode = BangumiGestureMode.None
+                        },
                         onDrag = { change, dragAmount ->
                             change.consume()
                             if (isScreenLocked) return@detectDragGestures
@@ -581,6 +594,19 @@ fun BangumiPlayerView(
                                 }
                                 BangumiGestureMode.Seek -> {
                                     dragDelta += dragAmount.x
+                                    // 速度判断：按当前速度倍率加权本次位移后再累加，
+                                    // 慢滑保持精确微调，快甩成倍放大跳转幅度。
+                                    val seekDrag = com.android.purebilibili.feature.video.ui.section
+                                        .accumulateVelocityWeightedSeekDrag(
+                                            weightedDragDistanceX = weightedSeekDragDelta,
+                                            dragAmountX = dragAmount.x,
+                                            uptimeMs = change.uptimeMillis,
+                                            containerWidthPx = screenWidth,
+                                            velocityEstimator = seekVelocityEstimator,
+                                            velocityEnabled = playerInteractionSettings.swipeSeekVelocityEnabled,
+                                            velocityMaxGain = playerInteractionSettings.swipeSeekVelocityMaxGain
+                                        )
+                                    weightedSeekDragDelta = seekDrag.weightedDragDistanceX
                                     // 与普通视频共用同一横滑策略：遵守全屏/内联滑动秒数、
                                     // 灵敏度与相对时长设置；全屏横滑被设置关闭时策略返回
                                     // null，拖动不再产生越界目标。
@@ -588,7 +614,7 @@ fun BangumiPlayerView(
                                         .resolveHorizontalSeekDeltaMs(
                                             isFullscreen = isFullscreen,
                                             fullscreenSwipeSeekEnabled = playerInteractionSettings.fullscreenSwipeSeekEnabled,
-                                            totalDragDistanceX = dragDelta,
+                                            totalDragDistanceX = weightedSeekDragDelta,
                                             containerWidthPx = screenWidth,
                                             fullscreenSwipeSeekSeconds = playerInteractionSettings.fullscreenSwipeSeekSeconds,
                                             inlineSwipeSeekSeconds = playerInteractionSettings.inlineSwipeSeekSeconds,

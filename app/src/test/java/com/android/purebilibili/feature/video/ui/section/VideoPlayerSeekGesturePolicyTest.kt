@@ -313,4 +313,170 @@ class VideoPlayerSeekGesturePolicyTest {
             )
         )
     }
+
+    @Test
+    fun `velocity gain stays neutral inside the dead zone and when disabled`() {
+        for (velocity in listOf(0f, 100f, -100f, 200f, -200f)) {
+            assertEquals(
+                1f,
+                resolveSeekVelocityGain(
+                    velocityPxPerSec = velocity,
+                    containerWidthPx = 800f,
+                    enabled = true,
+                    maxGain = 3f
+                ),
+                "velocity $velocity should be inside the slow-swipe dead zone"
+            )
+        }
+        assertEquals(
+            1f,
+            resolveSeekVelocityGain(
+                velocityPxPerSec = 10_000f,
+                containerWidthPx = 800f,
+                enabled = false,
+                maxGain = 4f
+            )
+        )
+    }
+
+    @Test
+    fun `velocity gain rises with swipe speed and is symmetric per direction`() {
+        for (velocity in listOf(800f, -800f)) {
+            assertEquals(
+                2.2f,
+                resolveSeekVelocityGain(
+                    velocityPxPerSec = velocity,
+                    containerWidthPx = 800f,
+                    enabled = true,
+                    maxGain = 3f
+                ),
+                0.001f,
+                "one container width per second should earn a 2.2x gain"
+            )
+        }
+        val gentle = resolveSeekVelocityGain(400f, 800f, true, 4f)
+        val brisk = resolveSeekVelocityGain(1_600f, 800f, true, 4f)
+        assertTrue(gentle > 1f && brisk > gentle, "gain must increase monotonically with speed")
+    }
+
+    @Test
+    fun `velocity gain respects configured ceiling and hard cap`() {
+        assertEquals(
+            2f,
+            resolveSeekVelocityGain(
+                velocityPxPerSec = 8_000f,
+                containerWidthPx = 800f,
+                enabled = true,
+                maxGain = 2f
+            )
+        )
+        assertEquals(
+            VIDEO_PLAYER_SEEK_VELOCITY_GAIN_HARD_CAP,
+            resolveSeekVelocityGain(
+                velocityPxPerSec = 80_000f,
+                containerWidthPx = 800f,
+                enabled = true,
+                maxGain = 10f
+            )
+        )
+    }
+
+    @Test
+    fun `velocity gain falls back to neutral for unusable geometry`() {
+        for (width in listOf(0f, -800f, Float.NaN, Float.POSITIVE_INFINITY)) {
+            assertEquals(1f, resolveSeekVelocityGain(10_000f, width, true, 3f))
+        }
+        assertEquals(1f, resolveSeekVelocityGain(Float.NaN, 800f, true, 3f))
+    }
+
+    @Test
+    fun `weighted seek drag keeps progress when the finger decelerates`() {
+        val estimator = SeekVelocityEstimator()
+        // 首个事件只能建立时间基准，还没有速度可言。
+        val baseline = accumulateVelocityWeightedSeekDrag(
+            weightedDragDistanceX = 0f,
+            dragAmountX = 0f,
+            uptimeMs = 0L,
+            containerWidthPx = 800f,
+            velocityEstimator = estimator,
+            velocityEnabled = true,
+            velocityMaxGain = 3f
+        )
+        assertEquals(1f, baseline.velocityGain)
+
+        var accumulation = accumulateVelocityWeightedSeekDrag(
+            weightedDragDistanceX = baseline.weightedDragDistanceX,
+            dragAmountX = 600f,
+            uptimeMs = 16L,
+            containerWidthPx = 800f,
+            velocityEstimator = estimator,
+            velocityEnabled = true,
+            velocityMaxGain = 3f
+        )
+        assertEquals(3f, accumulation.velocityGain, 0.001f, "a fast flick should hit the ceiling")
+
+        val distanceAfterFastFlick = accumulation.weightedDragDistanceX
+        accumulation = accumulateVelocityWeightedSeekDrag(
+            weightedDragDistanceX = distanceAfterFastFlick,
+            dragAmountX = 20f,
+            uptimeMs = 516L,
+            containerWidthPx = 800f,
+            velocityEstimator = estimator,
+            velocityEnabled = true,
+            velocityMaxGain = 3f
+        )
+
+        // 减速后倍率回落，但加权距离只能继续向前，绝不能把已经快进的进度倒着跳回去。
+        assertEquals(1f, accumulation.velocityGain, 0.001f)
+        assertTrue(
+            accumulation.weightedDragDistanceX > distanceAfterFastFlick,
+            "decelerating must not rewind the accumulated seek distance"
+        )
+    }
+
+    @Test
+    fun `weighted seek drag matches raw distance while velocity is disabled`() {
+        val estimator = SeekVelocityEstimator()
+        val accumulation = accumulateVelocityWeightedSeekDrag(
+            weightedDragDistanceX = 120f,
+            dragAmountX = 600f,
+            uptimeMs = 16L,
+            containerWidthPx = 800f,
+            velocityEstimator = estimator,
+            velocityEnabled = false,
+            velocityMaxGain = 4f
+        )
+
+        assertEquals(1f, accumulation.velocityGain)
+        assertEquals(720f, accumulation.weightedDragDistanceX)
+    }
+
+    @Test
+    fun `velocity estimator adopts instantaneous speed after a pause`() {
+        val estimator = SeekVelocityEstimator()
+        assertEquals(0f, estimator.addDrag(uptimeMs = 0L, dragAmountX = 100f))
+        // 同一时间戳的重复事件无法计算速度，保持原估计。
+        assertEquals(0f, estimator.addDrag(uptimeMs = 0L, dragAmountX = 900f))
+        // 短间隔走 EMA 平滑：0.35 * 2000 + 0.65 * 0
+        assertEquals(700f, estimator.addDrag(uptimeMs = 50L, dragAmountX = 100f), 0.001f)
+        // 间隔超过过期阈值（手指停顿）后直接采用新的瞬时速度，避免粘滞在高位。
+        assertEquals(100f, estimator.addDrag(uptimeMs = 1_050L, dragAmountX = 100f), 0.001f)
+
+        estimator.reset()
+        assertEquals(0f, estimator.velocity)
+    }
+
+    @Test
+    fun `velocity hint only appears once the gain actually leaves the dead zone`() {
+        assertFalse(shouldShowSeekVelocityHint(1f))
+        assertFalse(shouldShowSeekVelocityHint(1.02f))
+        assertTrue(shouldShowSeekVelocityHint(1.05f))
+    }
+
+    @Test
+    fun `velocity gain formats to one decimal`() {
+        assertEquals("1.0x", formatSeekVelocityGain(1f))
+        assertEquals("2.2x", formatSeekVelocityGain(2.2f))
+        assertEquals("4.0x", formatSeekVelocityGain(9f))
+    }
 }

@@ -105,6 +105,22 @@ internal val playbackSettingDirectory = listOf(
         { context -> com.android.purebilibili.core.store.SettingsManager.getSwipeSeekRelativePercent(context).map { "$it%" } },
         aliases = listOf("进度百分比", "快进比例", "快退比例", "滑动范围", "总时长比例", "25%", "50%", "90%", "100%")
     ),
+    PlaybackSettingItem(
+        "playback.swipe_seek_velocity_enabled",
+        "滑动快进速度判断",
+        SettingsRootCategory.FULLSCREEN_GESTURE,
+        SettingsSearchFocusIds.PLAYBACK_FULLSCREEN,
+        { context -> com.android.purebilibili.core.store.SettingsManager.getSwipeSeekVelocityEnabled(context).map { if (it) "开启" else "关闭" } },
+        aliases = listOf("滑得快", "甩动快进", "快进速度", "速度识别", "滑动速度", "快进幅度", "惯性快进")
+    ),
+    PlaybackSettingItem(
+        "playback.swipe_seek_velocity_max_gain",
+        "滑动快进最大倍率",
+        SettingsRootCategory.FULLSCREEN_GESTURE,
+        SettingsSearchFocusIds.PLAYBACK_FULLSCREEN,
+        { context -> com.android.purebilibili.core.store.SettingsManager.getSwipeSeekVelocityMaxGain(context).map { "${it.toInt()}倍" } },
+        aliases = listOf("2倍", "3倍", "4倍", "快进倍率", "加速上限")
+    ),
     PlaybackSettingItem("playback.auto_rotate_enabled", "自动横竖屏切换", SettingsRootCategory.FULLSCREEN_GESTURE, SettingsSearchFocusIds.PLAYBACK_FULLSCREEN, { context -> com.android.purebilibili.core.store.SettingsManager .getAutoRotateEnabled(context).map { if (it) "开启" else "关闭" } }),
     PlaybackSettingItem("playback.horizontal_adaptation_enabled", "横屏适配", SettingsRootCategory.FULLSCREEN_GESTURE, SettingsSearchFocusIds.PLAYBACK_FULLSCREEN, { context -> com.android.purebilibili.core.store.SettingsManager .getHorizontalAdaptationEnabled(context).map { if (it) "开启" else "关闭" } }),
     PlaybackSettingItem("playback.player_control_visibility.show_cast_button", "显示投屏按钮", SettingsRootCategory.FULLSCREEN_GESTURE, SettingsSearchFocusIds.PLAYBACK_FULLSCREEN, { context -> com.android.purebilibili.core.store.SettingsManager.getPlayerControlVisibilitySettings(context).map { if (it.showCastButton) "开启" else "关闭" } }),

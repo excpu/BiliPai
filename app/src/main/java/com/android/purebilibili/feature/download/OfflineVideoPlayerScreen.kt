@@ -77,7 +77,9 @@ import com.android.purebilibili.feature.video.ui.gesture.GestureLevelOverlayCont
 import com.android.purebilibili.feature.video.ui.gesture.resolveGestureLevelIcon
 import com.android.purebilibili.feature.video.ui.gesture.rememberGestureLevelOverlayStyle
 import com.android.purebilibili.feature.video.ui.section.VideoGestureMode
+import com.android.purebilibili.feature.video.ui.section.accumulateVelocityWeightedSeekDrag
 import com.android.purebilibili.feature.video.ui.section.resolveHorizontalSeekDeltaMs
+import com.android.purebilibili.feature.video.ui.section.SeekVelocityEstimator
 import com.android.purebilibili.danmaku.engine.DanmakuRenderView
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FastForward
@@ -182,6 +184,9 @@ fun OfflineVideoPlayerScreen(
     var startPosition by remember { mutableLongStateOf(0L) }
     var totalDragDistanceX by remember { mutableFloatStateOf(0f) }
     var totalDragDistanceY by remember { mutableFloatStateOf(0f) }
+    // 速度判断后的加权距离，仅用于 seek 幅度换算。
+    var weightedSeekDragDistanceX by remember { mutableFloatStateOf(0f) }
+    val seekVelocityEstimator = remember { SeekVelocityEstimator() }
     var startVolume by remember { mutableIntStateOf(0) }
     var startBrightness by remember { mutableFloatStateOf(0.5f) }
 
@@ -622,6 +627,8 @@ fun OfflineVideoPlayerScreen(
                     if (gestureMode == GestureMode.Seek) {
                         isGestureVisible = false
                         gestureMode = GestureMode.None
+                        weightedSeekDragDistanceX = 0f
+                        seekVelocityEstimator.reset()
                     }
                     if (playbackFailure != null) return@pointerInput
                     detectDragGestures(
@@ -640,6 +647,8 @@ fun OfflineVideoPlayerScreen(
                                 gestureMode = GestureMode.None
                                 totalDragDistanceY = 0f
                                 totalDragDistanceX = 0f
+                                weightedSeekDragDistanceX = 0f
+                                seekVelocityEstimator.reset()
 
                                 startVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
                                 startPosition = player.currentPosition
@@ -669,10 +678,14 @@ fun OfflineVideoPlayerScreen(
                             }
                             isGestureVisible = false
                             gestureMode = GestureMode.None
+                            weightedSeekDragDistanceX = 0f
+                            seekVelocityEstimator.reset()
                         },
                         onDragCancel = {
                             isGestureVisible = false
                             gestureMode = GestureMode.None
+                            weightedSeekDragDistanceX = 0f
+                            seekVelocityEstimator.reset()
                         },
                         onDrag = { change, dragAmount ->
                             if (!isGestureVisible && gestureMode == GestureMode.None) {
@@ -696,10 +709,22 @@ fun OfflineVideoPlayerScreen(
                                     GestureMode.Seek -> {
                                         totalDragDistanceX += dragAmount.x
                                         val duration = player.duration.coerceAtLeast(0L)
+                                        // 速度判断：按当前速度倍率加权本次位移后再累加，
+                                        // 慢滑保持精确微调，快甩成倍放大跳转幅度。
+                                        val seekDrag = accumulateVelocityWeightedSeekDrag(
+                                            weightedDragDistanceX = weightedSeekDragDistanceX,
+                                            dragAmountX = dragAmount.x,
+                                            uptimeMs = change.uptimeMillis,
+                                            containerWidthPx = size.width.toFloat(),
+                                            velocityEstimator = seekVelocityEstimator,
+                                            velocityEnabled = playerInteractionSettings.swipeSeekVelocityEnabled,
+                                            velocityMaxGain = playerInteractionSettings.swipeSeekVelocityMaxGain
+                                        )
+                                        weightedSeekDragDistanceX = seekDrag.weightedDragDistanceX
                                         val seekDelta = resolveHorizontalSeekDeltaMs(
                                             isFullscreen = isFullscreen,
                                             fullscreenSwipeSeekEnabled = playerInteractionSettings.fullscreenSwipeSeekEnabled,
-                                            totalDragDistanceX = totalDragDistanceX,
+                                            totalDragDistanceX = weightedSeekDragDistanceX,
                                             containerWidthPx = size.width.toFloat(),
                                             fullscreenSwipeSeekSeconds = playerInteractionSettings.fullscreenSwipeSeekSeconds,
                                             inlineSwipeSeekSeconds = playerInteractionSettings.inlineSwipeSeekSeconds,

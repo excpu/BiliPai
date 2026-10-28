@@ -195,4 +195,39 @@ class PlayerInteractionSettingsMappingPolicyTest {
 
         assertEquals(TabletCommentPanelWidthPreset.STANDARD, result.tabletCommentPanelWidthPreset)
     }
+
+    @Test
+    fun swipeSeekVelocity_defaultsKeepLegacyDistanceOnlyBehaviour() {
+        val result = mapPlayerInteractionSettingsFromPreferences(
+            mutablePreferencesOf()
+        )
+
+        assertFalse(result.swipeSeekVelocityEnabled)
+        assertEquals(3f, result.swipeSeekVelocityMaxGain)
+    }
+
+    @Test
+    fun swipeSeekVelocityMaxGain_normalizesOutOfRangeAndNonFiniteValues() {
+        val gainKey = floatPreferencesKey("swipe_seek_velocity_max_gain")
+        val cases = mapOf(
+            0.5f to 1f,
+            2f to 2f,
+            3f to 3f,
+            5f to 4f,
+            Float.NaN to 3f,
+            Float.POSITIVE_INFINITY to 3f
+        )
+
+        for ((stored, expected) in cases) {
+            val result = mapPlayerInteractionSettingsFromPreferences(
+                mutablePreferencesOf(gainKey to stored)
+            )
+            assertEquals(expected, result.swipeSeekVelocityMaxGain, "stored value $stored")
+        }
+
+        val enabled = mapPlayerInteractionSettingsFromPreferences(
+            mutablePreferencesOf(booleanPreferencesKey("swipe_seek_velocity_enabled") to true)
+        )
+        assertTrue(enabled.swipeSeekVelocityEnabled)
+    }
 }

@@ -132,7 +132,9 @@ import com.android.purebilibili.feature.video.ui.section.shouldKeepVideoPlayback
 import com.android.purebilibili.feature.video.ui.section.shouldShowLongPressSpeedFeedback
 import com.android.purebilibili.feature.video.ui.section.shouldShowLongPressSpeedHintCloseButton
 import com.android.purebilibili.feature.video.ui.section.shouldUseTextureSurfaceForFlip
+import com.android.purebilibili.feature.video.ui.section.accumulateVelocityWeightedSeekDrag
 import com.android.purebilibili.feature.video.ui.section.resolveHorizontalSeekDeltaMs
+import com.android.purebilibili.feature.video.ui.section.SeekVelocityEstimator
 import com.android.purebilibili.feature.video.usecase.seekPlayerFromUserAction
 import com.android.purebilibili.feature.video.usecase.togglePlayerPlaybackFromUserAction
 import androidx.media3.common.VideoSize
@@ -3158,11 +3160,15 @@ private fun VideoPageItem(
                 playerInteractionSettings
             ) {
                 var totalDragDistanceX = 0f
+                var weightedSeekDragDistanceX = 0f
+                val seekVelocityEstimator = SeekVelocityEstimator()
                 try {
                     detectHorizontalDragGestures(
                         onDragStart = {
                             isSeekGesture = false
                             totalDragDistanceX = 0f
+                            weightedSeekDragDistanceX = 0f
+                            seekVelocityEstimator.reset()
                             if (
                                 isCurrentPage &&
                                 playerGesturesEnabled &&
@@ -3185,19 +3191,34 @@ private fun VideoPageItem(
                             } finally {
                                 isSeekGesture = false
                                 totalDragDistanceX = 0f
+                                weightedSeekDragDistanceX = 0f
+                                seekVelocityEstimator.reset()
                             }
                         },
                         onDragCancel = {
                             isSeekGesture = false
                             totalDragDistanceX = 0f
+                            weightedSeekDragDistanceX = 0f
+                            seekVelocityEstimator.reset()
                         },
-                        onHorizontalDrag = { _, dragAmount ->
+                        onHorizontalDrag = { change, dragAmount ->
                             if (isCurrentPage && isSeekGesture && progressState.duration > 0L) {
                                 totalDragDistanceX += dragAmount
+                                // 速度判断：加权后的虚拟距离用于换算 seek 幅度，原始距离仍保留用于调试。
+                                val seekDrag = accumulateVelocityWeightedSeekDrag(
+                                    weightedDragDistanceX = weightedSeekDragDistanceX,
+                                    dragAmountX = dragAmount,
+                                    uptimeMs = change.uptimeMillis,
+                                    containerWidthPx = size.width.toFloat(),
+                                    velocityEstimator = seekVelocityEstimator,
+                                    velocityEnabled = playerInteractionSettings.swipeSeekVelocityEnabled,
+                                    velocityMaxGain = playerInteractionSettings.swipeSeekVelocityMaxGain
+                                )
+                                weightedSeekDragDistanceX = seekDrag.weightedDragDistanceX
                                 val seekDelta = resolveHorizontalSeekDeltaMs(
                                     isFullscreen = true,
                                     fullscreenSwipeSeekEnabled = playerInteractionSettings.fullscreenSwipeSeekEnabled,
-                                    totalDragDistanceX = totalDragDistanceX,
+                                    totalDragDistanceX = weightedSeekDragDistanceX,
                                     containerWidthPx = size.width.toFloat(),
                                     fullscreenSwipeSeekSeconds = playerInteractionSettings.fullscreenSwipeSeekSeconds,
                                     inlineSwipeSeekSeconds = playerInteractionSettings.inlineSwipeSeekSeconds,

@@ -650,6 +650,136 @@ private fun resolveConfiguredSeekDeltaMs(
     return rawDeltaMs.coerceIn(-maxDeltaMs, maxDeltaMs)
 }
 
+/**
+ * 横滑快进的「速度判断」：滑得越快，每像素换算出的时间越多。
+ *
+ * 速度单位用「几个播放器宽度/秒」而不是裸 px/s，这样不同分辨率、不同尺寸的设备
+ * （竖屏窄容器 vs 横屏宽容器）手感一致，也不会因为 dpi 差异需要单独调参。
+ *
+ * 低于 [VIDEO_PLAYER_SEEK_VELOCITY_DEAD_ZONE_WIDTHS_PER_SEC] 的死区内恒为 1f，
+ * 保证慢滑仍然是原来那种精确微调，不会被速度逻辑干扰。
+ */
+internal const val VIDEO_PLAYER_SEEK_VELOCITY_DEAD_ZONE_WIDTHS_PER_SEC = 0.25f
+
+/** 死区之上的加速斜率：每多滑 1 个「屏宽/秒」，倍率增加 1.6。 */
+internal const val VIDEO_PLAYER_SEEK_VELOCITY_GAIN_SLOPE = 1.6f
+
+/** 倍率硬上限，防止设置值异常时一划飞出整个视频。 */
+internal const val VIDEO_PLAYER_SEEK_VELOCITY_GAIN_HARD_CAP = 4f
+
+internal fun resolveSeekVelocityGain(
+    velocityPxPerSec: Float,
+    containerWidthPx: Float,
+    enabled: Boolean,
+    maxGain: Float
+): Float {
+    if (!enabled) return 1f
+    if (containerWidthPx <= 0f || !containerWidthPx.isFinite()) return 1f
+    if (!velocityPxPerSec.isFinite()) return 1f
+    val gainCeiling = maxGain.coerceIn(1f, VIDEO_PLAYER_SEEK_VELOCITY_GAIN_HARD_CAP)
+    val widthsPerSec = abs(velocityPxPerSec) / containerWidthPx
+    if (widthsPerSec <= VIDEO_PLAYER_SEEK_VELOCITY_DEAD_ZONE_WIDTHS_PER_SEC) return 1f
+    val rawGain = 1f +
+        (widthsPerSec - VIDEO_PLAYER_SEEK_VELOCITY_DEAD_ZONE_WIDTHS_PER_SEC) *
+        VIDEO_PLAYER_SEEK_VELOCITY_GAIN_SLOPE
+    return rawGain.coerceIn(1f, gainCeiling)
+}
+
+/**
+ * 单次横滑手势的速度估计器。
+ *
+ * 单个 onDrag 事件的瞬时速度噪声很大（丢帧、手指停顿都会造成尖峰），直接用它会让
+ * 倍率疯狂跳动、进度来回抖。这里做两件事：
+ * 1. EMA 平滑抑制单帧尖峰；一旦事件间隔超过 [staleThresholdMs]（手指明显停顿），
+ *    旧估计直接作废并采用新的瞬时速度，避免倍率粘滞在高位。
+ * 2. 只输出速度，不直接改 seek 目标，调用方把它换算成倍率后乘进「加权虚拟距离」即可。
+ */
+internal class SeekVelocityEstimator(
+    private val smoothingAlpha: Float = 0.35f,
+    /** 超过该毫秒数没有新的拖动事件，认为手指已停，丢弃过期的旧估计。 */
+    private val staleThresholdMs: Long = 90L
+) {
+    private var velocityPxPerSec: Float = 0f
+    private var lastEventUptimeMs: Long = Long.MIN_VALUE
+
+    val velocity: Float
+        get() = velocityPxPerSec
+
+    fun reset() {
+        velocityPxPerSec = 0f
+        lastEventUptimeMs = Long.MIN_VALUE
+    }
+
+    /**
+     * 记录一次拖动事件并返回平滑后的水平速度（px/s，带符号）。
+     *
+     * @param uptimeMs 事件时间戳（PointerInputChange.uptimeMillis）
+     * @param dragAmountX 本次事件的横向位移
+     */
+    fun addDrag(uptimeMs: Long, dragAmountX: Float): Float {
+        if (!dragAmountX.isFinite()) return velocityPxPerSec
+        val previousUptime = lastEventUptimeMs
+        lastEventUptimeMs = uptimeMs
+        // 同一时刻的重复事件（或时间戳回退）无法计算速度，保持原估计。
+        val elapsedMs = if (previousUptime == Long.MIN_VALUE) 0L else uptimeMs - previousUptime
+        if (elapsedMs <= 0L) return velocityPxPerSec
+        val instantPxPerSec = dragAmountX / elapsedMs * 1000f
+        if (!instantPxPerSec.isFinite()) return velocityPxPerSec
+        velocityPxPerSec = if (elapsedMs >= staleThresholdMs.coerceAtLeast(1L)) {
+            // 手指明显停顿：旧估计已过期，直接采用新速度，避免倍率粘滞在高位。
+            instantPxPerSec
+        } else {
+            val alpha = smoothingAlpha.coerceIn(0.05f, 1f)
+            alpha * instantPxPerSec + (1f - alpha) * velocityPxPerSec
+        }
+        return velocityPxPerSec
+    }
+}
+
+/** 一次拖动事件后的加权距离与当前倍率，倍率同时用于进度提示。 */
+internal data class SeekDragAccumulation(
+    val weightedDragDistanceX: Float,
+    val velocityGain: Float
+)
+
+/**
+ * 把本次位移换算成「加权虚拟距离」并更新速度估计。
+ *
+ * 关键：倍率必须作用在**增量**上再累加，而不是乘在累积距离上。否则中途减速时倍率变小，
+ * 已走过的进度会倒着跳回去。返回的加权距离可直接喂给 [resolveHorizontalSeekDeltaMs]，
+ * 后者签名与「固定秒数 / 不限制 / 相对时长」三种模式都无需改动。
+ */
+internal fun accumulateVelocityWeightedSeekDrag(
+    weightedDragDistanceX: Float,
+    dragAmountX: Float,
+    uptimeMs: Long,
+    containerWidthPx: Float,
+    velocityEstimator: SeekVelocityEstimator,
+    velocityEnabled: Boolean,
+    velocityMaxGain: Float
+): SeekDragAccumulation {
+    val velocity = velocityEstimator.addDrag(uptimeMs = uptimeMs, dragAmountX = dragAmountX)
+    val gain = resolveSeekVelocityGain(
+        velocityPxPerSec = velocity,
+        containerWidthPx = containerWidthPx,
+        enabled = velocityEnabled,
+        maxGain = velocityMaxGain
+    )
+    return SeekDragAccumulation(
+        weightedDragDistanceX = weightedDragDistanceX + dragAmountX * gain,
+        velocityGain = gain
+    )
+}
+
+/** 当前倍率是否值得提示用户（死区内 1.0x 不显示）。 */
+internal fun shouldShowSeekVelocityHint(gain: Float): Boolean = gain > 1.02f
+
+internal fun formatSeekVelocityGain(gain: Float): String {
+    val clamped = gain.coerceIn(1f, VIDEO_PLAYER_SEEK_VELOCITY_GAIN_HARD_CAP)
+    val tenths = (clamped * 10f).roundToInt()
+    return "${tenths / 10}.${tenths % 10}x"
+}
+
 internal fun resolveRelativeSeekTargetPosition(
     currentPositionMs: Long,
     deltaMs: Long,

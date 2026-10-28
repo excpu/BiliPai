@@ -9,8 +9,12 @@ import com.android.purebilibili.feature.video.danmaku.rememberDanmakuManager
 import com.android.purebilibili.feature.video.danmaku.configureAsPassiveDanmakuOverlay
 import com.android.purebilibili.feature.video.playback.policy.shouldHoldPlaybackTransitionPosition
 import com.android.purebilibili.feature.video.player.MiniPlayerManager
+import com.android.purebilibili.feature.video.ui.section.accumulateVelocityWeightedSeekDrag
+import com.android.purebilibili.feature.video.ui.section.formatSeekVelocityGain
 import com.android.purebilibili.feature.video.ui.section.isInSeekCancelEscapeZone
 import com.android.purebilibili.feature.video.ui.section.resolveHorizontalSeekDeltaMs
+import com.android.purebilibili.feature.video.ui.section.SeekVelocityEstimator
+import com.android.purebilibili.feature.video.ui.section.shouldShowSeekVelocityHint
 import com.android.purebilibili.feature.video.ui.section.rebindPlayerSurfaceIfNeeded
 import com.android.purebilibili.feature.video.ui.section.shouldCommitGestureSeek
 import com.android.purebilibili.feature.video.ui.section.shouldKeepVideoPlaybackAwake
@@ -334,6 +338,10 @@ fun FullscreenPlayerOverlay(
     var gestureValue by remember { mutableFloatStateOf(0f) }
     var dragDelta by remember { mutableFloatStateOf(0f) }
     var dragVerticalDelta by remember { mutableFloatStateOf(0f) }
+    // 速度判断后的加权距离，仅用于 seek 幅度换算；方向判定仍用原始 dragDelta。
+    var weightedSeekDragDelta by remember { mutableFloatStateOf(0f) }
+    var seekVelocityGain by remember { mutableFloatStateOf(1f) }
+    val seekVelocityEstimator = remember { SeekVelocityEstimator() }
     var seekPreviewPosition by remember { mutableLongStateOf(0L) }
     var gestureSeekStartPosition by remember { mutableLongStateOf(0L) }
     var lastSeekHapticTargetMs by remember { mutableLongStateOf(0L) }
@@ -775,6 +783,9 @@ fun FullscreenPlayerOverlay(
                 if (gestureMode == FullscreenGestureMode.Seek) {
                     gestureMode = FullscreenGestureMode.None
                     seekCancelPending = false
+                    weightedSeekDragDelta = 0f
+                    seekVelocityGain = 1f
+                    seekVelocityEstimator.reset()
                 }
                 if (!gesturesEnabled) {
                     return@pointerInput
@@ -804,6 +815,9 @@ fun FullscreenPlayerOverlay(
                         lastInteractionTime = System.currentTimeMillis()
                         dragDelta = 0f
                         dragVerticalDelta = 0f
+                        weightedSeekDragDelta = 0f
+                        seekVelocityGain = 1f
+                        seekVelocityEstimator.reset()
                         swipeExitAccumulatedY = 0f
                         seekCancelPending = false
 
@@ -900,10 +914,23 @@ fun FullscreenPlayerOverlay(
                                 )
                             }
                             FullscreenGestureMode.Seek -> {
+                                // 速度判断：按当前速度倍率加权本次位移后再累加，
+                                // 慢滑保持精确微调，快甩成倍放大跳转幅度。
+                                val seekDrag = accumulateVelocityWeightedSeekDrag(
+                                    weightedDragDistanceX = weightedSeekDragDelta,
+                                    dragAmountX = dragAmount.x,
+                                    uptimeMs = change.uptimeMillis,
+                                    containerWidthPx = screenWidth,
+                                    velocityEstimator = seekVelocityEstimator,
+                                    velocityEnabled = playerInteractionSettings.swipeSeekVelocityEnabled,
+                                    velocityMaxGain = playerInteractionSettings.swipeSeekVelocityMaxGain
+                                )
+                                weightedSeekDragDelta = seekDrag.weightedDragDistanceX
+                                seekVelocityGain = seekDrag.velocityGain
                                 val seekDelta = resolveHorizontalSeekDeltaMs(
                                     isFullscreen = true,
                                     fullscreenSwipeSeekEnabled = playerInteractionSettings.fullscreenSwipeSeekEnabled,
-                                    totalDragDistanceX = dragDelta,
+                                    totalDragDistanceX = weightedSeekDragDelta,
                                     containerWidthPx = screenWidth,
                                     fullscreenSwipeSeekSeconds = playerInteractionSettings.fullscreenSwipeSeekSeconds,
                                     inlineSwipeSeekSeconds = playerInteractionSettings.inlineSwipeSeekSeconds,
@@ -1164,6 +1191,7 @@ fun FullscreenPlayerOverlay(
                 },
                 seekTime = if (gestureMode == FullscreenGestureMode.Seek) seekPreviewPosition else null,
                 duration = duration,
+                seekVelocityGain = seekVelocityGain,
                 hazeState = overlayHazeState,
                 // Level overlays (esp. MIUIX edge rails) need full-size host for side alignment.
                 modifier = if (gestureMode == FullscreenGestureMode.Seek) {
@@ -1668,6 +1696,7 @@ private fun GestureIndicator(
     value: Float,
     seekTime: Long?,
     duration: Long,
+    seekVelocityGain: Float = 1f,
     hazeState: HazeState? = null,
     modifier: Modifier = Modifier
 ) {
@@ -1703,6 +1732,15 @@ private fun GestureIndicator(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
+                // 速度判断生效时显示当前倍率，避免用户把「跳得多」误认为抖动。
+                if (shouldShowSeekVelocityHint(seekVelocityGain)) {
+                    AppText(
+                        text = "快进速度 ${formatSeekVelocityGain(seekVelocityGain)}",
+                        color = Color.White.copy(alpha = 0.8f),
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
             }
         }
     } else {

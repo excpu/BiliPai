@@ -45,6 +45,7 @@ internal fun PlayerSeekPreview(
     isPortraitFullscreen: Boolean,
     seekTargetTime: Long,
     startPosition: Long,
+    seekVelocityGain: Float = 1f,
     modifier: Modifier = Modifier,
 ) {
     if (visible) {
@@ -85,6 +86,18 @@ internal fun PlayerSeekPreview(
                     offsetX = 0f,
                     containerWidth = 0f,
                     placement = com.android.purebilibili.feature.video.ui.components.SeekPreviewBubblePlacement.Centered
+                )
+            }
+            // 速度判断生效时在预览下方显示当前倍率，避免用户把「跳得多」误认为抖动。
+            if (shouldShowSeekVelocityHint(seekVelocityGain)) {
+                AppText(
+                    text = "快进速度 ${formatSeekVelocityGain(seekVelocityGain)}",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
                 )
             }
         }
