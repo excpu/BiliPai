@@ -3218,7 +3218,7 @@ private fun MiuixBottomBar(
                             {
                                 BottomBarReminderBadge(
                                     badgeText = badgeText,
-                                    modifier = Modifier.offset(x = 8.dp),
+                                    modifier = Modifier.offset(x = 6.dp),
                                 )
                             }
                         }
@@ -4143,7 +4143,7 @@ private fun BiliPaiFloatingBottomBarChrome(
                                         icon = resolveSharedBottomBarIcon(item, currentItem == item, iconStyle),
                                         label = resolveBottomNavItemLabel(item, itemLabels),
                                         badge = badgeText?.let { text ->
-                                            { BottomBarReminderBadge(badgeText = text, modifier = Modifier.offset(x = 8.dp)) }
+                                            { BottomBarReminderBadge(badgeText = text, modifier = Modifier.offset(x = 6.dp)) }
                                         },
                                     )
                                 }
@@ -5384,9 +5384,9 @@ private fun BottomBarReminderBadgeAnchor(
                 badgeText = badgeText,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    // 圆的左缘越过图标右缘，避免数字徽标压住铃铛；不参与图标及文字的测量。
+                    // 徽标靠近图标右上角，利用字形光学边距保留间隙，不参与图标及文字的测量。
                     .offset(
-                        x = badgeSize + 1.dp,
+                        x = badgeSize - 1.dp,
                         y = -badgeSize / 2f - if (floatingCompact) 0.dp else 1.dp,
                     ),
             )

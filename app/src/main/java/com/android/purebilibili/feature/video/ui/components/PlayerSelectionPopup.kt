@@ -183,20 +183,29 @@ fun PlayerSelectionPopup(
                             indication = null,
                         ) { onDismissRequest() }
                 )
+                // 缩放原点必须跟着实际展开方向：向上展开钉底边，向下展开钉顶边，
+                // 否则往下展开时动画会围着底边往上收，看起来像反了。
+                val menuHeightForDirection = menuMeasuredSize.height.takeIf { it > 0 }
+                    ?: menuHeightPx
+                val aboveSpaceForDirection = miuixAnchor.top - viewport.bounds.top
+                val scaleOrigin = if (menuHeightForDirection <= aboveSpaceForDirection) {
+                    TransformOrigin(0.5f, 1f)
+                } else {
+                    TransformOrigin(0.5f, 0f)
+                }
                 AnimatedVisibility(
                     visible = menuVisible,
-                    // 倍速菜单的观感是「整块从小变大、底边钉住」：
-                    // 用 scaleIn/scaleOut 把缩放原点设在底部中心即可（宽高同时变化）。
-                    // 缩放不影响布局尺寸，所以定位只需把菜单底边放在锚点上方。
+                    // 倍速菜单的观感是「整块从小变大」：用 scaleIn/scaleOut，
+                    // 宽度和高度同时变化。
                     enter = fadeIn(tween(120)) + scaleIn(
                         animationSpec = tween(160),
                         initialScale = 0.85f,
-                        transformOrigin = TransformOrigin(0.5f, 1f),
+                        transformOrigin = scaleOrigin,
                     ),
                     exit = fadeOut(tween(90)) + scaleOut(
                         animationSpec = tween(90),
                         targetScale = 0.85f,
-                        transformOrigin = TransformOrigin(0.5f, 1f),
+                        transformOrigin = scaleOrigin,
                     ),
                     modifier = Modifier
                         .align(Alignment.TopStart)
@@ -227,7 +236,9 @@ fun PlayerSelectionPopup(
                         // 容器若用 surfaceContainerHigh 就会露出来变成阶梯状色块；
                         // 这里跟行背景取同一档色，视觉上才是一整块。
                         color = MaterialTheme.colorScheme.surfaceContainer,
-                        shape = AppShapes.container(ContainerLevel.Card),
+                        // 用设计系统的语义档位而不是硬编码：MiuixAlignedShapes.extraSmall
+                        // 正是 8dp，Material3 下跟随它自己的 extraSmall，改规范时会一起变。
+                        shape = MaterialTheme.shapes.extraSmall,
                         border = BorderStroke(
                             width = 0.5.dp,
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),

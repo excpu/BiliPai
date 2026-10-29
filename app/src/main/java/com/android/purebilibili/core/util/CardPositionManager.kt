@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import com.android.purebilibili.core.ui.transition.VideoCardSourceChromeSnapshot
 import com.android.purebilibili.core.ui.transition.VideoCardSourceLayout
+import com.android.purebilibili.core.ui.transition.ownsVideoCardSourceSnapshot
 import com.android.purebilibili.core.ui.transition.resolveVideoCardSourceLayout
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
@@ -136,6 +137,23 @@ object CardPositionManager {
 
     internal val lastClickedNativeCardBitmap: ImageBitmap?
         get() = nativeCardBitmap.takeIf { ownsNativeResources() }
+
+    // 导航防抖发生在卡片记录之后。被拒绝的相邻点击也会替换全局资源，
+    // 飞行详情必须用自身冻结的快照核对归属，不能直接借用“最后点击”的文字像素。
+    internal fun nativeVideoCardLayerFor(snapshot: VideoCardSourceChromeSnapshot?): GraphicsLayer? =
+        lastClickedNativeCardLayer.takeIf {
+            ownsVideoCardSourceSnapshot(snapshot, lastClickedVideoSourceChromeSnapshot)
+        }
+
+    internal fun nativeVideoCoverOverlayLayerFor(snapshot: VideoCardSourceChromeSnapshot?): GraphicsLayer? =
+        lastClickedNativeCoverOverlayLayer.takeIf {
+            ownsVideoCardSourceSnapshot(snapshot, lastClickedVideoSourceChromeSnapshot)
+        }
+
+    internal fun nativeVideoCardBitmapFor(snapshot: VideoCardSourceChromeSnapshot?): ImageBitmap? =
+        lastClickedNativeCardBitmap.takeIf {
+            ownsVideoCardSourceSnapshot(snapshot, lastClickedVideoSourceChromeSnapshot)
+        }
 
     /** Immutable pixel provenance survives metadata-only restoration of a parent source key. */
     internal var lastClickedWholeCardReturnSnapshot: WholeCardReturnSnapshot? by mutableStateOf(null)

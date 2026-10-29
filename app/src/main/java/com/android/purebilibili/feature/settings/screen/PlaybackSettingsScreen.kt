@@ -1772,9 +1772,9 @@ SettingsItemAnchor("playback.subtitle_auto_preference") {
                 icon = rememberSettingsSemanticIcon(SettingsIconRole.VIDEO_CONTENT_NOTICE),
                 title = playbackSettingTitle("playback.video_argue_msg_shown"),
                 subtitle = if (videoArgueMsgShown) {
-                    "在简介上方显示 UP 主的视频声明"
+                    "显示视频警告、争议信息及禁止转载声明"
                 } else {
-                    "关闭后：不再显示 UP 主设置的视频声明"
+                    "关闭后隐藏视频警告、争议信息及禁止转载声明"
                 },
                 checked = videoArgueMsgShown,
                 onCheckedChange = {

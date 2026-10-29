@@ -145,6 +145,7 @@ internal fun BiliPaiNavDisplayHost(
     programmaticBackDispatcher: BiliPaiProgrammaticBackDispatcher,
     preferWholeCardReturn: Boolean = false,
     onBack: () -> Unit,
+    onOpenCardContainer: (BiliPaiNavKey) -> Unit = { backStack.add(it) },
     onPrepareVideoCardSharedReturn: () -> Boolean = { false },
     pendingRelatedReturnCount: Int = 0,
     relatedReturnRequestId: Long = 0L,
@@ -218,18 +219,31 @@ internal fun BiliPaiNavDisplayHost(
     val liveContainerPageColor = rememberUpdatedState(
         com.android.purebilibili.feature.live.resolveLiveBiliPaiRoomColorTokens().baseBackgroundColor,
     )
+    val webContainerPageColor = rememberUpdatedState(androidx.compose.material3.MaterialTheme.colorScheme.surface)
+    val articleContainerPageColor = rememberUpdatedState(androidx.compose.material3.MaterialTheme.colorScheme.background)
     val liveContainerIsLightBackground = rememberUpdatedState(isLightBackground)
     val availableLiveContainerTransitions = remember(
         liveContainerSnapshot, videoSharedTransitionDurationMillis,
-        videoTransitionRealtimeBlurEnabled, navBlurMotionTierProvider,
+        videoTransitionRealtimeBlurEnabled, settingsContainerRealtimeBlurEnabled, navBlurMotionTierProvider,
     ) {
-        liveContainerSnapshot.mapValues { (_, source) ->
+        liveContainerSnapshot.mapValues { (target, source) ->
+            val articleTarget = target is BiliPaiNavKey.ArticleDetail || target is BiliPaiNavKey.DynamicDetail
+            val generalContainer = target is BiliPaiNavKey.Web || target is BiliPaiNavKey.Space || target is BiliPaiNavKey.BangumiDetail
             SettingsContainerTransition(
                 source = source,
-                pageColor = { liveContainerPageColor.value },
-                durationMillis = videoSharedTransitionDurationMillis.coerceAtLeast(1),
-                cardBackgroundEffectsEnabled = true,
-                realtimeBlurEnabled = videoTransitionRealtimeBlurEnabled,
+                pageColor = { when {
+                    target is BiliPaiNavKey.BangumiPlayer -> androidx.compose.ui.graphics.Color.Black
+                    articleTarget -> articleContainerPageColor.value
+                    generalContainer -> webContainerPageColor.value
+                    else -> liveContainerPageColor.value
+                } },
+                durationMillis = if (generalContainer) SETTINGS_CONTAINER_DURATION_MILLIS
+                    else videoSharedTransitionDurationMillis.coerceAtLeast(1),
+                // 专栏使用视频卡片的导航时钟、曲线与景深，正文仍保持自己的页面底色。
+                videoCardMotionEnabled = articleTarget,
+                cardBackgroundEffectsEnabled = articleTarget || target is BiliPaiNavKey.Live || target is BiliPaiNavKey.LiveAreaDetail,
+                realtimeBlurEnabled = if (generalContainer) settingsContainerRealtimeBlurEnabled
+                    else videoTransitionRealtimeBlurEnabled,
                 isLightBackground = { liveContainerIsLightBackground.value },
                 blurMotionTierProvider = navBlurMotionTierProvider,
             )
@@ -237,7 +251,7 @@ internal fun BiliPaiNavDisplayHost(
     }
     val liveContainerTransitions = if (!liveContainerEnabled) emptyMap() else
         availableLiveContainerTransitions.filterKeys { target ->
-            (target is BiliPaiNavKey.Live || target is BiliPaiNavKey.LiveAreaDetail) && isSettingsContainerBoundary(
+            (target is BiliPaiNavKey.BangumiPlayer || target is BiliPaiNavKey.Live || target is BiliPaiNavKey.LiveAreaDetail || target is BiliPaiNavKey.ArticleDetail || target is BiliPaiNavKey.DynamicDetail || target is BiliPaiNavKey.Web || target is BiliPaiNavKey.Space || target is BiliPaiNavKey.BangumiDetail) && isSettingsContainerBoundary(
                 enabled = true,
                 backStack = stackSnapshot,
                 target = target,
@@ -938,6 +952,10 @@ internal fun BiliPaiNavDisplayHost(
                     onBack = performBack,
                 ) {
                     CompositionLocalProvider(
+                        com.android.purebilibili.core.ui.LocalNativeCardNavigate provides onOpenCardContainer,
+                        com.android.purebilibili.core.ui.LocalNativeArticleCardMotionEnabled provides liveContainerEnabled,
+                        com.android.purebilibili.feature.space.LocalShopContainerMotionEnabled provides
+                            (liveContainerEnabled && settingsContainerMorphEnabled),
                         com.android.purebilibili.feature.live.LocalLiveCardContainerSources provides
                             (if (liveContainerEnabled) liveContainerSources else null),
                         com.android.purebilibili.feature.live.LocalLiveCardContainerOwner provides key,

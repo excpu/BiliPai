@@ -487,32 +487,20 @@ private fun BoxScope.VideoSubtitleOverlayHost(
             cid = success?.info?.cid ?: 0L,
         )
     }
-    val hasSubtitleCues = remember(uiState) {
-        val success = uiState as? VideoPlaybackUiState.Success ?: return@remember false
-        success.subtitlePrimaryCues.isNotEmpty() || success.subtitleSecondaryCues.isNotEmpty()
-    }
-    val subtitleLifecycle = LocalLifecycleOwner.current.lifecycle
-    // Keep the fast playback-position read inside this restart scope so the player, video
-    // surface and danmaku hosts are not recomposed on every subtitle tick.
-    val subtitlePositionMs by produceState(
-        player.currentPosition.coerceAtLeast(0L),
-        player,
-        subtitlePollingIdentity,
-        subtitleFeatureEnabled,
-        hasSubtitleCues,
-        subtitleLifecycle,
+    val subtitleTimeline = remember(
+        subtitleOwner.subtitlePrimaryCues, subtitleOwner.subtitleSecondaryCues, timingOffsetMs,
     ) {
-        value = player.currentPosition.coerceAtLeast(0L)
-        if (!subtitleFeatureEnabled || !hasSubtitleCues) {
-            return@produceState
-        }
-        subtitleLifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            while (isActive) {
-                value = player.currentPosition.coerceAtLeast(0L)
-                delay(if (player.isPlaying) 120L else 1500L)
-            }
-        }
+        com.android.purebilibili.feature.video.subtitle.subtitlePositionTimeline(
+            subtitleOwner.subtitlePrimaryCues, subtitleOwner.subtitleSecondaryCues, timingOffsetMs,
+        )
     }
+    val subtitlePositionMs by com.android.purebilibili.core.player.rememberPlaybackPosition(
+        player = player,
+        identity = subtitlePollingIdentity,
+        enabled = subtitleFeatureEnabled &&
+            (subtitleOwner.subtitlePrimaryCues.isNotEmpty() || subtitleOwner.subtitleSecondaryCues.isNotEmpty()),
+        timeline = subtitleTimeline,
+    )
     val subtitlePrimaryRawText = remember(
         uiState,
         subtitleFeatureEnabled,

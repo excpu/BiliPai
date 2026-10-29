@@ -6541,6 +6541,19 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
         }
 
         viewModelScope.launch {
+            val initialSecondaryTrack = secondaryTrack
+            val secondaryDeferred = async {
+                initialSecondaryTrack?.let { track ->
+                    VideoRepository.getSubtitleCues(
+                        subtitleUrl = track.subtitleUrl,
+                        bvid = bvid,
+                        cid = cid,
+                        subtitleId = track.id,
+                        subtitleIdStr = track.idStr,
+                        subtitleLan = track.lan
+                    )
+                } ?: Result.success(emptyList())
+            }
             var primaryResult = VideoRepository.getSubtitleCues(
                 subtitleUrl = primaryTrack.subtitleUrl,
                 bvid = bvid,
@@ -6549,17 +6562,38 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
                 subtitleIdStr = primaryTrack.idStr,
                 subtitleLan = primaryTrack.lan
             )
-            var secondaryResult = secondaryTrack?.let { track ->
-                VideoRepository.getSubtitleCues(
-                    subtitleUrl = track.subtitleUrl,
-                    bvid = bvid,
-                    cid = cid,
-                    subtitleId = track.id,
-                    subtitleIdStr = track.idStr,
-                    subtitleLan = track.lan
-                )
-            } ?: Result.success(emptyList())
             var activeTrackMetas = trackMetas
+
+            // 主轨就绪即可阅读；副轨下载或鉴权重试不阻塞主轨首次显示。
+            fun publishPrimaryIfReady() {
+                val cues = primaryResult.getOrNull()?.takeIf { it.isNotEmpty() } ?: return
+                _uiState.update { state ->
+                    if (state is VideoPlaybackUiState.Success &&
+                        state.info.bvid == bvid && state.info.cid == cid &&
+                        shouldApplySubtitleLoadResult(
+                            activeSubtitleToken = subtitleLoadToken,
+                            resultSubtitleToken = currentToken,
+                            expectedBvid = bvid,
+                            expectedCid = cid,
+                            currentBvid = currentBvid,
+                            currentCid = currentCid
+                        )
+                    ) {
+                        state.copy(
+                            subtitleEnabled = true,
+                            subtitleOwnerBvid = bvid,
+                            subtitleOwnerCid = cid,
+                            subtitlePrimaryTrackKey = primaryTrackKey,
+                            subtitlePrimaryLanguage = primaryTrack.lan,
+                            subtitlePrimaryLikelyAi = isLikelyAiSubtitleTrack(primaryTrack),
+                            subtitlePrimaryCues = cues,
+                            subtitleTracks = activeTrackMetas
+                        )
+                    } else state
+                }
+            }
+            publishPrimaryIfReady()
+            var secondaryResult = secondaryDeferred.await()
 
             val shouldRetryWithFreshPlayerInfo = shouldRetrySubtitleLoadWithPlayerInfo(
                 primaryResult.exceptionOrNull()?.message
@@ -6603,6 +6637,7 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
                             subtitleIdStr = primaryTrack.idStr,
                             subtitleLan = primaryTrack.lan
                         )
+                        publishPrimaryIfReady()
                     }
 
                     if (secondaryTrack != null) {

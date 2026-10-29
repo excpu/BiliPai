@@ -31,6 +31,7 @@ import com.android.purebilibili.core.ui.components.AppGlassMenuSource
 import com.android.purebilibili.core.ui.components.appGlassMenuSource
 import com.android.purebilibili.core.ui.components.rememberAppGlassMenuSource
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -190,7 +191,8 @@ internal val LocalRelatedVideoCardLayout = androidx.compose.runtime.staticCompos
 
 internal const val RELATED_VIDEO_SKELETON_ROW_COUNT = 3
 
-
+/** 点击前同步读取父页的跳转锁，避免被拒绝的连点先覆盖来源卡片快照。 */
+internal val LocalRelatedVideoNavigationAllowed = compositionLocalOf<() -> Boolean> { { true } }
 
 /**
  * 相关推荐单列横卡：点击时冻结来源标识、几何与 chrome，供整卡 Morph 及逐层返回。
@@ -267,7 +269,9 @@ fun RelatedVideoItem(
             .diskCacheKey(stationaryCoverUrl)
             .build()
     }
-    val triggerRelatedVideoClick = {
+    val relatedVideoNavigationAllowed = LocalRelatedVideoNavigationAllowed.current
+    val triggerRelatedVideoClick = relatedClick@{
+        if (!relatedVideoNavigationAllowed()) return@relatedClick
         cardCoordinatesRef.value
             ?.takeIf { it.isAttached }
             ?.videoCardSourceBoundsInRoot()

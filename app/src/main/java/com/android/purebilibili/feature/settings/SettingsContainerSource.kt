@@ -51,6 +51,7 @@ internal class SettingsContainerSource(
     // 来源图层随主题重录，底色也必须同步，不能保留点击时的配色。
     var color by mutableStateOf(color)
     // 当次捕获拥有开合状态，主题或嵌套入口更新转场对象时不能重置。
+    var previewImageUrl: String? = null
     var hasOpened = false
     var companions: List<SettingsContainerCompanion> = emptyList()
     var returnInFlight: () -> Boolean = { false }

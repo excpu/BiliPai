@@ -82,6 +82,8 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.overscroll
+import androidx.compose.foundation.withoutVisualEffect
 import androidx.compose.foundation.rememberOverscrollEffect
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -134,6 +136,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
@@ -382,7 +386,12 @@ fun SpaceScreen(
     var repostDynamicId by remember { mutableStateOf<String?>(null) }
     val spaceThemeConfig = LocalAppThemeConfig.current
     // 交互以用户开关为边界，不跟随模糊性能降级切换，避免滚动过程中改变吸顶规则。
-    val pinContentTabs = shouldPinSpaceContentTabs(spaceThemeConfig.progressiveTopBlurEnabled)
+    // 纯色与渐进模糊共用固定顶栏下的连续滚动布局；两种效果都关闭时保留原有折叠路径。
+    // 此处只决定页面滚动，不改变玻璃、MD3 或 Miuix 的材质参数。
+    val pinContentTabs = shouldPinSpaceContentTabs(
+        progressiveTopBlurEnabled = spaceThemeConfig.progressiveTopBlurEnabled,
+        headerBlurEnabled = spaceThemeConfig.headerBlurEnabled,
+    )
     val spaceDensity = LocalDensity.current
     val hazeState = if (
         spaceThemeConfig.headerBlurEnabled &&
@@ -1338,8 +1347,26 @@ private fun SpaceContent(
     // 各标签页各自持有头部，但轮播页码属于同一个用户空间。
     var sharedBannerPage by remember(state.userInfo.mid) { mutableStateOf(0) }
     val contentDensity = LocalDensity.current
+    val shopContext = LocalContext.current
+    val showMemberShop by remember(shopContext) {
+        com.android.purebilibili.core.store.ContentDisplaySettings.observe(
+            shopContext, com.android.purebilibili.core.store.ContentDisplaySettings.SHOW_MEMBER_SHOP
+        )
+    }.collectAsStateWithLifecycle(initialValue = true)
+    LaunchedEffect(showMemberShop, selectedMainTab) {
+        if (!showMemberShop && selectedMainTab == SpaceMainTab.SHOP) onMainTabSelected(SpaceMainTab.HOME)
+    }
+    var shopReload by remember(state.userInfo.mid) { mutableIntStateOf(0) }
+    val shopResult by produceState<Result<com.android.purebilibili.data.repository.SpaceShopPage>?>(
+        null, state.userInfo.mid, selectedMainTab == SpaceMainTab.SHOP && showMemberShop, shopReload,
+    ) {
+        if (selectedMainTab == SpaceMainTab.SHOP && showMemberShop) {
+            value = null
+            value = com.android.purebilibili.data.repository.SpaceShopRepository.load(state.userInfo.mid)
+        }
+    }
     val displayedMainTabs = resolveSpaceDisplayedMainTabs(
-        tabs = state.mainTabs,
+        tabs = state.mainTabs.filter { showMemberShop || it.tab != SpaceMainTab.SHOP },
         selectedTab = selectedMainTab,
         hasCheese = state.hasCheeseTab || state.cheeseItems.isNotEmpty(),
     )
@@ -1568,12 +1595,28 @@ private fun SpaceContent(
         // 手势边界在回调中读取测量值，不让滚动逐帧触发组合。
         val pinnedTabsHeights = remember { mutableMapOf<SpaceMainTab, Int>() }
         val sharedGlassTabs = LocalAppThemeConfig.current.liquidGlassEnabled
+        // 玻璃主栏位于列表外，回弹必须作用于二者的共同父层，避免列表拉伸而 dock 原地漂浮。
+        // 原生 MD3/Miuix 仍由各页网格绘制回弹；标签吸顶模式继续禁用回弹。
+        val sharedSpaceOverscrollEffect = rememberOverscrollEffect()
+        val sharedGridOverscrollEffect = remember(sharedSpaceOverscrollEffect) {
+            sharedSpaceOverscrollEffect?.withoutVisualEffect()
+        }
         val pagerDragSource = remember(pagerState) {
             androidx.compose.foundation.interaction.MutableInteractionSource()
         }
         val pagerDragging by pagerDragSource.collectIsDraggedAsState()
+        com.android.purebilibili.core.ui.AdaptivePullToRefreshBox(
+            isRefreshing = selectedMainTab == SpaceMainTab.SHOP && shopResult == null,
+            onRefresh = { shopReload++ },
+            enabled = selectedMainTab == SpaceMainTab.SHOP,
+            indicatorTopInset = chromeTopInset,
+            modifier = Modifier.fillMaxSize(),
+        ) {
         SpaceMainTabsHost(
             sharedGlassTabs = sharedGlassTabs,
+            modifier = if (sharedGlassTabs && !pinContentTabs) {
+                Modifier.overscroll(sharedSpaceOverscrollEffect)
+            } else Modifier,
             position = {
                 val currentGrid = pageGridStates.getValue(displayedMainTabs[pagerState.currentPage].tab)
                 val info = currentGrid.layoutInfo
@@ -1803,7 +1846,11 @@ private fun SpaceContent(
         LazyVerticalStaggeredGrid(
             columns = StaggeredGridCells.Fixed(gridColumns),
             state = gridState,
-            overscrollEffect = if (pinContentTabs) null else spaceOverscrollEffect,
+            overscrollEffect = when {
+                pinContentTabs -> null
+                sharedGlassTabs -> sharedGridOverscrollEffect
+                else -> spaceOverscrollEffect
+            },
             modifier = Modifier
                 .fillMaxSize()
                 .homeFeedPinchZoom(
@@ -2878,6 +2925,31 @@ private fun SpaceContent(
                 }
             }
 
+            SpaceMainTab.SHOP -> {
+                val page = shopResult?.getOrNull()
+                if (page == null) {
+                    item(span = StaggeredGridItemSpan.FullLine) {
+                        Column(Modifier.fillMaxWidth().padding(24.dp)) {
+                            AppText(if (shopResult == null) "正在加载小店…" else shopResult?.exceptionOrNull()?.message ?: "小店加载失败")
+                            if (shopResult != null) com.android.purebilibili.core.ui.components.AppTextButton(onClick = { shopReload++ }) { AppText("重试") }
+                        }
+                    }
+                } else {
+                    items(page.products.size) { index -> SpaceShopCard(page.products[index], onWebClick) }
+                    item(span = StaggeredGridItemSpan.FullLine) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            if (page.products.isEmpty()) AppText("小店暂无商品")
+                            com.android.purebilibili.core.ui.components.AppTextButton(onClick = { shopReload++ }) { AppText("刷新小店") }
+                            page.moreUrl?.let { url ->
+                                com.android.purebilibili.core.ui.components.AppButton(onClick = { onWebClick(url, "小店") }) { AppText(page.moreLabel) }
+                            }
+                        }
+                    }
+                }
+            }
             SpaceMainTab.CHEESE -> {
                 if (state.isLoadingCheese && state.cheeseItems.isEmpty()) {
                     // 骨架行与真实行同 span、同 contentType，并各自挂 animateItem：
@@ -3005,6 +3077,7 @@ private fun SpaceContent(
         } // 每页内容及吸顶层
         } // HorizontalPager
         } // SpaceMainTabsHost
+        } // 小店刷新容器
 
 
     }
@@ -3308,6 +3381,43 @@ private fun SpaceHeader(
                         modifier = Modifier.align(Alignment.BottomEnd),
                         badgeSize = 20.dp,
                     )
+
+                    val liveRoom = userInfo.liveRoom
+                    val liveRoomId = liveRoom?.roomId?.takeIf { it > 0L }
+                        ?: liveRoom?.url?.substringBefore('?')?.trimEnd('/')
+                            ?.substringAfterLast('/')?.toLongOrNull()
+                    if (liveRoom?.liveStatus == 1 && liveRoomId != null && liveRoomId > 0L) {
+                        val headerVisible by remember(collapseFractionProvider) {
+                            derivedStateOf { collapseFractionProvider() < 1f }
+                        }
+                        // 头像预览、隐藏的 Pager 页与完全折叠的头部不运行音柱。
+                        // 音柱组件另行统一控制视口、窗口焦点、前台生命周期与减少动态效果。
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .size(28.dp)
+                                .background(MaterialTheme.colorScheme.primary, CircleShape)
+                                .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
+                                .clip(CircleShape)
+                                .appActionClickable(enabled = !avatarHidden) {
+                                    onLiveClick(
+                                        liveRoomId,
+                                        liveRoom.title.ifBlank { userInfo.name },
+                                        userInfo.name,
+                                    )
+                                }
+                                .padding(7.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            com.android.purebilibili.core.ui.components.PlaybackBarsIndicator(
+                                isPlaying = bannerPageActive && !contentPageMoving &&
+                                    headerVisible && !avatarHidden && !topPhotoHidden,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                contentDescription = "正在直播，点击进入直播间",
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(16.dp))
@@ -3316,7 +3426,6 @@ private fun SpaceHeader(
                     SpaceHeaderIdentityInfo(
                         userInfo = userInfo,
                         officialBadge = officialBadge,
-                        onLiveClick = onLiveClick,
                         modifier = Modifier
                             .weight(1f)
                             .graphicsLayer { alpha = 1f - collapseFractionProvider() }
@@ -3386,7 +3495,6 @@ private fun SpaceHeader(
             SpaceHeaderIdentityInfo(
                 userInfo = userInfo,
                 officialBadge = officialBadge,
-                onLiveClick = onLiveClick,
                 modifier = Modifier
                     .fillMaxWidth()
                     .graphicsLayer { alpha = 1f - collapseFractionProvider() }
@@ -3417,7 +3525,6 @@ private fun SpaceHeader(
 private fun SpaceHeaderIdentityInfo(
     userInfo: SpaceUserInfo,
     officialBadge: OfficialVerifyBadgeSpec?,
-    onLiveClick: (Long, String, String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // 信息区：名字 + 等级 + VIP 标识。
@@ -3453,36 +3560,6 @@ private fun SpaceHeaderIdentityInfo(
                                 vipType = userInfo.vip.type,
                             ),
                         compact = true,
-                    )
-                }
-            }
-
-            val liveRoom = userInfo.liveRoom
-            if (liveRoom?.liveStatus == 1 && liveRoom.url.isNotBlank()) {
-                FlowRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    SpaceBadgeChip(
-                        text = "直播中",
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                        onClick = {
-                            val roomId = liveRoom.roomId.takeIf { it > 0L }
-                                ?: liveRoom.url
-                                    .substringAfterLast('/')
-                                    .substringBefore('?')
-                                    .toLongOrNull()
-                                ?: 0L
-                            onLiveClick(
-                                roomId,
-                                liveRoom.title.ifBlank { userInfo.name },
-                                userInfo.name
-                            )
-                        }
                     )
                 }
             }
@@ -4924,18 +5001,26 @@ private fun SpaceArticleListItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val target = when (val action = resolveSpaceArticleClickAction(article)) {
+        is SpaceDynamicClickAction.OpenArticle -> com.android.purebilibili.navigation3.BiliPaiNavKey.ArticleDetail(action.articleId, action.title)
+        is SpaceDynamicClickAction.OpenDynamicDetail -> com.android.purebilibili.navigation3.BiliPaiNavKey.DynamicDetail(action.dynamicId)
+        else -> null
+    }
+    val container = target?.let { com.android.purebilibili.core.ui.rememberNativeCardContainerTransition(it, onClick) }
+    val openCard = container?.onClick ?: onClick
     Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
+            .then(container?.modifier ?: Modifier)
             .clip(AppShapes.container(ContainerLevel.Card))
-            .appActionClickable { onClick() }
+            .appActionClickable { openCard() }
             .padding(vertical = 6.dp)
     ) {
         RichTextContent(
             desc = remember(article.title) { DynamicDesc(text = article.title) },
             onUserClick = {},
-            onBlankTap = onClick,
+            onBlankTap = openCard,
             fontSize = MaterialTheme.typography.titleMedium.fontSize,
             fontWeight = FontWeight.SemiBold,
             lineHeight = MaterialTheme.typography.titleMedium.lineHeight,
