@@ -133,6 +133,7 @@ internal fun VideoDetailPhoneSuccessContentLayer(
     commentThreadCoveredBlurProgressProvider: () -> Float = { 0f },
     commentPullToRefreshEnabled: Boolean = true,
     animateLateEntryContent: Boolean = false,
+    deferFreshEntryContent: Boolean = false,
 ) {
     val commentState by commentStateHandle
     val engagementSuccess = success.withEngagementUiState(engagementState)
@@ -146,6 +147,7 @@ internal fun VideoDetailPhoneSuccessContentLayer(
             isLeaving = isLeaving,
             rootTransitionOwnsContentAlpha = rootTransitionOwnsContentAlpha,
             keepContentVisibleAfterBackPreview = keepContentVisibleAfterBackPreview,
+            deferFreshEntryContent = deferFreshEntryContent,
         )
         // 正文被入场门控拦住时骨架垫底必须撑住（Loading 骨架此刻已卸载），
         // 否则骨架结束到正文放行之间是一段纯黑空窗。

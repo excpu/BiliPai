@@ -508,6 +508,126 @@ class CdnRegionPolicyTest {
     }
 
     @Test
+    fun `custom host outranks plugin ordering`() {
+        val original = buildPlaybackCdnCandidates(
+            videoUrls = listOf(
+                "https://plugin-first.bilivideo.com/upgcxcode/1/2/video.m4s?sign=abc",
+                "https://plugin-second.bilivideo.com/upgcxcode/1/2/video.m4s?sign=abc",
+            ),
+            audioUrls = emptyList(),
+        )
+
+        val preferred = applyPlaybackCdnPreference(
+            candidates = original,
+            preference = PlaybackCdnPreference.CUSTOM,
+            customHost = "my-cdn.example.net",
+            pluginApplied = true,
+        )
+
+        assertEquals("my-cdn.example.net", hostFromCdnUrl(preferred.first().videoUrl))
+    }
+
+    @Test
+    fun `plugin ordering outranks built-in mirror rewrite only when no custom host set`() {
+        val original = buildPlaybackCdnCandidates(
+            videoUrls = listOf(
+                "https://plugin-first.bilivideo.com/upgcxcode/1/2/video.m4s?sign=abc",
+                "https://mcdn.bilivideo.cn/upgcxcode/1/2/video.m4s?sign=abc",
+            ),
+            audioUrls = emptyList(),
+        )
+
+        // 插件已排序 + 未指定线路：保留插件顺序，不再二次过滤 PCDN。
+        val pluginFirst = applyPlaybackCdnPreference(
+            candidates = original,
+            preference = PlaybackCdnPreference.BASE_URL,
+            pluginApplied = true,
+        )
+        assertEquals("plugin-first.bilivideo.com", hostFromCdnUrl(pluginFirst.first().videoUrl))
+        assertTrue(pluginFirst.any { hostFromCdnUrl(it.videoUrl) == "mcdn.bilivideo.cn" })
+
+        // 插件没开：排除 PCDN。
+        val filtered = applyPlaybackCdnPreference(
+            candidates = original,
+            preference = PlaybackCdnPreference.BASE_URL,
+        )
+        assertEquals(listOf("plugin-first.bilivideo.com"), filtered.map { hostFromCdnUrl(it.videoUrl) })
+    }
+
+    @Test
+    fun `custom host with invalid value falls back to plugin ordering instead of rewriting`() {
+        val original = buildPlaybackCdnCandidates(
+            videoUrls = listOf("https://plugin-first.bilivideo.com/upgcxcode/1/2/video.m4s?sign=abc"),
+            audioUrls = emptyList(),
+        )
+
+        val preferred = applyPlaybackCdnPreference(
+            candidates = original,
+            preference = PlaybackCdnPreference.CUSTOM,
+            customHost = "not a host",
+            pluginApplied = true,
+        )
+
+        assertEquals(original, preferred)
+    }
+
+    @Test
+    fun `rewrite bilivideo host accepts pcdn mirrors and rejects foreign hosts`() {
+        assertEquals(
+            "https://upos-sz-mirrorhw.bilivideo.com/upgcxcode/1/2/video.m4s?sign=abc",
+            rewriteBilivideoHost(
+                "https://mcdn.bilivideo.cn/upgcxcode/1/2/video.m4s?sign=abc",
+                "upos-sz-mirrorhw.bilivideo.com",
+            ),
+        )
+        assertEquals(
+            "https://upos-sz-mirrorhw.bilivideo.com/video.m4s",
+            rewriteBilivideoHost("https://upos-sz-mirrorali.bilivideo.net/video.m4s", "upos-sz-mirrorhw.bilivideo.com"),
+        )
+        assertNull(rewriteBilivideoHost("https://123.45.67.89/video.m4s", "upos-sz-mirrorhw.bilivideo.com"))
+        assertNull(rewriteBilivideoHost("https://a.bilivideo.com/video.m4s", "bad host"))
+    }
+
+    @Test
+    fun `all pcdn candidates fall back to a regular mirror instead of an empty list`() {        val original = buildPlaybackCdnCandidates(
+            videoUrls = listOf("https://mcdn.bilivideo.cn/upgcxcode/1/2/video.m4s?sign=abc"),
+            audioUrls = listOf("https://mcdn.bilivideo.cn/upgcxcode/1/2/audio.m4s?sign=abc"),
+        )
+
+        val preferred = applyPlaybackCdnPreference(
+            candidates = original,
+            preference = PlaybackCdnPreference.BASE_URL,
+        )
+
+        assertEquals(1, preferred.size)
+        assertEquals("upos-sz-mirrorali.bilivideo.com", hostFromCdnUrl(preferred.first().videoUrl))
+        assertEquals("upos-sz-mirrorali.bilivideo.com", hostFromCdnUrl(preferred.first().audioUrl.orEmpty()))
+    }
+
+    @Test
+    fun `single url rewrite honors custom host over built-in mirrors`() {
+        val url = "https://mcdn.bilivideo.cn/upgcxcode/1/2/video.m4s?sign=abc"
+
+        // 手输线路：不受域名限制，PCDN 源也能改写。
+        assertEquals(
+            "https://my-cdn.example.net:8443/upgcxcode/1/2/video.m4s?sign=abc",
+            rewriteCdnUrlForPreference(url, PlaybackCdnPreference.CUSTOM, "my-cdn.example.net:8443"),
+        )
+        // 内置线路：改写 B 站镜像（含 PCDN 域名）。
+        assertEquals(
+            "https://upos-sz-mirrorhw.bilivideo.com/upgcxcode/1/2/video.m4s?sign=abc",
+            rewriteCdnUrlForPreference(url, PlaybackCdnPreference.HW),
+        )
+        // 基础URL / 备用URL 不改写；自定义线路未填主机时保持原地址。
+        assertEquals(url, rewriteCdnUrlForPreference(url, PlaybackCdnPreference.BASE_URL))
+        assertEquals(url, rewriteCdnUrlForPreference(url, PlaybackCdnPreference.BACKUP_URL))
+        assertEquals(url, rewriteCdnUrlForPreference(url, PlaybackCdnPreference.CUSTOM, customHost = null))
+        // 非 B 站域名不会被内置线路改写。
+        val foreign = "https://123.45.67.89/video.m4s"
+        assertEquals(foreign, rewriteCdnUrlForPreference(foreign, PlaybackCdnPreference.HW))
+    }
+
+    @Test
     fun `normalize playback cdn host accepts host port and full urls`() {
         assertEquals("cdn.example.net", normalizePlaybackCdnHost("CDN.Example.NET"))
         assertEquals("cdn.example.net:8443", normalizePlaybackCdnHost("  cdn.example.net:8443  "))

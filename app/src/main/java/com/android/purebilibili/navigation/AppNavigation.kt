@@ -3068,7 +3068,10 @@ fun AppNavigation(
                                     pushNavigation3Route(ScreenRoutes.Space.createRoute(mid))
                                 },
                                 globalHazeState = mainHazeState,
-                                isTopLevelActive = currentNavigation3Key == BiliPaiNavKey.MainHost &&
+                                // 保留首页布局供卡片落位，过渡结束后再恢复 Pager/锚点及业务工作。
+                                // 玻璃与原生材质共用活跃门控，不改变各自布局和视觉参数。
+                                isTopLevelActive = isBottomPagerPageActive &&
+                                    currentNavigation3Key == BiliPaiNavKey.MainHost &&
                                     currentBottomNavItem == BottomNavItem.HOME,
                                 visibleDuringNavigation = isBottomPagerPageVisibleDuringNavigation,
                                 isReturningFromVideoDetail = navigation3ReturnSession.isReturningFromDetail,

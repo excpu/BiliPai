@@ -73,37 +73,86 @@ enum class PlaybackCdnPreference(
 }
 
 /**
- * 应用全局 CDN 线路偏好。
- *
- * 内置线路只改写 B 站镜像域名（[rewriteBilivideoHost]），避免把 mcdn/IP 源改写成无效镜像；
- * [PlaybackCdnPreference.CUSTOM] 走 [rewriteCdnUrlHost]，不做任何域名限制，用户输入什么主机就替换成
- * 什么主机，路径与签名参数原样保留。自定义主机非法或未填写时不改写，保持原始候选顺序回退。
+ * 应用全局 CDN 线路偏好，优先级从高到低：
+ *  ① 自定义线路（用户手输 host）——最高优先，走 [rewriteCdnUrlHost]，不做任何域名限制，
+ *     用户输入什么主机就替换成什么主机，路径与签名参数原样保留；主机非法或未填写时不改写，
+ *     保持原始候选顺序回退。
+ *  ② 设置里选的内置线路——只改写 B 站镜像域名（[rewriteBilivideoHost]），避免把 IP 源改写成无效镜像。
+ *  ③ 插件（CDN 智能选线）已开启——尊重插件给出的顺序，不再二次过滤。
+ *  ④ 都没指定——排除 PCDN 候选，整批都是 PCDN 时换 host 兜底。
  */
 internal fun applyPlaybackCdnPreference(
     candidates: List<PlaybackCdnCandidate>,
     preference: PlaybackCdnPreference,
     customHost: String? = null,
+    pluginApplied: Boolean = false,
 ): List<PlaybackCdnCandidate> {
-    if (candidates.isEmpty() || preference == PlaybackCdnPreference.BASE_URL) return candidates
+    if (candidates.isEmpty()) return candidates
+
+    // ① 自定义线路（手输 CDN）：最高优先级，排在内置线路与插件结果之前。
+    if (preference == PlaybackCdnPreference.CUSTOM) {
+        val host = normalizePlaybackCdnHost(customHost) ?: return candidates
+        val source = candidates.first()
+        val preferred = source.copy(
+            videoUrl = rewriteCdnUrlHost(source.videoUrl, host) ?: return candidates,
+            audioUrl = source.audioUrl?.let { rewriteCdnUrlHost(it, host) ?: it },
+        )
+        return (listOf(preferred) + candidates).distinctBy { it.videoUrl to it.audioUrl }
+    }
+
+    // ② 设置里选了内置线路：次高优先，无条件排到最前。
+    val host = preference.host
+    if (host != null) {
+        // 不管原候选是 PCDN 还是常规 CDN，改 host 后就是设置里的线路
+        // （upgcxcode 路径与签名在 host 之间通用）。
+        val base = candidates.first()
+        val preferred = base.copy(
+            videoUrl = rewriteBilivideoHost(base.videoUrl, host) ?: base.videoUrl,
+            audioUrl = base.audioUrl?.let { rewriteBilivideoHost(it, host) ?: it },
+        )
+        val rest = excludePcdnCandidates(candidates)
+        return (listOf(preferred) + rest).distinctBy { it.videoUrl to it.audioUrl }
+    }
+    // ③ 插件（CDN 智能选线）已开启：尊重插件给出的顺序，不再额外过滤。
+    //    插件内部已用 risky 标记把 PCDN 排到最后，再过滤等于推翻它的判断。
+    if (pluginApplied) {
+        return if (preference == PlaybackCdnPreference.BACKUP_URL) {
+            candidates.drop(1) + candidates.take(1)
+        } else {
+            candidates
+        }
+    }
+
+    // ④ 插件没开：排除 PCDN，整批都是 PCDN 时换 host 兜底。
+    val usable = excludePcdnCandidates(candidates)
     if (preference == PlaybackCdnPreference.BACKUP_URL) {
-        return candidates.drop(1) + candidates.take(1)
+        return usable.drop(1) + usable.take(1)
     }
-    val host = if (preference == PlaybackCdnPreference.CUSTOM) {
-        normalizePlaybackCdnHost(customHost) ?: return candidates
-    } else {
-        preference.host ?: return candidates
-    }
-    val useCustomHost = preference == PlaybackCdnPreference.CUSTOM
-    val source = candidates.first()
-    val preferred = source.copy(
-        videoUrl = rewriteCandidateHost(source.videoUrl, host, useCustomHost) ?: return candidates,
-        audioUrl = source.audioUrl?.let { rewriteCandidateHost(it, host, useCustomHost) ?: it },
-    )
-    return (listOf(preferred) + candidates).distinctBy { it.videoUrl to it.audioUrl }
+    return usable
 }
 
 private fun rewriteCandidateHost(url: String, host: String, unrestricted: Boolean): String? =
     if (unrestricted) rewriteCdnUrlHost(url, host) else rewriteBilivideoHost(url, host)
+
+/**
+ * 单条地址的线路改写，语义与 [applyPlaybackCdnPreference] 的优先级一致：
+ * 自定义线路（手输 host）最优先且不受域名限制，其次内置线路，「基础URL / 备用URL」不改写。
+ * 无法改写时返回原地址，调用方（下载链路）据此保持可用。
+ */
+internal fun rewriteCdnUrlForPreference(
+    url: String,
+    preference: PlaybackCdnPreference,
+    customHost: String? = null,
+): String {
+    if (url.isBlank()) return url
+    return if (preference == PlaybackCdnPreference.CUSTOM) {
+        val host = normalizePlaybackCdnHost(customHost) ?: return url
+        rewriteCdnUrlHost(url, host) ?: url
+    } else {
+        val host = preference.host ?: return url
+        rewriteBilivideoHost(url, host) ?: url
+    }
+}
 
 /** 番剧/课程起播前解析出的播放地址。 */
 internal data class BangumiCdnUrlSelection(
@@ -137,7 +186,12 @@ internal fun resolveBangumiCdnUrls(
         return BangumiCdnUrlSelection(null, orderedAudioUrls.firstOrNull())
     }
     val candidates = buildPlaybackCdnCandidates(orderedVideoUrls, orderedAudioUrls)
-    val selected = applyPlaybackCdnPreference(candidates, preference, customHost).firstOrNull()
+    val selected = applyPlaybackCdnPreference(
+        candidates = candidates,
+        preference = preference,
+        customHost = customHost,
+        pluginApplied = pluginRewrite != null,
+    ).firstOrNull()
         ?: return BangumiCdnUrlSelection(orderedVideoUrls.first(), orderedAudioUrls.firstOrNull())
     return BangumiCdnUrlSelection(
         videoUrl = selected.videoUrl.takeIf { it.isNotBlank() } ?: orderedVideoUrls.first(),
@@ -260,6 +314,34 @@ internal fun normalizePlaybackCdnHost(input: String?): String? {
     }
     return authority
 }
+
+/**
+ * 排除 PCDN 候选。
+ *
+ * 整批都是 PCDN 时不直接返回空，而是把 host 换成常规线路——upgcxcode 路径与签名
+ * 在不同 host 之间通用，这样屏蔽 PCDN 之后仍然能播放/下载。
+ */
+private fun excludePcdnCandidates(
+    candidates: List<PlaybackCdnCandidate>
+): List<PlaybackCdnCandidate> {
+    val safe = candidates.filter { !isRiskyCdnHost(hostOf(it.videoUrl)) }
+    if (safe.isNotEmpty()) return safe
+    return candidates.map { candidate ->
+        candidate.copy(
+            videoUrl = rewriteBilivideoHost(candidate.videoUrl, FALLBACK_CDN_HOST)
+                ?: candidate.videoUrl,
+            audioUrl = candidate.audioUrl?.let {
+                rewriteBilivideoHost(it, FALLBACK_CDN_HOST) ?: it
+            },
+        )
+    }
+}
+
+private fun hostOf(url: String): String =
+    runCatching { java.net.URI(url).host.orEmpty() }.getOrDefault("")
+
+/** 整批候选都是 PCDN 时改写的目标线路。 */
+private const val FALLBACK_CDN_HOST = "upos-sz-mirrorali.bilivideo.com"
 
 data class CdnCustomRuleValidation(
     val rule: CdnCustomRule,
@@ -865,16 +947,23 @@ private fun normalizeRegionName(value: String): String {
         .removeSuffix("市")
 }
 
-private fun rewriteBilivideoHost(url: String, newHost: String): String? {
+internal fun rewriteBilivideoHost(url: String, newHost: String): String? {
     val uri = runCatching { URI(url) }.getOrNull() ?: return null
     val originalHost = uri.host ?: return null
-    if (originalHost != "bilivideo.com" && !originalHost.endsWith(".bilivideo.com")) return null
+    // 允许 PCDN 域名一起参与改写：mcdn.bilivideo.cn / .net 的 upgcxcode 路径与签名
+    // 和常规 CDN 通用，用户屏蔽 mcdn 后正是靠换 host 才能继续下载/播放。
+    val isBiliHost = originalHost == "bilivideo.com" ||
+        originalHost.endsWith(".bilivideo.com") ||
+        originalHost == "bilivideo.cn" ||
+        originalHost.endsWith(".bilivideo.cn") ||
+        originalHost.endsWith(".bilivideo.net")
+    if (!isBiliHost) return null
     return rewriteCdnUrlHost(url, newHost)
 }
 
 /**
  * 用 [newHost] 替换 URL 的主机部分，不做任何域名限制：任意来源（bilivideo 镜像、mcdn、IP 直连）
- * 都可被替换，路径、查询串（含签名参数）与片段原样保留。仅用于用户手动输入的自定义线路。
+ * 都可被替换，路径、查询串（含签名参数）与片段原样保留。用户手动输入的自定义线路走这里。
  */
 private fun rewriteCdnUrlHost(url: String, newHost: String): String? {
     val host = normalizePlaybackCdnHost(newHost) ?: return null

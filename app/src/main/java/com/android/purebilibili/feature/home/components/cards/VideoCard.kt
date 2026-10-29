@@ -131,10 +131,12 @@ import com.android.purebilibili.core.ui.components.UpBadgeName
 import com.android.purebilibili.core.ui.components.resolveUpStatsText
 import com.android.purebilibili.core.ui.transition.LocalVideoCardSharedElementSourceRoute
 import com.android.purebilibili.core.ui.transition.LocalMiuixVideoCardTransitionState
+import com.android.purebilibili.core.ui.transition.LocalVideoCardTransitionBackgroundState
 import com.android.purebilibili.core.ui.transition.captureNativeCoverOverlayLayer
 import com.android.purebilibili.core.ui.transition.captureNativeVideoCardImage
 import com.android.purebilibili.core.ui.transition.captureWholeCardReturnBitmap
-import kotlinx.coroutines.CoroutineStart
+import com.android.purebilibili.core.ui.transition.captureVideoCardPixelsAfterEntry
+import com.android.purebilibili.core.ui.transition.rememberVideoCardPixelCaptureAllowed
 import kotlinx.coroutines.launch
 import com.android.purebilibili.core.ui.transition.recordNativeVideoCardLayer
 import com.android.purebilibili.core.ui.transition.rememberNativeVideoCardLayer
@@ -1064,6 +1066,8 @@ internal fun ElegantVideoCard(
     val hasTrailingCardAction = onUnfavorite != null || hasOverflowMenu
     val nativeCardLayer = rememberNativeVideoCardLayer()
     val wholeCardCaptureScope = rememberCoroutineScope()
+    val wholeCardCaptureAllowed = rememberVideoCardPixelCaptureAllowed()
+    val videoCardTransitionBackgroundState = LocalVideoCardTransitionBackgroundState.current
     val nativeCoverOverlayLayer = rememberNativeVideoCardLayer()
     val freezeNativeCardLayer = remember(video.bvid) { mutableStateOf(false) }
 
@@ -1201,10 +1205,24 @@ internal fun ElegantVideoCard(
                 freezeNativeCardLayer.value = true
                 captureNativeVideoCardImage(nativeCardLayer)
                 captureNativeCoverOverlayLayer(nativeCoverOverlayLayer)
-                val expectedSourceKey = CardPositionManager.lastClickedVideoSourceKey
-                if (expectedSourceKey != null) {
-                    wholeCardCaptureScope.launch(start = CoroutineStart.UNDISPATCHED) {
-                        captureWholeCardReturnBitmap(nativeCardLayer, expectedSourceKey)
+                val owner = CardPositionManager.videoCardPixelOwnerFor(CardPositionManager.lastClickedVideoSourceKey)
+                if (owner != null) {
+                    wholeCardCaptureScope.launch {
+                        captureVideoCardPixelsAfterEntry(
+                            phaseProvider = videoCardTransitionBackgroundState.phaseProvider,
+                            isReturnGestureInProgress = {
+                                videoCardTransitionBackgroundState.isReturnGestureInProgressProvider() ||
+                                    videoCardTransitionBackgroundState.isGestureRestoreInProgressProvider()
+                            },
+                            ownsCapture = {
+                                !nativeCardLayer.isReleased &&
+                                    CardPositionManager.isActiveVideoCardPixelOwner(owner) &&
+                                    CardPositionManager.isNativeVideoCardLayerCurrentOwner(nativeCardLayer)
+                            },
+                            captureAllowed = { wholeCardCaptureAllowed.value },
+                            entryWorkReleased = { owner.entryWorkReleased },
+                            capture = { captureWholeCardReturnBitmap(nativeCardLayer, owner) },
+                        )
                     }
                 }
             }

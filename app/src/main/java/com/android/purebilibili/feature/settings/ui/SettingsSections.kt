@@ -2287,6 +2287,21 @@ internal val AboutDevelopers = listOf(
         name = "converk",
         githubLogin = "converk",
         avatarUrl = "https://avatars.githubusercontent.com/u/34793421?v=4"
+    ),
+    AboutDeveloper(
+        name = "Hikari0618",
+        githubLogin = "Hikari0618",
+        avatarUrl = "https://avatars.githubusercontent.com/u/90288898?v=4"
+    ),
+    AboutDeveloper(
+        name = "ajax-prog",
+        githubLogin = "ajax-prog",
+        avatarUrl = "https://avatars.githubusercontent.com/u/175576147?v=4"
+    ),
+    AboutDeveloper(
+        name = "bugrsix",
+        githubLogin = "bugrsix",
+        avatarUrl = "https://avatars.githubusercontent.com/u/104134191?v=4"
     )
 )
 

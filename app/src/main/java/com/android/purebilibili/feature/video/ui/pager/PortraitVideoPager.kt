@@ -3425,7 +3425,7 @@ private fun VideoPageItem(
                             model = FormatUtils.fixImageUrl(cover),
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
-                            contentScale = resolvePortraitCoverContentScale()
+                            contentScale = resolvePortraitCoverContentScale(isVerticalVideo = currentVideoAspect < 1f)
                         )
                     }
                 } else {
@@ -3433,7 +3433,7 @@ private fun VideoPageItem(
                         model = FormatUtils.fixImageUrl(cover),
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize(),
-                        contentScale = resolvePortraitCoverContentScale()
+                        contentScale = resolvePortraitCoverContentScale(isVerticalVideo = currentVideoAspect < 1f)
                     )
                 }
 

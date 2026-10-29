@@ -45,6 +45,7 @@ internal fun HorizontalVideoCardFrame(
     stacked: Boolean = false,
     compactPartition: Boolean = false,
     allowPortraitCover: Boolean = false,
+    fillInfoHeight: Boolean = compactPartition,
 ) {
     // MD3、Miuix 和玻璃共用布局；封面保持所选比例。
     val effectiveAspectRatio = coverAspectRatio.takeIf {
@@ -146,8 +147,8 @@ internal fun HorizontalVideoCardFrame(
                     (desiredHeight * effectiveAspectRatio).toInt().coerceIn(0, maxCoverWidth)
                 val coverHeight = (coverWidth / effectiveAspectRatio).toInt()
                 val infoWidth = (width - gap - coverWidth).coerceAtLeast(0)
-                // 分区紧凑模式下信息列至少与封面等高，使元信息行可以固定在卡片底部。
-                val infoMinHeight = if (compactPartition) {
+                // 按入口选择信息列与封面等高，供底部元信息使用弹性空白；上下排列不扩高。
+                val infoMinHeight = if (fillInfoHeight) {
                     coverHeight.coerceAtMost(
                         if (constraints.maxHeight != Constraints.Infinity) constraints.maxHeight else coverHeight
                     )

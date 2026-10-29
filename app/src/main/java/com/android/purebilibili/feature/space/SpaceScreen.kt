@@ -1,6 +1,7 @@
 package com.android.purebilibili.feature.space
 
 import com.android.purebilibili.navigation.tabIndicatorPosition
+import com.android.purebilibili.navigation.isTabSelectionInProgress
 import com.android.purebilibili.feature.home.effectiveGridColumnCount
 import com.android.purebilibili.feature.home.effectiveGridColumnCountCompact
 import com.android.purebilibili.feature.home.gridColumnPinchEnabled
@@ -22,8 +23,6 @@ import coil3.request.crossfade
 import com.android.purebilibili.core.ui.components.AppHorizontalDivider
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import com.android.purebilibili.core.ui.common.contentTabPagerGestures
 import com.android.purebilibili.core.ui.common.rememberContentTabPager
 import com.android.purebilibili.core.ui.common.stationaryPagerHeader
@@ -1329,6 +1328,12 @@ private fun SpaceContent(
     val homeSettings by com.android.purebilibili.core.store.SettingsManager
         .getHomeSettings(context)
         .collectAsStateWithLifecycle(initialValue = com.android.purebilibili.core.store.HomeSettings())
+    val sharedTabsCoroutineScope = rememberCoroutineScope()
+    // 外边距由卡片风格决定，不依赖各分页的网格列数；共享主栏与分页使用同一来源。
+    val outerPaddingDp = maxOf(16, resolveHomeFeedCardLayout(
+        style = homeSettings.homeFeedCardStyle,
+        widthSizeClass = windowSizeClass.widthSizeClass,
+    ).outerPaddingDp).dp
     val selectedMainTab = state.tabShellState.selectedTab
     // 各标签页各自持有头部，但轮播页码属于同一个用户空间。
     var sharedBannerPage by remember(state.userInfo.mid) { mutableStateOf(0) }
@@ -1562,6 +1567,57 @@ private fun SpaceContent(
     ) {
         // 手势边界在回调中读取测量值，不让滚动逐帧触发组合。
         val pinnedTabsHeights = remember { mutableMapOf<SpaceMainTab, Int>() }
+        val sharedGlassTabs = LocalAppThemeConfig.current.liquidGlassEnabled
+        val pagerDragSource = remember(pagerState) {
+            androidx.compose.foundation.interaction.MutableInteractionSource()
+        }
+        val pagerDragging by pagerDragSource.collectIsDraggedAsState()
+        SpaceMainTabsHost(
+            sharedGlassTabs = sharedGlassTabs,
+            position = {
+                val currentGrid = pageGridStates.getValue(displayedMainTabs[pagerState.currentPage].tab)
+                val info = currentGrid.layoutInfo
+                val item = info.visibleItemsInfo.firstOrNull { it.key == "space_tabs" }
+                val chromeBottom = with(contentDensity) { chromeTopInset.roundToPx() }
+                val pinned = pinContentTabs && shouldShowSpacePinnedTabs(
+                    tabsOffsetPx = item?.offset?.y,
+                    beforeContentPaddingPx = info.beforeContentPadding,
+                    chromeBottomPx = chromeBottom,
+                    firstVisibleItemIndex = currentGrid.firstVisibleItemIndex,
+                )
+                when {
+                    isInitialLoading -> null
+                    pinned -> androidx.compose.ui.unit.IntOffset(0, chromeBottom)
+                    item != null -> androidx.compose.ui.unit.IntOffset(0, item.offset.y + info.beforeContentPadding)
+                    else -> null
+                }
+            },
+            tabs = {
+                SpaceMainTabRow(
+                    tabs = displayedMainTabs,
+                    selectedTab = resolveSpacePrimaryTab(selectedMainTab),
+                    onSelect = { tab ->
+                        if (pinContentTabs && tab == resolveSpacePrimaryTab(selectedMainTab)) {
+                            val grid = pageGridStates.getValue(tab)
+                            if (grid.firstVisibleItemIndex > 0) {
+                                sharedTabsCoroutineScope.launch { grid.animateScrollToItem(1) }
+                            }
+                        } else onMainTabSelected(tab)
+                    },
+                    modifier = Modifier
+                        .padding(horizontal = outerPaddingDp)
+                        .scrollable(
+                            state = pageGridStates.getValue(displayedMainTabs[pagerState.currentPage].tab),
+                            orientation = Orientation.Vertical,
+                            reverseDirection = true,
+                        ),
+                    indicatorPositionProvider = { pagerState.tabIndicatorPosition },
+                    isScrollInProgressProvider = { pagerState.isScrollInProgress || pagerState.isTabSelectionInProgress },
+                    isPagerDraggingProvider = { pagerDragging },
+                    pagerTargetPositionProvider = { pagerState.targetPage.toFloat() },
+                )
+            },
+        ) { mainTabsSlot ->
         HorizontalPager(
             state = pagerState,
             userScrollEnabled = false,
@@ -1569,6 +1625,7 @@ private fun SpaceContent(
             modifier = Modifier.fillMaxSize().contentTabPagerGestures(
                 pager = pagerState,
                 enabled = !isInitialLoading,
+                dragInteractionSource = if (sharedGlassTabs) pagerDragSource else null,
                 contentTopPx = {
                     val info = pageGridStates.getValue(displayedMainTabs[pagerState.currentPage].tab).layoutInfo
                     val tabs = info.visibleItemsInfo.firstOrNull { it.key == "space_tabs" }
@@ -1669,7 +1726,6 @@ private fun SpaceContent(
             widthSizeClass = windowSizeClass.widthSizeClass,
         )
         val spaceFeedCoverAspectRatio = spaceFeedCardLayout.coverAspectRatio
-        val outerPaddingDp = maxOf(16, spaceFeedCardLayout.outerPaddingDp).dp
         // 首屏骨架与真实卡片共用同一个网格、同一种排版：色块用固定色（不呼吸），
         // 骨架只负责占位，数据到达时是 item 原地替换而不是整棵网格重建。
         val spaceSkeletonBlockColor = rememberStaticSkeletonBlockColor()
@@ -1726,6 +1782,7 @@ private fun SpaceContent(
                     },
                     pagerState = pagerState,
                     page = page,
+                    mainTabsSlot = mainTabsSlot,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 if (selectedMainTab == SpaceMainTab.CONTRIBUTION &&
@@ -1852,6 +1909,7 @@ private fun SpaceContent(
                         onContributionTabSelected = onContributionTabSelected,
                         pagerState = pagerState,
                         page = page,
+                        mainTabsSlot = mainTabsSlot,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -2297,6 +2355,8 @@ private fun SpaceContent(
             SpaceMainTab.CONTRIBUTION -> {
                 when (selectedContributionTab.subTab) {
                     SpaceSubTab.VIDEO, SpaceSubTab.CHARGING_VIDEO -> {
+                        // 开启渐进模糊时，数量与排序只属于列表，滚出后不创建顶栏悬浮副本。
+                        // 关闭时仍由吸顶标签区域承接，玻璃、MD3 与 Miuix 共用此边界。
                         if ((!pinContentTabs || state.isSearchMode) && (state.videos.isNotEmpty() || state.totalVideos > 0)) {
                             item(key = "space_video_summary_bar", span = StaggeredGridItemSpan.FullLine) {
                                 SpaceContributionVideoSummaryBar(
@@ -2933,46 +2993,6 @@ private fun SpaceContent(
             }
         }
 
-        // 投稿统计条滚走后，仅保留独立的排序工具条，固定在顶部导航栏下方。
-        val isContributionVideoTab = selectedMainTab == SpaceMainTab.CONTRIBUTION &&
-            selectedContributionTab.subTab in setOf(SpaceSubTab.VIDEO, SpaceSubTab.CHARGING_VIDEO)
-        val isContributionSummaryScrolledAway by remember(gridState) {
-            derivedStateOf {
-                val info = gridState.layoutInfo
-                val summary = info.visibleItemsInfo.firstOrNull { it.key == "space_video_summary_bar" }
-                if (summary != null) summary.offset.y <= 0
-                else gridState.firstVisibleItemIndex > 2
-            }
-        }
-        if (!pinContentTabs && isContributionVideoTab && !state.isSearchMode &&
-            (state.videos.isNotEmpty() || state.totalVideos > 0)
-        ) {
-            AnimatedVisibility(
-                visible = isContributionSummaryScrolledAway,
-                enter = EnterTransition.None,
-                exit = ExitTransition.None,
-                modifier = Modifier.align(Alignment.TopCenter),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = chromeTopInset)
-                        .background(
-                            com.android.purebilibili.core.ui.globalWallpaperAwareChromeColor(
-                                MaterialTheme.colorScheme.surface
-                            ).let { if (it.alpha < 0.97f) it.copy(alpha = 0.97f) else it }
-                        )
-                ) {
-                    SpaceContributionVideoSummaryBar(
-                        modifier = Modifier.padding(horizontal = outerPaddingDp),
-                        totalCount = state.totalVideos.takeIf { it > 0 } ?: state.videos.size,
-                        currentOrder = state.sortOrder,
-                        onSelectSortOrder = onSelectSortOrder,
-                    )
-                }
-            }
-        }
-
         // [新增] 双指缩放切换网格列数 HUD 胶囊 (自适应 MD3 / MIUIX)
         GridPinchColumnHudPill(
             visible = isPinchPillVisible,
@@ -2984,6 +3004,7 @@ private fun SpaceContent(
         )
         } // 每页内容及吸顶层
         } // HorizontalPager
+        } // SpaceMainTabsHost
 
 
     }
@@ -3595,6 +3616,7 @@ private fun SpaceContentTabs(
     pagerState: PagerState,
     page: Int,
     onMainTabReselected: (() -> Unit)? = null,
+    mainTabsSlot: (@Composable () -> Unit)? = null,
 ) {
     val selectedMainTab = state.tabShellState.selectedTab
     val hasCheese = state.hasCheeseTab || state.cheeseItems.isNotEmpty()
@@ -3639,7 +3661,7 @@ private fun SpaceContentTabs(
         }
     }
     Column(modifier = modifier) {
-        SpaceMainTabRow(
+        if (mainTabsSlot != null) mainTabsSlot() else SpaceMainTabRow(
             tabs = displayedMainTabs,
             selectedTab = resolveSpacePrimaryTab(selectedMainTab),
             onSelect = { tab ->
@@ -3720,6 +3742,8 @@ private fun SpaceMainTabRow(
     modifier: Modifier = Modifier,
     indicatorPositionProvider: () -> Float,
     isScrollInProgressProvider: () -> Boolean,
+    isPagerDraggingProvider: (() -> Boolean)? = null,
+    pagerTargetPositionProvider: (() -> Float)? = null,
 ) {
     val liquidGlassEnabled = LocalAppThemeConfig.current.liquidGlassEnabled
     val miuixNonGlass = com.android.purebilibili.core.ui.isMiuixNonGlassEnabled()
@@ -3741,6 +3765,9 @@ private fun SpaceMainTabRow(
             onSelectionChange = onSelect,
             indicatorPositionProvider = indicatorPositionProvider,
             isScrollInProgressProvider = isScrollInProgressProvider,
+            // 仅玻璃主栏提供分页交互身份；原生 MD3 / Miuix 保留既有动画路径。
+            isPagerDraggingProvider = if (liquidGlassEnabled) isPagerDraggingProvider else null,
+            pagerTargetPositionProvider = if (liquidGlassEnabled) pagerTargetPositionProvider else null,
             // 玻璃保留独立间距；非玻璃 Miuix 主导航放得下时均匀居中，
             // 空间不足时仍按完整文字宽度滚动。
             centerContent = liquidGlassEnabled || miuixNonGlass,

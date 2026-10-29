@@ -29,7 +29,15 @@ internal fun shouldUseQuickReturnSharedTransitionPolicy(
 internal class VideoCardPixelOwner(
     val sourceKey: String,
     val sourceInstanceId: Long?,
-)
+) {
+    // 每次点击独立等待详情首轮挂载；恢复来源元数据不能替新会话放行。
+    var entryWorkReleased by mutableStateOf(false)
+        private set
+
+    fun releaseEntryWork() {
+        entryWorkReleased = true
+    }
+}
 
 internal class WholeCardReturnSnapshot(
     val owner: VideoCardPixelOwner,
@@ -80,7 +88,13 @@ object CardPositionManager {
     internal var lastClickedVideoPixelOwner: VideoCardPixelOwner? = null
         private set
 
-    private var activeVideoSourceOwner: VideoCardPixelOwner? = null
+    private var activeVideoSourceOwner: VideoCardPixelOwner? by mutableStateOf(null)
+
+    /** 恢复父来源只改变活跃归属，不得让子页最后一次点击继续发布像素。 */
+    internal fun isActiveVideoCardPixelOwner(owner: VideoCardPixelOwner?): Boolean =
+        owner != null && owner === lastClickedVideoPixelOwner && owner === activeVideoSourceOwner &&
+            owner.sourceKey == lastClickedVideoSourceKey &&
+            owner.sourceInstanceId == lastClickedVideoSourceInstanceId
 
     internal fun videoCardPixelOwnerFor(sourceKey: String?): VideoCardPixelOwner? =
         lastClickedVideoPixelOwner?.takeIf {
@@ -267,7 +281,7 @@ object CardPositionManager {
         bitmap: ImageBitmap?,
         expectedOwner: VideoCardPixelOwner?,
     ) {
-        if (expectedOwner != null && lastClickedVideoPixelOwner === expectedOwner) {
+        if (isActiveVideoCardPixelOwner(expectedOwner)) {
             nativeResourcesOwner = expectedOwner
             nativeCardBitmap = bitmap
         }
@@ -275,7 +289,7 @@ object CardPositionManager {
 
     /** Accept only the exact click that started capture, including repeated clicks on one card. */
     internal fun recordWholeCardReturnBitmap(bitmap: ImageBitmap, expectedOwner: VideoCardPixelOwner?) {
-        if (expectedOwner != null && lastClickedVideoPixelOwner === expectedOwner) {
+        if (expectedOwner != null && isActiveVideoCardPixelOwner(expectedOwner)) {
             lastClickedWholeCardReturnSnapshot = WholeCardReturnSnapshot(expectedOwner, bitmap)
         }
     }
@@ -304,10 +318,12 @@ object CardPositionManager {
     }
 
     internal fun isNativeVideoCardLayerCurrentOwner(layer: GraphicsLayer): Boolean =
-        nativeCardLayer === layer && nativeResourcesOwner === lastClickedVideoPixelOwner
+        nativeCardLayer === layer && ownsNativeResources() &&
+            isActiveVideoCardPixelOwner(nativeResourcesOwner)
 
     internal fun isNativeCoverOverlayLayerCurrentOwner(layer: GraphicsLayer): Boolean =
-        nativeCoverOverlayLayer === layer && nativeResourcesOwner === lastClickedVideoPixelOwner
+        nativeCoverOverlayLayer === layer && ownsNativeResources() &&
+            isActiveVideoCardPixelOwner(nativeResourcesOwner)
     
     /**
      * 清除记录的位置

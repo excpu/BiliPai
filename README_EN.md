@@ -8,7 +8,7 @@
 
 [简体中文](README.md) · [English](README_EN.md)
 
-<img src="https://img.shields.io/badge/Source-0.6.7-007AFF?style=flat-square" alt="Source 0.6.7" />
+<img src="https://img.shields.io/badge/Source-0.6.8-007AFF?style=flat-square" alt="Source 0.6.8" />
 <img src="https://img.shields.io/badge/Android-8.0%2B-34C759?style=flat-square" alt="Android 8.0+" />
 <img src="https://img.shields.io/badge/License-GPLv3-FF3B30?style=flat-square" alt="GPLv3" />
 
@@ -120,6 +120,6 @@ This is an unofficial client and is not affiliated with BiliBili. Content belong
 
 <div align="center">
 
-<sub>Source version 0.6.7 (529) · Updated 2026-10-28 · Made by [YangY](https://x.com/YangY_0x00)</sub>
+<sub>Source version 0.6.8 (530) · Updated 2026-10-29 · Made by [YangY](https://x.com/YangY_0x00)</sub>
 
 </div>

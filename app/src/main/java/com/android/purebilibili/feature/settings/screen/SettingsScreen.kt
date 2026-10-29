@@ -15,7 +15,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.clickable // [New]
 import androidx.compose.foundation.layout.*
 import com.android.purebilibili.core.ui.components.AppLazyColumn as LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -32,13 +31,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.foundation.Image
-import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
-import androidx.compose.ui.graphics.Color
 import com.android.purebilibili.R
 import com.android.purebilibili.core.ui.blur.rememberRecoverableHazeState
 import com.android.purebilibili.core.util.CacheClearTarget
@@ -1252,75 +1246,6 @@ private fun MobileSettingsNavLayout(
             }
         } else {
             SettingsRootContent()
-        }
-    }
-}
-
-@Composable
-fun DonateDialog(onDismiss: () -> Unit) {
-    androidx.compose.ui.window.Dialog(
-        onDismissRequest = onDismiss,
-        properties = androidx.compose.ui.window.DialogProperties(
-            usePlatformDefaultWidth = false, // Full screen
-            decorFitsSystemWindows = false
-        )
-    ) {
-        com.android.purebilibili.core.ui.ModalWindowBlurBehindEffect()
-        Box(
-            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.9f)),
-            contentAlignment = Alignment.Center
-        ) {
-            // QR Code Container
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Box(contentAlignment = Alignment.TopStart) {
-                    Image(
-                        painter = painterResource(id = com.android.purebilibili.R.drawable.author_qr),
-                        contentDescription = stringResource(R.string.settings_donate_qr_description),
-                        modifier = Modifier
-                            .fillMaxWidth(0.85f)
-                            .aspectRatio(1f)
-                            // QR code preview: ~16dp → Dialog level (14dp scaled per preset).
-                            .clip(AppShapes.container(ContainerLevel.Dialog))
-                            .clickable { onDismiss() }, // [New] Click to dismiss
-                        contentScale = ContentScale.Fit
-                    )
-
-                    // Close Button (Top Left of Image)
-                    AppIconButton(
-                        onClick = onDismiss,
-                        modifier = Modifier
-                            .padding(8.dp)
-                            .background(Color.Black.copy(alpha = 0.3f), androidx.compose.foundation.shape.CircleShape)
-                            .size(32.dp)
-                    ) {
-                        AppIcon(
-                            imageVector = com.android.purebilibili.feature.settings.rememberMaterialSymbol(com.android.purebilibili.R.drawable.ms_close_24), // Fixed: Filled.Xmark -> Default.Xmark or correct path
-                            contentDescription = stringResource(R.string.common_close),
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                AppText(
-                    stringResource(R.string.settings_donate_thanks),
-                    color = Color.White.copy(alpha = 0.9f),
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                AppText(
-                    stringResource(R.string.settings_donate_dismiss_hint),
-                    color = Color.White.copy(alpha = 0.6f),
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
         }
     }
 }

@@ -240,16 +240,35 @@ fun PlaybackSettingsContent(
 
     // 检查画中画权限
     fun checkPipPermission(): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-            val mode = appOps.checkOpNoThrow(
-                AppOpsManager.OPSTR_PICTURE_IN_PICTURE,
-                context.applicationInfo.uid,
-                context.packageName
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return false
+        // 设备本身要支持画中画特性
+        if (!context.packageManager.hasSystemFeature(
+                android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE
             )
-            return mode == AppOpsManager.MODE_ALLOWED
+        ) return false
+        return try {
+            val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+            val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                appOps.unsafeCheckOpNoThrow(
+                    AppOpsManager.OPSTR_PICTURE_IN_PICTURE,
+                    context.applicationInfo.uid,
+                    context.packageName
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                appOps.checkOpNoThrow(
+                    AppOpsManager.OPSTR_PICTURE_IN_PICTURE,
+                    context.applicationInfo.uid,
+                    context.packageName
+                )
+            }
+            // MODE_DEFAULT 表示"跟随系统默认"，实际是允许的：部分 ROM（MIUI/澎湃等）
+            // 在用户授权后仍返回 MODE_DEFAULT，只认 MODE_ALLOWED 会误判成未授权，
+            // 导致设置里的小窗相关开关被禁用。
+            mode == AppOpsManager.MODE_ALLOWED || mode == AppOpsManager.MODE_DEFAULT
+        } catch (_: Exception) {
+            false
         }
-        return false
     }
 
     // 跳转到系统设置
@@ -957,6 +976,7 @@ SettingsItemAnchor("playback.music_lyrics_ui_style") {
                                     "选择小窗或画中画模式后生效"
                                 },
                                 checked = pipNoDanmakuEnabled,
+                                enabled = pipDanmakuToggleEnabled,
                                 onCheckedChange = {
                                     if (!pipDanmakuToggleEnabled) {
                                         return@AppSwitchPreference
@@ -984,6 +1004,7 @@ SettingsItemAnchor("playback.music_lyrics_ui_style") {
                                     "仅支持系统画中画的模式下生效"
                                 },
                                 checked = audioModeAutoPipEnabled,
+                                enabled = audioModeAutoPipToggleEnabled,
                                 onCheckedChange = {
                                     if (!audioModeAutoPipToggleEnabled) {
                                         return@AppSwitchPreference

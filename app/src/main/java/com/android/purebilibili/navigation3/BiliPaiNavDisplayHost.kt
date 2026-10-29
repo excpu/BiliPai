@@ -184,14 +184,15 @@ internal fun BiliPaiNavDisplayHost(
     val settingsPersistentPanes = settingsHasPersistentPanes()
     val settingsContainerSources = remember { com.android.purebilibili.feature.settings.SettingsContainerSources() }
     val settingsContainerEnabled = settingsContainerMorphEnabled && !settingsPersistentPanes && !reduceMotion
-    val settingsContainerPageColor = AppSurfaceTokens.groupedListContainer()
+    // 颜色按当前主题读取，不能以调色动画的每一帧重建容器转场。
+    val settingsContainerPageColor = rememberUpdatedState(AppSurfaceTokens.groupedListContainer())
     val settingsContainerSnapshot = settingsContainerSources.sources.toMap()
     val availableSettingsContainerTransitions = remember(
-        settingsContainerSnapshot, settingsContainerPageColor, settingsContainerRealtimeBlurEnabled, navBlurMotionTierProvider,
+        settingsContainerSnapshot, settingsContainerRealtimeBlurEnabled, navBlurMotionTierProvider,
     ) {
         settingsContainerSnapshot.mapValues { (_, source) ->
             SettingsContainerTransition(
-                source, settingsContainerPageColor,
+                source, pageColor = { settingsContainerPageColor.value },
                 realtimeBlurEnabled = settingsContainerRealtimeBlurEnabled,
                 blurMotionTierProvider = navBlurMotionTierProvider,
             )
@@ -214,19 +215,22 @@ internal fun BiliPaiNavDisplayHost(
     val liveContainerEnabled = cardTransitionEnabled && !reduceMotion &&
         com.android.purebilibili.core.ui.LocalComponentMotionEnabled.current
     val liveContainerSnapshot = liveContainerSources.sources.toMap()
-    val liveContainerPageColor = com.android.purebilibili.feature.live.resolveLiveBiliPaiRoomColorTokens().baseBackgroundColor
+    val liveContainerPageColor = rememberUpdatedState(
+        com.android.purebilibili.feature.live.resolveLiveBiliPaiRoomColorTokens().baseBackgroundColor,
+    )
+    val liveContainerIsLightBackground = rememberUpdatedState(isLightBackground)
     val availableLiveContainerTransitions = remember(
-        liveContainerSnapshot, liveContainerPageColor, videoSharedTransitionDurationMillis,
-        videoTransitionRealtimeBlurEnabled, isLightBackground, navBlurMotionTierProvider,
+        liveContainerSnapshot, videoSharedTransitionDurationMillis,
+        videoTransitionRealtimeBlurEnabled, navBlurMotionTierProvider,
     ) {
         liveContainerSnapshot.mapValues { (_, source) ->
             SettingsContainerTransition(
                 source = source,
-                pageColor = liveContainerPageColor,
+                pageColor = { liveContainerPageColor.value },
                 durationMillis = videoSharedTransitionDurationMillis.coerceAtLeast(1),
                 cardBackgroundEffectsEnabled = true,
                 realtimeBlurEnabled = videoTransitionRealtimeBlurEnabled,
-                isLightBackground = isLightBackground,
+                isLightBackground = { liveContainerIsLightBackground.value },
                 blurMotionTierProvider = navBlurMotionTierProvider,
             )
         }
@@ -665,7 +669,11 @@ internal fun BiliPaiNavDisplayHost(
         }
     }
     LaunchedEffect(effectiveVideoCardExposure) {
-        if (shouldReleaseHostOwnedDepthLayer(effectiveVideoCardExposure)) {
+        // 新点击可在旧 Idle effect 执行前同步开启会话，不能清空刚接手的背景层。
+        if (shouldReleaseHostOwnedDepthLayer(effectiveVideoCardExposure) &&
+            shouldReleaseHostOwnedDepthLayer(videoCardExposureProvider()) &&
+            videoCardClock.phase == VideoCardTransitionBackgroundPhase.IDLE
+        ) {
             videoCardSnapshotHandle.releaseSession()
         }
     }

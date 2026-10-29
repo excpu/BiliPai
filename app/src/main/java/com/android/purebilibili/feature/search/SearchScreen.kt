@@ -2113,7 +2113,9 @@ fun SearchScreen(
                                                             bvid = video.bvid,
                                                             contentType = video.contentType,
                                                             navigationUrl = video.navigationUrl,
-                                                            title = video.title
+                                                            title = video.title,
+                                                            videoId = video.id,
+                                                            ownerName = video.owner.name
                                                         )
                                                     ) {
                                                         is SearchResultNavigationTarget.Video -> {
@@ -2129,6 +2131,8 @@ fun SearchScreen(
                                                         }
                                                         is SearchResultNavigationTarget.Web ->
                                                             onWebClick(target.url, target.title)
+                                                        is SearchResultNavigationTarget.LiveRoom ->
+                                                            onLiveClick(target.roomId, target.title, target.uname)
                                                         else -> Unit
                                                     }
                                                 }

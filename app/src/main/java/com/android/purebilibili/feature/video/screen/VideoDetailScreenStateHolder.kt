@@ -1201,16 +1201,26 @@ internal fun VideoDetailScreenStateHolder(
         }
     }
 
-    // Keep the existing morph and body reveal intact. Only animated fresh entries
-    // stagger post-landing work; mini-player reuse and animation-off entries bypass it.
+    // 普通导航与整卡导航共用落位后的工作错峰；不借卡片开关改变玻璃或原生布局。
+    // 已有播放器复用入口不延后；entry 内阶段单向锁存，返回预览不重新关闭许可。
     val entryWorkPhase = rememberVideoDetailEntryWorkPhase(
-        staggerWork = transitionEnabled && deferVideoDetailEntryLoad && !reuseFromMiniPlayerAtEntry,
+        staggerWork = shouldStaggerVideoDetailEntryWork(
+            deferEntryLoad = deferVideoDetailEntryLoad,
+            reuseFromMiniPlayerAtEntry = reuseFromMiniPlayerAtEntry,
+        ),
         contentReady = isTransitionFinished && detailContentState != null,
         isVisible = isVisible,
     )
     val entryPlaybackReady = entryTransitionFinished && entryWorkPhase != VideoDetailEntryWorkPhase.Content
     val entryRelatedReady = entryWorkPhase == VideoDetailEntryWorkPhase.Related
     val entryCommentsReady = entryTransitionFinished && entryWorkPhase >= VideoDetailEntryWorkPhase.Comments
+    ReleaseVideoCardCaptureAfterEntryWork(
+        enabled = transitionEnabled,
+        bvid = bvid,
+        sourceRoute = sourceRouteForSharedElement,
+        ready = isTransitionFinished && detailContentState != null && entryRelatedReady,
+        isVisible = isVisible,
+    )
 
     //  监听评论状态
     val commentStateHandle = commentViewModel.commentState.collectAsStateWithLifecycle()
@@ -3252,17 +3262,9 @@ internal fun VideoDetailScreenStateHolder(
     val handlePipClick = {
         // 使用 MiniPlayerManager 进入应用内小窗模式
         miniPlayerManager?.let { manager ->
-            val stopPlaybackOnExit = com.android.purebilibili.core.store.SettingsManager
-                .getStopPlaybackOnExitSync(context)
-            if (stopPlaybackOnExit) {
-                com.android.purebilibili.core.util.Logger.d(
-                    "VideoDetailScreen",
-                    "Stop-on-exit enabled, skip mini mode and leave page directly"
-                )
-                manager.markLeavingByNavigation(expectedBvid = currentBvid)
-                onBack()
-                return@let
-            }
+            // 用户显式点击「小窗」是明确的小窗意图，理应优先于「退出时停止播放」：
+            // 那个设置约束的是普通返回/离开页面，不该把小窗请求改写成退出——
+            // 否则按钮点了等于没点，还会顺手停掉播放（issue #1041 的现象）。
 
             //  [埋点] PiP 进入事件
             com.android.purebilibili.core.util.AnalyticsHelper.logPictureInPicture(
@@ -5369,6 +5371,9 @@ internal fun VideoDetailScreenStateHolder(
                                         isTransitionFinished = isTransitionFinished ||
                                             keepLoadedContentForBackPreview ||
                                             suppressEnterFadeAfterBackPreview,
+                                        // 首次重正文等入场完成，静态骨架沿用现有材质与揭示几何。
+                                        // 返回预览和已经挂载的内容由完成锁存继续保留。
+                                        deferFreshEntryContent = deferVideoDetailEntryLoad,
                                         isLeaving = isLeaving,
                                         rootTransitionOwnsContentAlpha = detailShellSharedBoundsEnabled,
                                         animateLateEntryContent = currentBvid == bvid &&
