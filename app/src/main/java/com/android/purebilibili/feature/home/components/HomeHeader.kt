@@ -2161,6 +2161,12 @@ fun HomeHeader(
         maxOf(baseContinuousSlabHeight, protectionContentBottom + 32.dp)
     } else baseContinuousSlabHeight
     val protectionHeight = maxOf(continuousSlabHeight, protectionContentBottom + 32.dp)
+    // 首页顶栏遮罩改为纯色背景：不再透出壁纸，也只延伸到分类行下方一点点，剩余区域交给内容本身。
+    // 关闭"顶栏纯色渐变"后仍保留原有的渐进模糊材质。
+    val useSolidTopChromeMask = nativeProgressiveLayout && isProgressiveFadeActive
+    val solidTopChromeMaskHeight = protectionContentBottom + AppSpacingTokens.ExtraSmall
+    // 有壁纸取色时跟随壁纸主色，否则等于主题背景；两者都强制不透明。
+    val solidTopChromeMaskColor = topFadeSurfaceColor.copy(alpha = 1f)
     val tabProtectionVisibility = if (!hideTopTabs && expandedTabHeight > 0.dp) {
         (tabAlpha * tabContentAlpha * (currentTabHeight / expandedTabHeight).coerceIn(0f, 1f)).coerceIn(0f, 1f)
     } else 0f
@@ -2408,7 +2414,14 @@ fun HomeHeader(
         val shouldRenderContinuousSlab = effectiveContinuousSlabRenderMode != HomeTopChromeRenderMode.PLAIN ||
             isProgressiveBlurActive ||
             isProgressiveFadeActive
-        if (shouldRenderContinuousSlab) {
+        if (useSolidTopChromeMask) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(solidTopChromeMaskHeight)
+                    .background(solidTopChromeMaskColor, resolveHomeTopContinuousSlabShape())
+            )
+        } else if (shouldRenderContinuousSlab) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2458,7 +2471,8 @@ fun HomeHeader(
             } else 1f,
         )
         // 非玻璃渐进顶栏按控件位置保护分类文字，尾部渐隐；普通磨砂与无特效仍用原来的实色遮罩。
-        if (nativeTopProtectionAlpha > 0f) {
+        // 纯色遮罩已经覆盖控件区域，这里不再叠加半透明渐隐层。
+        if (nativeTopProtectionAlpha > 0f && !useSolidTopChromeMask) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()

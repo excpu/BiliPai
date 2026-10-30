@@ -287,12 +287,15 @@ internal fun resolvePortraitInlinePlayerLayoutSpec(
 }
 
 /**
- * 普通视频竖屏详情播放器内容高度：按真实布局宽度计算，加载封面与播放画面均为 16:9，
+ * 普通视频竖屏详情播放器内容高度：按真实布局宽度计算，加载封面与播放画面均铺满布局宽度，
  * 避免 configuration.screenWidthDp 与窗口可用宽度不一致时左右黑边。
+ * [sourceAspect] 为片源显示比例（宽/高），未知时沿用 16:9。
  */
 internal fun resolvePhoneDetailPlayerContentHeightPx(
     layoutWidthPx: Int,
+    sourceAspect: Float = PHONE_DETAIL_VIDEO_ASPECT_RATIO,
 ): Int {
     val width = layoutWidthPx.coerceAtLeast(1)
-    return (width / PHONE_DETAIL_VIDEO_ASPECT_RATIO).roundToInt().coerceAtLeast(1)
+    val aspect = sourceAspect.takeIf { it.isFinite() && it > 0f } ?: PHONE_DETAIL_VIDEO_ASPECT_RATIO
+    return (width / aspect).roundToInt().coerceAtLeast(1)
 }

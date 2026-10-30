@@ -196,6 +196,130 @@ class LargeScreenVideoLayoutPolicyTest {
     }
 
     @Test
+    fun fourByThreeSource_fillsPhoneInlineViewport() {
+        // 竖屏播放 4:3 片源时，播放区域高度按片源比例伸展，画面可以填满而不是被 16:9 视口裁成上下黑边。
+        assertEquals(
+            393f * 3f / 4f,
+            resolvePhoneInlineVideoViewportHeightDp(
+                windowWidthDp = 393f,
+                windowHeightDp = 851f,
+                isFoldableCoverWindow = false,
+                sourceAspect = 4f / 3f,
+            ),
+            0.1f,
+        )
+    }
+
+    @Test
+    fun sourceAspect_fallsBackToSixteenByNineWhenSizeUnknown() {
+        assertEquals(
+            PHONE_DETAIL_VIDEO_ASPECT_RATIO,
+            resolveInlineVideoDisplayAspect(videoWidth = 0, videoHeight = 0, isVerticalVideo = false),
+            0.001f,
+        )
+        assertEquals(
+            PHONE_DETAIL_VIDEO_ASPECT_RATIO,
+            resolveInlineVideoDisplayAspect(videoWidth = 720, videoHeight = 1280, isVerticalVideo = true),
+            0.001f,
+        )
+    }
+
+    @Test
+    fun sourceAspect_followsFourByThreeAndClampsExtremeRatios() {
+        assertEquals(4f / 3f, resolveInlineVideoDisplayAspect(1440, 1080, isVerticalVideo = false), 0.001f)
+        // 超宽银幕与极窄竖源都被钳制，播放区域不会吃掉整个屏幕。
+        assertEquals(INLINE_VIDEO_ASPECT_MAX, resolveInlineVideoDisplayAspect(3840, 1080, isVerticalVideo = false), 0.001f)
+        assertEquals(INLINE_VIDEO_ASPECT_MIN, resolveInlineVideoDisplayAspect(1080, 1920, isVerticalVideo = false), 0.001f)
+    }
+
+    @Test
+    fun aspectPreference_fixedRatiosKeepTheirOwnViewport() {
+        assertEquals(
+            PHONE_DETAIL_VIDEO_ASPECT_RATIO,
+            resolveInlineVideoDisplayAspect(
+                preference = com.android.purebilibili.core.store.FullscreenAspectRatio.RATIO_16_9,
+                videoWidth = 1440,
+                videoHeight = 1080,
+                isVerticalVideo = false,
+            ),
+            0.001f,
+        )
+        assertEquals(
+            4f / 3f,
+            resolveInlineVideoDisplayAspect(
+                preference = com.android.purebilibili.core.store.FullscreenAspectRatio.RATIO_4_3,
+                videoWidth = 1920,
+                videoHeight = 1080,
+                isVerticalVideo = false,
+            ),
+            0.001f,
+        )
+    }
+
+    @Test
+    fun aspectPreference_cropStretchModesKeepSixteenByNineViewport() {
+        for (preference in listOf(
+            com.android.purebilibili.core.store.FullscreenAspectRatio.FILL,
+            com.android.purebilibili.core.store.FullscreenAspectRatio.STRETCH,
+            com.android.purebilibili.core.store.FullscreenAspectRatio.SCALE_DOWN,
+        )) {
+            assertFalse(shouldInlineViewportFollowSourceAspect(preference), preference.name)
+            assertEquals(
+                PHONE_DETAIL_VIDEO_ASPECT_RATIO,
+                resolveInlineVideoDisplayAspect(
+                    preference = preference,
+                    videoWidth = 1440,
+                    videoHeight = 1080,
+                    isVerticalVideo = false,
+                ),
+                0.001f,
+                preference.name,
+            )
+        }
+    }
+
+    @Test
+    fun aspectPreference_sourceTrackingModesFillWithFourByThree() {
+        for (preference in listOf(
+            com.android.purebilibili.core.store.FullscreenAspectRatio.FIT,
+            com.android.purebilibili.core.store.FullscreenAspectRatio.FIT_WIDTH,
+            com.android.purebilibili.core.store.FullscreenAspectRatio.FIT_HEIGHT,
+            com.android.purebilibili.core.store.FullscreenAspectRatio.ORIGINAL,
+        )) {
+            assertTrue(shouldInlineViewportFollowSourceAspect(preference), preference.name)
+            assertEquals(
+                4f / 3f,
+                resolveInlineVideoDisplayAspect(
+                    preference = preference,
+                    videoWidth = 1440,
+                    videoHeight = 1080,
+                    isVerticalVideo = false,
+                ),
+                0.001f,
+                preference.name,
+            )
+        }
+    }
+
+    @Test
+    fun largeScreenLandscape_playerHeightFollowsSourceAspect() {
+        val sixteenByNine = resolveLargeScreenVideoMetrics(
+            windowWidthDp = 1000f,
+            windowHeightDp = 700f,
+            isVerticalVideo = false,
+        )
+        val fourByThree = resolveLargeScreenVideoMetrics(
+            windowWidthDp = 1000f,
+            windowHeightDp = 700f,
+            isVerticalVideo = false,
+            sourceAspect = 4f / 3f,
+        )
+        assertEquals(sixteenByNine.mode, fourByThree.mode)
+        assertTrue(fourByThree.playerHeightDp > sixteenByNine.playerHeightDp)
+        assertEquals(fourByThree.playerWidthDp / (4f / 3f), fourByThree.playerHeightDp, 1f)
+    }
+
+    @Test
     fun puraXMaxInnerPortrait_entersAlmostSquareLayout() {
         // Pura X Max inner display: 1828 x 2584 px, aspect ratio ~ 0.7074
         // With density ~ 2.75, width ~ 665dp, height ~ 940dp

@@ -291,6 +291,8 @@ internal fun TabletVideoLayout(
     externalQueueTitle: String = "播放列表",
     externalQueueContent: (@Composable () -> Unit)? = null,
     transitionChromeAlphaProvider: () -> Float = { 1f },
+    /** 内联播放区域显示比例（宽/高），由调用方按片源尺寸解析；未知时为 16:9。 */
+    inlineVideoDisplayAspect: Float = PHONE_DETAIL_VIDEO_ASPECT_RATIO,
 ) {
     val adaptiveInfo = com.android.purebilibili.core.util.LocalAppWindowAdaptiveInfo.current
     val contentState = detailContentState ?: (uiState as? VideoPlaybackUiState.Success)
@@ -411,15 +413,16 @@ internal fun TabletVideoLayout(
                 }
 
                 BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                    val playerAspect = inlineVideoDisplayAspect
                     val playerWidth = if (layoutPolicy.useTabletopLayout) {
-                        minOf(maxWidth, maxHeight * 16f / 9f, layoutPolicy.playerMaxWidthDp.dp)
+                        minOf(maxWidth, maxHeight * playerAspect, layoutPolicy.playerMaxWidthDp.dp)
                     } else {
                         minOf(maxWidth, layoutPolicy.playerMaxWidthDp.dp)
                     }
                     val videoHeight = if (forceCoverOnlyOnReturn) {
                         playerWidth / VIDEO_SHARED_COVER_ASPECT_RATIO
                     } else {
-                        playerWidth * 9f / 16f
+                        playerWidth / playerAspect
                     }
                     PlayerAmbientLayout(
                         modifier = Modifier.fillMaxWidth().align(Alignment.Center),

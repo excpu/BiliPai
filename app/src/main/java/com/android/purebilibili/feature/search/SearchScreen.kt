@@ -2883,6 +2883,7 @@ fun SearchTopBar(
         resolveSearchTopBarRowMinHeightDp(inputHeightDp)
     }
     val searchInteractionSource = remember { MutableInteractionSource() }
+    val autoFocusKeyboardController = LocalSoftwareKeyboardController.current
     val backIcon = rememberAppBackIcon()
     val density = LocalDensity.current
     val entryMotionProgress = remember { Animatable(1f) }
@@ -2992,7 +2993,9 @@ fun SearchTopBar(
     LaunchedEffect(autoFocusEnabled, focusRequester) {
         if (autoFocusEnabled) {
             kotlinx.coroutines.delay(80)
-            runCatching { focusRequester.requestFocus() }
+            if (runCatching { focusRequester.requestFocus() }.isSuccess) {
+                autoFocusKeyboardController?.show()
+            }
         }
     }
     val activeMotionSpec = entryMotionSpec ?: exitMotionSpec

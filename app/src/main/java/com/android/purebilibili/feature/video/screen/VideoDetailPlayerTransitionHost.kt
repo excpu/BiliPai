@@ -88,6 +88,7 @@ internal data class ContinuousPlayerFullscreenExtras(
  * 避免 `configuration.screenWidthDp` 与真机可用宽度不一致时出现左右黑边（vivo 等窄机更常见）。
  * 折叠/半折叠时必须仍尊重 [inlineHeight]（评论上滑缩小播放器），不能盖成固定展开比例。
  * @param inlineTopInset 沉浸状态栏额外高度；只加在 inline 高度上，不参与媒体比例本体。
+ * @param sourceAspect 片源显示比例（宽/高），展开态按它铺满布局宽度；未知时沿用 16:9。
  */
 internal fun Modifier.continuousPlayerViewportHeight(
     progressProvider: () -> Float,
@@ -96,6 +97,7 @@ internal fun Modifier.continuousPlayerViewportHeight(
     enabled: Boolean,
     preferLayoutWidthInline: Boolean = false,
     inlineTopInset: Dp = 0.dp,
+    sourceAspect: Float = PHONE_DETAIL_VIDEO_ASPECT_RATIO,
     removedInlineTopInsetProvider: () -> Dp = { 0.dp },
 ): Modifier {
     return layout { measurable, constraints ->
@@ -108,6 +110,7 @@ internal fun Modifier.continuousPlayerViewportHeight(
             preferLayoutWidthInline = preferLayoutWidthInline,
             callerInlineHeightPx = callerInlinePx,
             inlineTopInsetPx = insetPx,
+            sourceAspect = sourceAspect,
         )
         val fraction = progressProvider().coerceIn(0f, 1f)
         val fullscreenPx = fullscreenHeight.toPx()
@@ -141,22 +144,25 @@ internal fun Modifier.continuousPlayerViewportHeight(
  * 解析 continuous player 的 inline 高度。
  *
  * - 默认：直接使用调用方传入的 [callerInlineHeightPx]（已含评论上滑折叠进度）。
- * - [preferLayoutWidthInline]：展开时用真实布局宽计算加载封面与播放画面的统一 16:9 高度，消除 screenWidthDp 黑边；
- *   折叠时取与调用方高度的较小值，避免盖掉「上滑缩小播放器」。
+ * - [preferLayoutWidthInline]：展开时用真实布局宽计算加载封面与播放画面的统一高度（按 [sourceAspect] 铺满布局宽度），
+ *   消除 screenWidthDp 黑边；折叠时取与调用方高度的较小值，避免盖掉「上滑缩小播放器」。
  */
 internal fun resolveContinuousPlayerInlineHeightPx(
     layoutWidthPx: Int,
     preferLayoutWidthInline: Boolean,
     callerInlineHeightPx: Int,
     inlineTopInsetPx: Int,
+    sourceAspect: Float = PHONE_DETAIL_VIDEO_ASPECT_RATIO,
 ): Int {
     val callerPx = callerInlineHeightPx.coerceAtLeast(0)
     if (!preferLayoutWidthInline) {
         return callerPx.coerceAtLeast(1)
     }
     val expandedFromLayoutPx =
-        resolvePhoneDetailPlayerContentHeightPx(layoutWidthPx = layoutWidthPx) +
-            inlineTopInsetPx.coerceAtLeast(0)
+        resolvePhoneDetailPlayerContentHeightPx(
+            layoutWidthPx = layoutWidthPx,
+            sourceAspect = sourceAspect,
+        ) + inlineTopInsetPx.coerceAtLeast(0)
     // 展开：layout 宽计算的高度通常 ≤ screenWidthDp 估高，取 min 消黑边。
     // 折叠/半折叠：caller 更小，取 min 保留上滑缩小。
     return minOf(expandedFromLayoutPx, callerPx).coerceAtLeast(1)

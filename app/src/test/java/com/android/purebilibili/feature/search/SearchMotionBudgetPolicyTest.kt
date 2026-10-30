@@ -142,7 +142,7 @@ class SearchMotionBudgetPolicyTest {
     }
 
     @Test
-    fun autoFocus_isDisabledForSearchDestinationEntry() {
+    fun autoFocus_focusesBlankLandingAfterStartupSettles() {
         assertFalse(
             shouldAutoFocusSearchField(
                 startupSettled = false,
@@ -155,7 +155,7 @@ class SearchMotionBudgetPolicyTest {
                 query = "abc"
             )
         )
-        assertFalse(
+        assertTrue(
             shouldAutoFocusSearchField(
                 startupSettled = true,
                 query = ""
@@ -164,7 +164,7 @@ class SearchMotionBudgetPolicyTest {
     }
 
     @Test
-    fun autoFocus_remainsDisabledForResultsAndConsumedState() {
+    fun autoFocus_staysDisabledForResultsAndConsumedState() {
         assertFalse(
             shouldAutoFocusSearchField(
                 startupSettled = true,

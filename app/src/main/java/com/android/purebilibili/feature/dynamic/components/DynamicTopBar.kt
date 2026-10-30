@@ -122,6 +122,11 @@ fun DynamicTopBarWithTabs(
     val progressiveTopBlurEnabled = appThemeConfig.progressiveTopBlurEnabled
     val isProgressiveBlurActive = progressiveTopBlurEnabled && !headerBlurEnabled
     val isProgressiveFadeActive = appThemeConfig.progressiveTopFadeEnabled && !headerBlurEnabled
+    // 与首页同一取舍：开启渐进模糊/渐隐时，标签与按钮背后原本只有半透明材质，壁纸会直接透光。
+    // 关闭玻璃后改用不透明纯色背景（有壁纸取色时跟随壁纸主色）；磨砂或玻璃材质保持原样。
+    val useSolidDynamicTopMask = !liquidGlassEnabled && (isProgressiveBlurActive || isProgressiveFadeActive)
+    val solidDynamicTopMaskColor = globalWallpaperAwareChromeColor(MaterialTheme.colorScheme.background)
+        .copy(alpha = 1f)
     val collapseArrowRotation = animateFloatAsState(
         targetValue = if (actionDockCollapsed) 0f else 180f,
         animationSpec = spring(
@@ -136,12 +141,15 @@ fun DynamicTopBarWithTabs(
 
     BiliPaiImmersiveTopBar(
         backdrop = dockBackdrop,
-        enabled = isProgressiveBlurActive,
+        // 纯色遮罩开启时不再绘制模糊/渐隐层，否则它们会盖在实色之上重新透出壁纸。
+        enabled = isProgressiveBlurActive && !useSolidDynamicTopMask,
         headerBlurActive = headerBlurEnabled &&
             hazeState?.let { recoverableBlurEnabled(it) } == true &&
             !isProgressiveBlurActive,
-        fadeEnabled = isProgressiveFadeActive,
-        iconSurfaceColor = if (!isProgressiveBlurActive && headerBlurEnabled && hazeState != null) {
+        fadeEnabled = isProgressiveFadeActive && !useSolidDynamicTopMask,
+        iconSurfaceColor = if (useSolidDynamicTopMask) {
+            solidDynamicTopMaskColor
+        } else if (!isProgressiveBlurActive && headerBlurEnabled && hazeState != null) {
             AppSurfaceTokens.cardContainer().copy(alpha = AppSurfaceTokens.FrostedScrimAlpha)
         } else Color.Transparent,
         surfaceColor = globalWallpaperAwareChromeColor(MaterialTheme.colorScheme.background),
@@ -153,8 +161,17 @@ fun DynamicTopBarWithTabs(
                 Modifier
                     .unifiedBlur(hazeState = hazeState, surfaceType = BlurSurfaceType.HEADER)
                     .background(AppSurfaceTokens.cardContainer().copy(alpha = AppSurfaceTokens.FrostedScrimAlpha))
+            } else if (useSolidDynamicTopMask) {
+                Modifier.background(solidDynamicTopMaskColor)
             } else Modifier
         ),
+    ) {
+    // 纯色遮罩停用模糊/渐隐层后，共享组件会把沉浸标志置为 false；
+    // 这里按遮罩开启状态补回，保持标签行的透明轨道样式不变。
+    val immersiveChromeActive = useSolidDynamicTopMask ||
+        com.android.purebilibili.core.ui.LocalImmersiveTopChromeActive.current
+    CompositionLocalProvider(
+        com.android.purebilibili.core.ui.LocalImmersiveTopChromeActive provides immersiveChromeActive,
     ) {
     val visibleDockBackdrop = com.android.purebilibili.core.ui.blur.rememberSurfaceOverlayBackdrop(
         dockBackdrop, com.android.purebilibili.core.ui.components.LocalAppTopBarSurfaceColor.current,
@@ -330,6 +347,7 @@ fun DynamicTopBarWithTabs(
             }
         }
         Spacer(modifier = Modifier.height(AppSpacingTokens.Small))
+    }
     }
     }
 }

@@ -63,16 +63,17 @@ internal fun shouldBootstrapSearchLandingData(
 }
 
 /**
- * Search is a navigation destination rather than an IME-first overlay. Do not focus the empty
- * landing automatically: an automatic IME consumes the first system Back event, making a newly
- * opened search page appear to require two Back actions to leave.
+ * 进入搜索页落地页时自动聚焦输入框并弹出键盘。
+ *
+ * 只在首帧稳定后的空白落地页触发一次：已输入关键词、已展示结果，或用户已经收起过键盘
+ * （autoFocusConsumed）时都不再自动拉起，避免返回/切页时键盘反复弹出。
  */
 internal fun shouldAutoFocusSearchField(
-    @Suppress("UNUSED_PARAMETER") startupSettled: Boolean,
-    @Suppress("UNUSED_PARAMETER") query: String,
-    @Suppress("UNUSED_PARAMETER") showResults: Boolean = false,
-    @Suppress("UNUSED_PARAMETER") autoFocusConsumed: Boolean = false
-): Boolean = false
+    startupSettled: Boolean,
+    query: String,
+    showResults: Boolean = false,
+    autoFocusConsumed: Boolean = false
+): Boolean = startupSettled && !showResults && query.isBlank() && !autoFocusConsumed
 
 enum class SearchBackAction {
     RETURN_TO_LANDING,

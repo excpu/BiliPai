@@ -531,8 +531,27 @@ fun SpaceScreen(
     val spaceHeaderBlurActive = spaceThemeConfig.headerBlurEnabled &&
         hazeState?.let { recoverableBlurEnabled(it) } == true &&
         !spaceProgressiveBlur
+    // 顶栏标题（UP 主名称）实际出现的时机，与 AppTopBar 的显示条件保持一致。
+    val spaceTopChromeTitleVisible = pinContentTabs || pinnedTopChromeScrim > 0.4f
+    // 开启渐进特效时，名称背后原本只有半透明渐隐/模糊，封面图会直接透光。
+    // 现在名称一出现就改用纯色背景；停在封面顶部、尚未显示名称时保留原有沉浸效果。
+    val spaceSolidTopChromeMask = !spaceThemeConfig.liquidGlassEnabled &&
+        (spaceProgressiveBlur || spaceFadeActive) &&
+        spaceTopChromeTitleVisible
+    // 纯色层随名称的显隐节奏从 0 平滑升到满，避免在标题出现的那一帧硬切。
+    // 折叠式路径（吸顶）跟随标题自身的淡入动画，渐进式路径跟随滚动进度。
+    val spaceSolidTopChromeMaskAlpha = when {
+        !spaceSolidTopChromeMask -> 0f
+        pinContentTabs -> collapsedTitleAlpha.value
+        else -> ((pinnedTopChromeScrim - 0.4f) / 0.3f).coerceIn(0f, 1f)
+    }
+    // 纯色层尚未铺满时继续保留模糊/渐隐材质，铺满后才停用，避免实色上方再叠一层透图模糊。
+    val spaceSolidTopChromeMaskComplete = spaceSolidTopChromeMaskAlpha >= 1f
     val spaceTopChromeSurfaceColor =
-        if (spaceProgressiveBlur || spaceHeaderBlurActive || spaceFadeActive) Color.Transparent
+        if (spaceSolidTopChromeMask) {
+            com.android.purebilibili.core.ui.globalWallpaperAwareChromeColor(MaterialTheme.colorScheme.surface)
+                .copy(alpha = spaceSolidTopChromeMaskAlpha)
+        } else if (spaceProgressiveBlur || spaceHeaderBlurActive || spaceFadeActive) Color.Transparent
         else com.android.purebilibili.core.ui.globalWallpaperAwareChromeColor(MaterialTheme.colorScheme.surface)
             .copy(alpha = pinnedTopChromeScrim)
     // 仅按钮采样合入顶栏实际遮色；列表与返回顶部按钮仍采样各自位置的内容。
@@ -543,10 +562,11 @@ fun SpaceScreen(
         topBar = {
             BiliPaiImmersiveTopBar(
                 backdrop = spaceChromeBackdrop,
-                enabled = spaceProgressiveBlur,
+                // 纯色遮罩铺满后不再绘制模糊/渐隐层，否则它们会盖在实色之上重新透出背景图。
+                enabled = spaceProgressiveBlur && !spaceSolidTopChromeMaskComplete,
                 headerBlurActive = spaceHeaderBlurActive,
                 surfaceColor = com.android.purebilibili.core.ui.globalWallpaperAwareChromeColor(MaterialTheme.colorScheme.surface),
-                fadeEnabled = spaceFadeActive,
+                fadeEnabled = spaceFadeActive && !spaceSolidTopChromeMaskComplete,
                 opaqueBackgroundFallback = false,
                 modifier = Modifier.background(spaceTopChromeSurfaceColor),
             ) {
@@ -574,7 +594,7 @@ fun SpaceScreen(
                     )
             ) {
                 AppTopBar(
-                    title = if (pinContentTabs || pinnedTopChromeScrim > 0.4f) screenTitle else "",
+                    title = if (spaceTopChromeTitleVisible) screenTitle else "",
                     smallTitleColor = if (pinContentTabs) {
                         AppContentColors.primaryText().copy(alpha = collapsedTitleAlpha.value)
                     } else Color.Unspecified,

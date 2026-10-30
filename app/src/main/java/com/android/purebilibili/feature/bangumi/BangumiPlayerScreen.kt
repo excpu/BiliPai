@@ -7,6 +7,8 @@ import com.android.purebilibili.core.ui.components.appElasticPress
 
 
 import com.android.purebilibili.feature.video.screen.resolvePhoneInlineVideoViewportHeightDp
+import com.android.purebilibili.feature.video.screen.PHONE_DETAIL_VIDEO_ASPECT_RATIO
+import com.android.purebilibili.feature.video.screen.resolveInlineVideoDisplayAspect
 import com.android.purebilibili.feature.video.screen.resolveVideoDetailStableStatusBarHeightDp
 import com.android.purebilibili.feature.video.screen.resolveVideoDetailPortraitPlayerTopInsetDp
 import com.android.purebilibili.feature.video.ambient.AmbientPresentation
@@ -292,6 +294,24 @@ fun BangumiPlayerScreen(
     }
 
     //  [优化] 播放诊断监听先于加载注册，避免错过首帧事件后误报黑屏
+    var bangumiVideoSize by remember(exoPlayer) { mutableStateOf(0 to 0) }
+    val bangumiAspectRatioPreference by com.android.purebilibili.core.store.SettingsManager
+        .getFullscreenAspectRatio(context)
+        .collectAsStateWithLifecycle(
+            initialValue = com.android.purebilibili.core.store.FullscreenAspectRatio.FIT
+        )
+    val targetBangumiInlineVideoDisplayAspect = resolveInlineVideoDisplayAspect(
+        preference = bangumiAspectRatioPreference,
+        videoWidth = bangumiVideoSize.first,
+        videoHeight = bangumiVideoSize.second,
+        isVerticalVideo = bangumiVideoSize.second > bangumiVideoSize.first,
+    )
+    // 首帧才拿到尺寸时平滑过渡，避免播放区域一帧内从 16:9 弹到片源比例。
+    val bangumiInlineVideoDisplayAspect by animateFloatAsState(
+        targetValue = targetBangumiInlineVideoDisplayAspect,
+        animationSpec = tween(durationMillis = 220, easing = AppMotionEasing.M1Standard),
+        label = "bangumi_inline_video_display_aspect",
+    )
     DisposableEffect(exoPlayer) {
         fun updatePlaybackDebug(
             event: String,
@@ -350,6 +370,12 @@ fun BangumiPlayerScreen(
                     firstFrameRendered = true
                 )
                 android.util.Log.d("BangumiPlayer", "🎬 首帧已渲染")
+            }
+
+            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                if (videoSize.width > 0 && videoSize.height > 0) {
+                    bangumiVideoSize = videoSize.width to videoSize.height
+                }
             }
         }
         exoPlayer.addListener(errorListener)
@@ -1067,6 +1093,7 @@ fun BangumiPlayerScreen(
             windowWidthDp = configuration.screenWidthDp.toFloat(),
             windowHeightDp = configuration.screenHeightDp.toFloat(),
             isFoldableCoverWindow = displayContext.isFoldableCoverWindow,
+            sourceAspect = bangumiInlineVideoDisplayAspect,
         ).dp
         val collapsedPlayerHeight = 56.dp
         val collapseRangePx = remember(playerHeight, density) {

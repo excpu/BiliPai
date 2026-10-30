@@ -1,5 +1,6 @@
 package com.android.purebilibili.feature.video.screen
 
+import com.android.purebilibili.core.store.FullscreenAspectRatio
 import com.android.purebilibili.core.store.TabletSecondaryDefaultTab
 
 /**
@@ -9,6 +10,72 @@ import com.android.purebilibili.core.store.TabletSecondaryDefaultTab
 internal const val LARGE_SCREEN_VIDEO_LANDSCAPE_RATIO = 1.2f
 internal const val LARGE_SCREEN_VIDEO_ASPECT_16_9 = 16f / 9f
 internal const val PHONE_DETAIL_VIDEO_ASPECT_RATIO = 16f / 9f
+
+/**
+ * 内联播放区域跟随片源比例时的上下限：过窄的竖源不会吃掉整屏，超宽银幕也不会把详情内容推出屏幕。
+ */
+internal const val INLINE_VIDEO_ASPECT_MIN = 0.9f
+internal const val INLINE_VIDEO_ASPECT_MAX = 2.5f
+
+/**
+ * 内联播放区域使用的显示比例（宽/高）。
+ *
+ * 尺寸未知（首帧前 0x0）时回落到 16:9，避免加载封面与首帧之间视口跳动；
+ * 竖屏片源继续由官方竖屏内联体验/竖屏全屏接管，这里保持 16:9 不引入新的塌陷高度。
+ */
+internal fun resolveInlineVideoDisplayAspect(
+    videoWidth: Int,
+    videoHeight: Int,
+    isVerticalVideo: Boolean,
+    fallback: Float = PHONE_DETAIL_VIDEO_ASPECT_RATIO,
+): Float {
+    if (isVerticalVideo) return fallback
+    if (videoWidth <= 0 || videoHeight <= 0) return fallback
+    val ratio = videoWidth.toFloat() / videoHeight.toFloat()
+    if (!ratio.isFinite() || ratio <= 0f) return fallback
+    return ratio.coerceIn(INLINE_VIDEO_ASPECT_MIN, INLINE_VIDEO_ASPECT_MAX)
+}
+
+/**
+ * 内联播放区域是否应贴合片源比例。
+ *
+ * 「裁剪」「拉伸」「限制」依赖容器与片源的差异来完成裁切或保持原始尺寸，继续按 16:9 视口展示；
+ * 自动 / 等宽 / 等高 / 原始 让播放区域贴合源比例，4:3 等画面可以填满播放区域。
+ */
+internal fun shouldInlineViewportFollowSourceAspect(preference: FullscreenAspectRatio): Boolean {
+    return when (preference) {
+        FullscreenAspectRatio.FIT,
+        FullscreenAspectRatio.FIT_WIDTH,
+        FullscreenAspectRatio.FIT_HEIGHT,
+        FullscreenAspectRatio.ORIGINAL,
+        -> true
+        FullscreenAspectRatio.RATIO_16_9,
+        FullscreenAspectRatio.RATIO_4_3,
+        FullscreenAspectRatio.FILL,
+        FullscreenAspectRatio.STRETCH,
+        FullscreenAspectRatio.SCALE_DOWN,
+        -> false
+    }
+}
+
+/** 按用户画幅偏好解析内联播放区域比例；固定画幅与裁切类模式保持原视口。 */
+internal fun resolveInlineVideoDisplayAspect(
+    preference: FullscreenAspectRatio,
+    videoWidth: Int,
+    videoHeight: Int,
+    isVerticalVideo: Boolean,
+): Float {
+    return when {
+        preference == FullscreenAspectRatio.RATIO_16_9 -> PHONE_DETAIL_VIDEO_ASPECT_RATIO
+        preference == FullscreenAspectRatio.RATIO_4_3 -> 4f / 3f
+        else -> resolveInlineVideoDisplayAspect(
+            videoWidth = videoWidth,
+            videoHeight = videoHeight,
+            isVerticalVideo = isVerticalVideo || !shouldInlineViewportFollowSourceAspect(preference),
+        )
+    }
+}
+
 internal const val LARGE_SCREEN_VIDEO_MIN_SIDE_PANE_DP = 280f
 internal const val LARGE_SCREEN_VIDEO_MAX_SIDE_PANE_DP = 425f
 internal const val LARGE_SCREEN_VIDEO_SIDE_PANE_BREAKPOINT_DP = 560f
@@ -46,8 +113,10 @@ internal fun resolvePhoneInlineVideoViewportHeightDp(
     windowWidthDp: Float,
     windowHeightDp: Float,
     isFoldableCoverWindow: Boolean,
+    sourceAspect: Float = PHONE_DETAIL_VIDEO_ASPECT_RATIO,
 ): Float {
-    val aspectHeight = windowWidthDp.coerceAtLeast(0f) / PHONE_DETAIL_VIDEO_ASPECT_RATIO
+    val aspect = sourceAspect.takeIf { it.isFinite() && it > 0f } ?: PHONE_DETAIL_VIDEO_ASPECT_RATIO
+    val aspectHeight = windowWidthDp.coerceAtLeast(0f) / aspect
     if (!isFoldableCoverWindow || windowHeightDp <= 0f) return aspectHeight
     if (windowHeightDp >= FOLDABLE_COVER_COMPACT_HEIGHT_MAX_DP) return aspectHeight
     return minOf(
@@ -98,7 +167,9 @@ internal fun resolveLargeScreenVideoMetrics(
     windowHeightDp: Float,
     isVerticalVideo: Boolean,
     enableVerticalExpand: Boolean = false,
+    sourceAspect: Float = LARGE_SCREEN_VIDEO_ASPECT_16_9,
 ): LargeScreenVideoMetrics {
+    val aspect = sourceAspect.takeIf { it.isFinite() && it > 0f } ?: LARGE_SCREEN_VIDEO_ASPECT_16_9
     if (windowWidthDp <= 0f || windowHeightDp <= 0f) {
         return LargeScreenVideoMetrics(
             mode = LargeScreenVideoLayoutMode.Phone,
@@ -123,10 +194,10 @@ internal fun resolveLargeScreenVideoMetrics(
     }
     if (landscape) {
         val playerWidth = resolveLargeScreenLandscapePlayerWidthDp(windowWidthDp, windowHeightDp)
-        val playerHeight = playerWidth / LARGE_SCREEN_VIDEO_ASPECT_16_9
+        val playerHeight = playerWidth / aspect
         if (playerHeight > windowHeightDp) {
             val splitHeight = windowHeightDp
-            val splitWidth = splitHeight * LARGE_SCREEN_VIDEO_ASPECT_16_9
+            val splitWidth = splitHeight * aspect
             return LargeScreenVideoMetrics(
                 mode = LargeScreenVideoLayoutMode.Split,
                 playerWidthDp = splitWidth.coerceAtMost(windowWidthDp),
@@ -143,8 +214,10 @@ internal fun resolveLargeScreenVideoMetrics(
             introBelowPlayer = true,
         )
     }
-    val fullWidthPlayerHeight = windowWidthDp / LARGE_SCREEN_VIDEO_ASPECT_16_9
-    if (fullWidthPlayerHeight < LARGE_SCREEN_VIDEO_SQUARE_MIN_HEIGHT_FRACTION * windowHeightDp) {
+    val fullWidthPlayerHeight = windowWidthDp / aspect
+    if (windowWidthDp / LARGE_SCREEN_VIDEO_ASPECT_16_9 <
+        LARGE_SCREEN_VIDEO_SQUARE_MIN_HEIGHT_FRACTION * windowHeightDp
+    ) {
         return LargeScreenVideoMetrics(
             mode = LargeScreenVideoLayoutMode.Phone,
             playerWidthDp = windowWidthDp,

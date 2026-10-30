@@ -117,6 +117,8 @@ internal fun LargeScreenVideoLayout(
     externalQueueTitle: String = "播放列表",
     externalQueueContent: (@Composable () -> Unit)? = null,
     transitionChromeAlphaProvider: () -> Float = { 1f },
+    /** 内联播放区域显示比例（宽/高），由调用方按片源尺寸解析；未知时为 16:9。 */
+    inlineVideoDisplayAspect: Float = LARGE_SCREEN_VIDEO_ASPECT_16_9,
 ) {
     val pageColor = AppSurfaceTokens.chromeBackground()
     // With a supplied transition host, backing pixels must move inside its media clip.
@@ -136,12 +138,13 @@ internal fun LargeScreenVideoLayout(
     ) {
         val windowWidthDp = maxWidth.value
         val windowHeightDp = maxHeight.value
-        val metrics = remember(windowWidthDp, windowHeightDp, isVerticalVideo) {
+        val metrics = remember(windowWidthDp, windowHeightDp, isVerticalVideo, inlineVideoDisplayAspect) {
             resolveLargeScreenVideoMetrics(
                 windowWidthDp = windowWidthDp,
                 windowHeightDp = windowHeightDp,
                 isVerticalVideo = isVerticalVideo,
                 enableVerticalExpand = true,
+                sourceAspect = inlineVideoDisplayAspect,
             )
         }
         val applySideStatusBarPadding =

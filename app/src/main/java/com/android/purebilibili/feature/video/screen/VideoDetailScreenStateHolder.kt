@@ -2614,6 +2614,28 @@ internal fun VideoDetailScreenStateHolder(
     val isVerticalFromPlayer by playerState.isVerticalVideo.collectAsStateWithLifecycle()
     val isVerticalFromInfo = (uiState as? VideoPlaybackUiState.Success)?.info?.dimension?.isVertical == true
     val isVerticalVideo = initialVerticalFromRoute || isVerticalFromPlayer || isVerticalFromInfo
+    // 📐 内联播放区域跟随片源比例：优先使用 API 预判断尺寸（首帧前即可用），其次播放器精确尺寸。
+    // 固定画幅（16:9 / 4:3）与裁切类模式保持原视口，自动 / 等宽 / 等高 / 原始按片源铺满，4:3 视频可填满播放区域。
+    val playerVideoSize by playerState.videoSize.collectAsStateWithLifecycle()
+    val apiVideoDimension by playerState.apiDimension.collectAsStateWithLifecycle()
+    val inlineAspectRatioPreference by com.android.purebilibili.core.store.SettingsManager
+        .getFullscreenAspectRatio(context)
+        .collectAsStateWithLifecycle(
+            initialValue = com.android.purebilibili.core.store.FullscreenAspectRatio.FIT,
+            lifecycle = lifecycleOwner.lifecycle
+        )
+    val targetInlineVideoDisplayAspect = resolveInlineVideoDisplayAspect(
+        preference = inlineAspectRatioPreference,
+        videoWidth = (apiVideoDimension ?: playerVideoSize).first,
+        videoHeight = (apiVideoDimension ?: playerVideoSize).second,
+        isVerticalVideo = isVerticalVideo,
+    )
+    // 尺寸可能在首帧才到达，高度随之平滑过渡，避免播放区域一帧内从 16:9 弹到片源比例。
+    val inlineVideoDisplayAspect by animateFloatAsState(
+        targetValue = targetInlineVideoDisplayAspect,
+        animationSpec = tween(durationMillis = 220, easing = AppMotionEasing.M1Standard),
+        label = "inline_video_display_aspect",
+    )
     val continuousFullscreenTransitionEnabled = transitionEnabled &&
         isOrientationDrivenFullscreen &&
         orientationPolicyDevice &&
@@ -4047,6 +4069,7 @@ internal fun VideoDetailScreenStateHolder(
                                 externalQueueContent = tabletExternalQueueContent,
                                 playerContent = continuousPlayerSlot,
                                 transitionChromeAlphaProvider = videoCardDetailChromeAlphaProvider,
+                                inlineVideoDisplayAspect = inlineVideoDisplayAspect,
                             )
                         } else {
                             LargeScreenVideoLayout(
@@ -4120,6 +4143,7 @@ internal fun VideoDetailScreenStateHolder(
                             externalQueueContent = tabletExternalQueueContent,
                             playerContent = continuousPlayerSlot,
                             transitionChromeAlphaProvider = videoCardDetailChromeAlphaProvider,
+                            inlineVideoDisplayAspect = inlineVideoDisplayAspect,
                             )
                         }
                     } else {
@@ -4147,6 +4171,7 @@ internal fun VideoDetailScreenStateHolder(
                             windowWidthDp = configuration.screenWidthDp.toFloat(),
                             windowHeightDp = configuration.screenHeightDp.toFloat(),
                             isFoldableCoverWindow = displayContext.isFoldableCoverWindow,
+                            sourceAspect = inlineVideoDisplayAspect,
                         ).dp
                         val playerChromeProfile = rememberAppPlayerChromeProfile()
                         val liquidGlassTabMotion = com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled
@@ -4959,9 +4984,10 @@ internal fun VideoDetailScreenStateHolder(
                                     inlineHeight = inlinePlayerHeight,
                                     fullscreenHeight = fullscreenPlayerHeight,
                                     enabled = continuousFullscreenTransitionEnabled,
-                                    // Loading cover and playback share 16:9 geometry; the first frame must not resize the viewport.
+                                    // Loading cover and playback share the source-aspect geometry; the first frame must not resize the viewport.
                                     preferLayoutWidthInline = !useOfficialInlinePortraitDetailExperience &&
                                         !suppressPhoneDetailBodyForDirectPortrait,
+                                    sourceAspect = inlineVideoDisplayAspect,
                                     inlineTopInset = if (!useOfficialInlinePortraitDetailExperience) {
                                         playerTopInset
                                     } else {
