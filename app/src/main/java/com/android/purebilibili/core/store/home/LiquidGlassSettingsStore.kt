@@ -22,8 +22,18 @@ enum class GlassPopupPalette(val value: Int, val label: String) {
 }
 
 internal val glassPopupPalettePreferencesKey = intPreferencesKey("liquid_glass_popup_palette")
+internal val progressiveBlurRendererPreferencesKey = intPreferencesKey("progressive_blur_renderer")
 
 object LiquidGlassSettingsStore {
+    fun observeProgressiveBlurRenderer(context: Context): Flow<ProgressiveBlurRenderer> =
+        context.settingsDataStore.data.map {
+            ProgressiveBlurRenderer.fromValue(it[progressiveBlurRendererPreferencesKey] ?: 0)
+        }.distinctUntilChanged()
+
+    suspend fun setProgressiveBlurRenderer(context: Context, renderer: ProgressiveBlurRenderer) {
+        context.settingsDataStore.edit { it[progressiveBlurRendererPreferencesKey] = renderer.value }
+    }
+
     fun observePopupPalette(context: Context): Flow<GlassPopupPalette> =
         context.settingsDataStore.data.map {
             GlassPopupPalette.fromValue(it[glassPopupPalettePreferencesKey] ?: GlassPopupPalette.DOCK.value)

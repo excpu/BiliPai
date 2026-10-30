@@ -119,6 +119,7 @@ fun DynamicDetailScreen(
     dynamicId: String,
     openCommentRootRpid: Long = 0L,
     openCommentTargetRpid: Long = 0L,
+    openComments: Boolean = false,
     onBack: () -> Unit,
     onVideoClick: (String) -> Unit,
     onBangumiClick: (Long, Long) -> Unit = { _, _ -> },
@@ -219,7 +220,9 @@ fun DynamicDetailScreen(
     var forwardCountDelta by remember(dynamicId) { mutableIntStateOf(0) }
     var subReplyCoveredBlurProgress by remember { mutableFloatStateOf(0f) }
     val avatarPushEnabled = com.android.purebilibili.feature.video.ui.components.rememberCommentAvatarPushEnabled()
-    val detailListState = rememberLazyListState()
+    val detailListState = rememberLazyListState(
+        initialFirstVisibleItemIndex = if (openComments) 1 else 0,
+    )
     //  [新增] 大屏/横屏分栏：右栏评论列表
     val commentListState = rememberLazyListState()
     val useSplitLayout = LocalWindowSizeClass.current.shouldUseSplitLayout
@@ -355,6 +358,16 @@ fun DynamicDetailScreen(
                         }
                 }
 
+                val showCommentsInPlace: () -> Unit = {
+                    detailScrollScope.launch {
+                        if (useSplitLayout) {
+                            commentListState.animateScrollToItem(0)
+                        } else {
+                            detailListState.animateScrollToItem(1)
+                        }
+                    }
+                }
+
                 //  [新增] 卡片与评论内容提取，供分栏/单列两种布局复用
                 val cardContent: androidx.compose.foundation.lazy.LazyListScope.() -> Unit = {
                     item {
@@ -378,15 +391,8 @@ fun DynamicDetailScreen(
                                     onMatchClick = onMatchClick,
                                 ),
                                 interaction = DynamicCardInteractionActions(
-                                    onCommentClick = {
-                                        detailScrollScope.launch {
-                                            if (useSplitLayout) {
-                                                commentListState.animateScrollToItem(0)
-                                            } else {
-                                                detailListState.animateScrollToItem(1)
-                                            }
-                                        }
-                                    },
+                                    onCommentClick = { showCommentsInPlace() },
+                                    onShowCommentsInPlace = showCommentsInPlace,
                                     onRepostClick = { showRepostDialog = it },
                                     onLikeClickWithState = { targetDynamicId, isLiked ->
                                         interactionViewModel.likeDynamic(
@@ -474,7 +480,7 @@ fun DynamicDetailScreen(
                         comments = comments,
                         isLoading = commentsLoading,
                         isLoadingMore = commentsLoadingMore,
-                        onViewReplies = { reply -> interactionViewModel.openSubReply(reply) },
+                        onViewReplies = interactionViewModel::openSubReply,
                         onReply = { reply -> interactionViewModel.startCommentReply(reply) },
                         onLike = { reply -> interactionViewModel.likeComment(reply.rpid) },
                         onHate = { reply ->

@@ -2,6 +2,7 @@ package com.android.purebilibili.feature.web
 
 import com.android.purebilibili.core.util.BilibiliNavigationTarget
 import com.android.purebilibili.core.util.BilibiliNavigationTargetParser
+import com.android.purebilibili.core.util.hasCommentLocation
 
 internal sealed interface WebViewNavigationAction {
     data object AllowWebLoad : WebViewNavigationAction
@@ -35,7 +36,7 @@ internal fun resolveWebViewNavigationAction(
         }
 
         val target = BilibiliNavigationTargetParser.parse(urlString)
-        if (target is BilibiliNavigationTarget.Dynamic) {
+        if (target != null && (target is BilibiliNavigationTarget.Dynamic || target.hasCommentLocation)) {
             return WebViewNavigationAction.DispatchTarget(target)
         }
 

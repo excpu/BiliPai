@@ -130,6 +130,7 @@ internal fun BangumiCommentPanel(
                 upMid = state.upMid,
                 maxTimestampMs = maxTimestampMs,
                 replies = state.replies,
+                pageControl = state.pageControl,
                 replyCount = state.replyCount,
                 emoteMap = emptyMap(),
                 isRepliesLoading = state.isRepliesLoading,

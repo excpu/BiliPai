@@ -341,14 +341,14 @@ private fun RelatedVideoItemSkeleton(
     stacked: Boolean = false,
 ) {
     HorizontalVideoCardFrame(
+        plainHorizontal = true,
+        fillInfoHeight = true,
         coverAspectRatio = coverAspectRatio,
         stacked = stacked,
         coverWidthDp = RELATED_VIDEO_HORIZONTAL_COVER_WIDTH_DP.dp,
         centerCoverVertically = true,
         trailingContent = { Spacer(Modifier.size(48.dp)) },
-        modifier = modifier
-            .clip(AppShapes.container(ContainerLevel.Card))
-            .background(AppSurfaceTokens.cardContainer()),
+        modifier = modifier,
         coverContent = {
             SkeletonBlock(
                 modifier = Modifier.fillMaxSize(),

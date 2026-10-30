@@ -8,6 +8,32 @@ import kotlin.test.assertNotEquals
 
 class BiliPaiNavKeyMappingPolicyTest {
     @Test
+    fun dynamicCommentEntryAndReplyLocationSurviveRouteRestoration() {
+        listOf(
+            BiliPaiNavKey.DynamicDetail("123"),
+            BiliPaiNavKey.DynamicDetail("123", openComments = true),
+            BiliPaiNavKey.DynamicDetail("123", 456L, 789L, openComments = true),
+            BiliPaiNavKey.DynamicDetail("123", 456L, 789L),
+        ).forEach { key ->
+            assertEquals(key, legacyRouteToBiliPaiNavKey(key.toLegacyRoute()))
+            assertEquals(
+                key,
+                legacyRouteToBiliPaiNavKey(ScreenRoutes.DynamicDetail.createRoute(
+                    dynamicId = key.dynamicId,
+                    commentRootRpid = key.commentRootRpid,
+                    commentTargetRpid = key.commentTargetRpid,
+                    openComments = key.openComments,
+                )),
+            )
+        }
+        assertEquals(BiliPaiNavKey.DynamicDetail("123"), legacyRouteToBiliPaiNavKey("dynamic_detail/123"))
+        assertEquals(
+            BiliPaiNavKey.DynamicDetail("123"),
+            legacyRouteToBiliPaiNavKey("dynamic_detail/123?openComments=false"),
+        )
+    }
+
+    @Test
     fun articleCommentLocationSurvivesRouteRestoration() {
         val key = BiliPaiNavKey.ArticleDetail(123L, "专栏 & 评论", 456L, 789L)
         assertEquals(key, legacyRouteToBiliPaiNavKey(key.toLegacyRoute()))

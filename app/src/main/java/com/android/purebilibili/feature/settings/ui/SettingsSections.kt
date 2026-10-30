@@ -1387,7 +1387,29 @@ fun PrivacySection(
         SettingsIconRole.PRIVACY_CONTENT_AUTHENTICATION,
     )
 
+    val showHotControl by SettingsManager.getSearchLandingSectionVisible(context, 0).collectAsStateWithLifecycle(initialValue = true)
+    val showHistoryControl by SettingsManager.getSearchLandingSectionVisible(context, 1).collectAsStateWithLifecycle(initialValue = true)
+    val showDiscoverControl by SettingsManager.getSearchLandingSectionVisible(context, 2).collectAsStateWithLifecycle(initialValue = true)
+
     SettingsCardGroup {
+        listOf(
+            Triple("privacy.search_hot_control", showHotControl, SettingsIconRole.SEARCH_HOT_SECTION),
+            Triple("privacy.search_history_control", showHistoryControl, SettingsIconRole.SEARCH_HISTORY_SECTION),
+            Triple("privacy.search_discover_control", showDiscoverControl, SettingsIconRole.SEARCH_DISCOVER_SECTION),
+        ).forEachIndexed { index, (id, visible, iconRole) ->
+            SettingsItemAnchor(id) {
+                SettingSwitchItem(
+                    icon = rememberSettingsSemanticIcon(iconRole),
+                    title = settingItemTitle(id),
+                    subtitle = if (index == 1) "关闭后隐藏搜索历史，记录设置和已有历史不变" else "关闭后隐藏搜索页对应分区",
+                    checked = visible,
+                    onCheckedChange = { enabled ->
+                        scope.launch { SettingsManager.setSearchLandingSectionVisible(context, index, enabled) }
+                    },
+                )
+            }
+            SettingsAdaptiveDivider()
+        }
         SettingSwitchItem(
             icon = rememberSettingsSemanticIcon(SettingsIconRole.HOME_SEARCH_GLASS),
             title = "搜索框推荐词",

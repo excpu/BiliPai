@@ -40,7 +40,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -79,6 +78,8 @@ fun PlayerSelectionPopup(
     if (placement == PlayerListPopupPlacement.ANCHOR_END && anchorBounds == null && !anchorToGlassSource) return
     // 仅玻璃列表使用播放器菜单上限；原生分支继续保留调用方的尺寸与定位。
     val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val safe = playerPanelSafeWindowBounds()
+    val popupAnchorBounds = anchorBounds?.let { resolvePlayerPopupAnchorBounds(it, safe) }
     val glassPolicy = resolvePlayerSettingsMenuLayoutPolicy(
         screenWidthDp = configuration.screenWidthDp,
         screenHeightDp = configuration.screenHeightDp,
@@ -98,7 +99,7 @@ fun PlayerSelectionPopup(
                 PlayerListPopupPlacement.END_BOTTOM -> com.android.purebilibili.core.ui.components.AppGlassMenuPlacement.END_BOTTOM
                 PlayerListPopupPlacement.ANCHOR_END -> com.android.purebilibili.core.ui.components.AppGlassMenuPlacement.ANCHOR_END
             },
-            anchorBounds = anchorBounds?.let { androidx.compose.ui.geometry.Rect(
+            anchorBounds = popupAnchorBounds?.let { androidx.compose.ui.geometry.Rect(
                 it.left.toFloat(), it.top.toFloat(), it.right.toFloat(), it.bottom.toFloat()) },
             minWidth = minWidth.coerceAtMost(glassMaxWidth),
             maxWidth = glassMaxWidth,
@@ -117,15 +118,6 @@ fun PlayerSelectionPopup(
         }) return
     val density = LocalDensity.current
     val direction = LocalLayoutDirection.current
-    val size = LocalWindowInfo.current.containerSize
-    val insets = WindowInsets.safeDrawing
-    val left = insets.getLeft(density, direction).coerceIn(0, size.width)
-    val top = insets.getTop(density).coerceIn(0, size.height)
-    val safe = IntRect(
-        left, top,
-        (size.width - insets.getRight(density, direction)).coerceIn(left, size.width),
-        (size.height - insets.getBottom(density)).coerceIn(top, size.height),
-    )
     val gap = with(density) { 4.dp.roundToPx() }
     val requestedMaxHeight = with(density) { maxHeight?.roundToPx() }
     val viewport = resolvePlayerPopupViewport(
@@ -133,7 +125,7 @@ fun PlayerSelectionPopup(
         requestedMaxHeight = requestedMaxHeight,
         horizontalMargin = gap,
         verticalMargin = gap,
-        anchorBounds = anchorBounds.takeIf { placement == PlayerListPopupPlacement.ANCHOR_END },
+        anchorBounds = popupAnchorBounds.takeIf { placement == PlayerListPopupPlacement.ANCHOR_END },
         anchorGap = gap,
     )
     if (viewport.bounds.width <= 0 || viewport.maxHeight <= 0) return
@@ -148,7 +140,7 @@ fun PlayerSelectionPopup(
         // 和倍速 / 画面比例菜单一致的行为：点菜单外收起菜单，且这一下点击被遮罩吃掉、
         // 不穿透给下层按钮（否则会出现"关闭又被同一个点击重新打开"的闪烁）。
         // 做法：Popup 内容铺满全屏 —— 一层透明遮罩负责消费点击并关闭，菜单本身叠在其上。
-        val miuixAnchor = anchorBounds ?: when (placement) {
+        val miuixAnchor = popupAnchorBounds ?: when (placement) {
             PlayerListPopupPlacement.CENTER -> IntRect(safe.center, IntSize.Zero)
             PlayerListPopupPlacement.START -> IntRect(safe.left, safe.center.y, safe.left, safe.center.y)
             PlayerListPopupPlacement.END -> IntRect(safe.right, safe.center.y, safe.right, safe.center.y)
@@ -269,7 +261,7 @@ fun PlayerSelectionPopup(
         )
     } else {
         // 原生菜单从实际按钮边界定位；窗口坐标只在布局阶段换算，避免覆盖层偏移。
-        val target = anchorBounds ?: when (placement) {
+        val target = popupAnchorBounds ?: when (placement) {
             PlayerListPopupPlacement.START -> IntRect(safe.left, safe.center.y, safe.left, safe.center.y)
             PlayerListPopupPlacement.END -> IntRect(safe.right, safe.center.y, safe.right, safe.center.y)
             PlayerListPopupPlacement.END_BOTTOM -> IntRect(safe.right, safe.bottom, safe.right, safe.bottom)

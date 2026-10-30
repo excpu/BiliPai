@@ -371,6 +371,7 @@ internal fun resolveSpaceDynamicCardItem(item: SpaceDynamicItem): DynamicItem {
         orig = item.orig?.let(::resolveSpaceDynamicCardItem),
         modules = DynamicModules(
             module_dispute = item.modules.module_dispute,
+            module_interaction = item.modules.module_interaction,
             module_author = item.modules.module_author?.let { author ->
                 DynamicAuthorModule(
                     mid = author.mid,

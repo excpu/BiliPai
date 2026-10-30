@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.layer.CompositingStrategy
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
@@ -1092,6 +1093,7 @@ internal class VideoCardTransitionSnapshotHandle(
     private val sourceLayer: androidx.compose.ui.graphics.layer.GraphicsLayer,
     val state: VideoCardTransitionSnapshotLayerState,
 ) {
+    private var effectRasterScale = Float.NaN
     /**
      * 来源内容与动态景深分层。内层只在快照刷新时录制，使用独立离屏缓存承载复杂页面；
      * 外层仅引用内层，模糊、透明度与圆角更新不会同时改动内层的图层属性。
@@ -1101,10 +1103,37 @@ internal class VideoCardTransitionSnapshotHandle(
         sourceLayer.compositingStrategy = CompositingStrategy.Offscreen
         with(scope) {
             sourceLayer.record(block = drawBlock)
-            contentLayer.record {
-                drawLayer(sourceLayer)
-            }
         }
+        effectRasterScale = Float.NaN
+    }
+
+    /** 仅供刚完成录制的同一帧复用清晰底图，不再次执行来源页面的绘制。 */
+    fun drawJustRecordedSource(scope: DrawScope) {
+        with(scope) { drawLayer(sourceLayer) }
+    }
+
+    /** 只重录效果壳的单条图层引用，不重新执行首页的绘制或改变原始来源缓存。 */
+    fun prepareEffectLayer(scope: DrawScope, blurRadiusPx: Float): Float {
+        val rasterScale = resolveVideoCardBlurRasterScale(blurRadiusPx)
+        val rasterSize = resolveVideoCardBlurRasterSize(
+            Size(sourceLayer.size.width.toFloat(), sourceLayer.size.height.toFloat()),
+            rasterScale,
+        )
+        if (effectRasterScale != rasterScale || contentLayer.size != rasterSize) {
+            contentLayer.record(
+                density = scope,
+                layoutDirection = scope.layoutDirection,
+                size = rasterSize,
+            ) {
+                scale(rasterScale, rasterScale, pivot = Offset.Zero) {
+                    drawLayer(sourceLayer)
+                }
+            }
+            effectRasterScale = rasterScale
+            // Outline 的默认尺寸取当前纹理尺寸，切换分辨率后必须同步重建。
+            state.lastCornerRadiusPx = Float.NaN
+        }
+        return rasterScale
     }
 
     fun clearRenderEffect() {
@@ -1116,6 +1145,7 @@ internal class VideoCardTransitionSnapshotHandle(
 
     fun releaseSession() {
         clearRenderEffect()
+        effectRasterScale = Float.NaN
         // 标记失效不会清除 GraphicsLayer 的绘制闭包和子层引用。
         // 会话结束后录入空内容，归还旧列表的封面与离屏图层。
         contentLayer.record(
@@ -1147,32 +1177,39 @@ internal fun applyVideoCardTransitionSnapshotFrame(
     canvasSize: androidx.compose.ui.geometry.Size,
     sourceBounds: Rect? = null,
     layerAlpha: Float = 1f,
+    rasterScale: Float = 1f,
 ) {
     // Shared with the host renderer: write the owning renderer's final alpha once.
     contentLayer.alpha = layerAlpha
-    contentLayer.pivotOffset = resolveVideoCardTransitionBackgroundScalePivotOffset(
+    val pivot = resolveVideoCardTransitionBackgroundScalePivotOffset(
         sourceBounds = sourceBounds,
         canvasSize = canvasSize,
     )
-    contentLayer.scaleX = frame.contentScale
-    contentLayer.scaleY = frame.contentScale
-    if (frame.cornerRadiusPx != snapshotState.lastCornerRadiusPx) {
-        snapshotState.lastCornerRadiusPx = frame.cornerRadiusPx
-        if (frame.cornerRadiusPx > 0.01f) {
-            contentLayer.setRoundRectOutline(cornerRadius = frame.cornerRadiusPx)
+    contentLayer.pivotOffset = pivot * rasterScale
+    val translation = resolveVideoCardBlurRasterTranslation(pivot, rasterScale)
+    contentLayer.translationX = translation.x
+    contentLayer.translationY = translation.y
+    contentLayer.scaleX = frame.contentScale / rasterScale
+    contentLayer.scaleY = frame.contentScale / rasterScale
+    val cornerRadiusPx = frame.cornerRadiusPx * rasterScale
+    if (cornerRadiusPx != snapshotState.lastCornerRadiusPx) {
+        snapshotState.lastCornerRadiusPx = cornerRadiusPx
+        if (cornerRadiusPx > 0.01f) {
+            contentLayer.setRoundRectOutline(cornerRadius = cornerRadiusPx)
             contentLayer.clip = true
-            contentLayer.shadowElevation = frame.shadowElevationPx
+            contentLayer.shadowElevation = frame.shadowElevationPx * rasterScale
         } else {
             contentLayer.setRectOutline()
             contentLayer.clip = false
             contentLayer.shadowElevation = 0f
         }
-    } else if (frame.cornerRadiusPx > 0.01f) {
-        contentLayer.shadowElevation = frame.shadowElevationPx
+    } else if (cornerRadiusPx > 0.01f) {
+        contentLayer.shadowElevation = frame.shadowElevationPx * rasterScale
     }
-    if (frame.blurRadiusPx != snapshotState.lastBlurRadiusPx) {
-        snapshotState.lastBlurRadiusPx = frame.blurRadiusPx
-        contentLayer.renderEffect = snapshotState.blurEffect(frame.blurRadiusPx)
+    val blurRadiusPx = frame.blurRadiusPx * rasterScale
+    if (blurRadiusPx != snapshotState.lastBlurRadiusPx) {
+        snapshotState.lastBlurRadiusPx = blurRadiusPx
+        contentLayer.renderEffect = snapshotState.blurEffect(blurRadiusPx)
         VideoCardTransitionDiagnostics.onBlurEffectUpdated()
     }
 }
@@ -1225,6 +1262,7 @@ internal fun Modifier.videoCardTransitionBackgroundEffect(
     scaleReductionProvider: () -> Float = { VIDEO_CARD_TRANSITION_BACKGROUND_SCALE_REDUCTION },
     sourceBoundsProvider: () -> Rect? = { null },
     snapshotHandle: VideoCardTransitionSnapshotHandle? = null,
+    reuseJustRecordedSourceForHandoff: Boolean = false,
 ): Modifier {
     val isHostOwnedSnapshot = snapshotHandle != null
     // A host-owned handle already supplies both resources; allocate the fallback only when
@@ -1398,6 +1436,7 @@ internal fun Modifier.videoCardTransitionBackgroundEffect(
                         frame = heldFrame,
                         canvasSize = size,
                         sourceBounds = sourceBoundsProvider(),
+                        rasterScale = effectiveSnapshotHandle.prepareEffectLayer(this, heldFrame.blurRadiusPx),
                     )
                     drawLayer(contentLayer)
                     VideoCardTransitionDiagnostics.onSourceLayerDrawn()
@@ -1530,7 +1569,13 @@ internal fun Modifier.videoCardTransitionBackgroundEffect(
             depthProgress = activeProgress,
         )
         if (shouldPrimeHazeSources || liveHandoffActive) {
-            drawContent()
+            if (needsRecord && reuseJustRecordedSourceForHandoff) {
+                // 刚刚录制时来源及采样节点已执行过 draw。当前帧复用同一份清晰
+                // 像素作交接底图，避免重录快照后再遍历一次实时页面；下一帧恢复 live。
+                effectiveSnapshotHandle.drawJustRecordedSource(this)
+            } else {
+                drawContent()
+            }
         }
 
         applyVideoCardTransitionSnapshotFrame(
@@ -1540,6 +1585,7 @@ internal fun Modifier.videoCardTransitionBackgroundEffect(
             canvasSize = size,
             sourceBounds = sourceBoundsProvider(),
             layerAlpha = frozenLayerAlpha,
+            rasterScale = effectiveSnapshotHandle.prepareEffectLayer(this, frame.blurRadiusPx),
         )
         if (!liveHandoffActive && shouldDrawVideoCardTransitionScaleGapFill(frame.contentScale)) {
             drawRect(

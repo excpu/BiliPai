@@ -1,5 +1,7 @@
 package com.android.purebilibili.feature.profile
 
+import com.android.purebilibili.core.util.responsiveContentWidth
+
 import com.android.purebilibili.navigation.tabIndicatorPosition
 import com.android.purebilibili.data.model.AccountLedgerKind
 import com.android.purebilibili.core.ui.motion.AppMotionEasing
@@ -173,6 +175,8 @@ import com.android.purebilibili.core.ui.rememberAppDeleteIcon
 import com.android.purebilibili.core.ui.rememberAppLinkIcon
 import com.android.purebilibili.core.ui.rememberAppSemanticVisualPolicy
 import com.android.purebilibili.core.ui.AppSemanticAccentRole
+import com.android.purebilibili.core.ui.UserAvatarCornerMarkBadge
+import com.android.purebilibili.core.ui.resolveUserAvatarCornerMark
 import com.android.purebilibili.core.ui.components.UserLevelBadge
 import com.android.purebilibili.core.ui.rememberAppWarningIcon
 import com.android.purebilibili.core.ui.rememberAppWatchLaterIcon
@@ -3092,7 +3096,11 @@ private fun ProfileVideoList(
                 onClick = listLayout.toggle,
             )
         }
-        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        BoxWithConstraints(
+            modifier = if (columns == 1) {
+                Modifier.responsiveContentWidth(com.android.purebilibili.core.util.resolveSingleColumnFeedMaxWidth())
+            } else Modifier.fillMaxWidth(),
+        ) {
             val cardWidth = (maxWidth - 10.dp * (columns - 1)) / columns
             LookaheadScope {
                 FlowRow(
@@ -3108,6 +3116,7 @@ private fun ProfileVideoList(
                             )) {
                                 if (columns == 1) {
                                     PersonalMediaCardFrame(
+                                        horizontalCoverMaxWidthDp = com.android.purebilibili.feature.home.components.cards.WIDE_LIST_COVER_MAX_WIDTH_DP,
                                         headlineContent = {
                                             AppText(
                                                 video.title,
@@ -4384,15 +4393,26 @@ fun UserInfoSection(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = if (centered) Arrangement.Center else Arrangement.Start
     ) {
-        AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current).data(FormatUtils.fixImageUrl(user.face)).crossfade(true).placeholder(android.R.color.darker_gray).build(),
-            contentDescription = null,
-            modifier = Modifier
-                .size(72.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentScale = ContentScale.Crop
-        )
+        // 自身头像与评论区头像对齐：右下角叠加认证/大会员角标（对齐 PiliPlus 我的页）。
+        Box {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current).data(FormatUtils.fixImageUrl(user.face)).crossfade(true).placeholder(android.R.color.darker_gray).build(),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentScale = ContentScale.Crop
+            )
+            UserAvatarCornerMarkBadge(
+                mark = resolveUserAvatarCornerMark(
+                    officialType = user.officialVerifyType,
+                    vipStatus = if (user.isVip) 1 else 0,
+                ),
+                modifier = Modifier.align(Alignment.BottomEnd),
+                badgeSize = 20.dp,
+            )
+        }
         if (!centered) {
             Spacer(modifier = Modifier.width(16.dp))
             Column {
@@ -4760,7 +4780,12 @@ private fun ProfileWallpaperActionButton(
 @Composable
 fun UserInfoText(user: UserState, centered: Boolean = false, forceWhite: Boolean = false) {
     //  修复：用户名颜色 + 阴影
-    val contentColor = if (forceWhite) Color.White else AppContentColors.primaryText()
+    // 对齐 PiliPlus 我的页：年度大会员用户名染 VIP 粉色（透明表头保持白色保证可读）。
+    val contentColor = when {
+        forceWhite -> Color.White
+        user.isVip && user.vipType == 2 -> com.android.purebilibili.core.ui.components.userVipPink()
+        else -> AppContentColors.primaryText()
+    }
     val shadow = if (forceWhite) Shadow(color = Color.Black.copy(alpha = 0.5f), blurRadius = 4f) else null
 
     AppText(

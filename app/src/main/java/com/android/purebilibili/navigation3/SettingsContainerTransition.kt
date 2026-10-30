@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.graphicsLayer
 import com.android.purebilibili.core.ui.adaptive.MotionTier
 import com.android.purebilibili.core.ui.transition.BlurRenderEffectCache
+import com.android.purebilibili.core.ui.transition.videoCardTransitionSnapshotBlur
 import com.android.purebilibili.core.ui.transition.resolvePredictiveBackBlurFrame
 import com.android.purebilibili.core.ui.transition.VideoCardTransitionBackgroundFrameCache
 import com.android.purebilibili.core.ui.transition.VideoCardTransitionBackgroundPhase
@@ -47,6 +48,9 @@ internal class SettingsContainerTransition(
     private val cardBackgroundEffectsEnabled: Boolean = false,
     private val isLightBackground: () -> Boolean = { pageColor().luminance() > 0.5f },
     private val videoCardMotionEnabled: Boolean = false,
+    // 实时直播保留子绘制指令；实际画面失效仍更新，不录制冻结的视频快照。
+    private val isolateContentDrawing: Boolean = false,
+    private val useSharedSnapshotBlur: Boolean = false,
 ) : NavTransition {
     private val blurCache = BlurRenderEffectCache()
     private val cardFrameCache = VideoCardTransitionBackgroundFrameCache()
@@ -99,7 +103,7 @@ internal class SettingsContainerTransition(
     override fun scrimFraction(scope: NavTransitionScope): Float = 0f
 
     override fun Modifier.transformEntry(scope: NavTransitionScope): Modifier {
-        if (scope.relativeDepth < 0f) source.returnInFlight = {
+        val returnInFlight = {
             scope.role == NavRole.Outgoing && scope.isRunning
         }
         return this
@@ -116,7 +120,7 @@ internal class SettingsContainerTransition(
                 shape = coveredShapeCache.resolve(resolveMiuixVideoCardCoveredCornerPx(
                     depth, reduced, scope.density.density,
                 ))
-                renderEffect = if (covered && realtimeBlurEnabled) {
+                renderEffect = if (covered && realtimeBlurEnabled && !useSharedSnapshotBlur) {
                     blurCache.resolve(cardBackgroundFrame(scope).blurRadiusPx)
                 } else null
             } else if (realtimeBlurEnabled) Modifier.graphicsLayer {
@@ -131,6 +135,8 @@ internal class SettingsContainerTransition(
                 renderEffect = blurCache.resolve(frame.blurRadiusPx)
             } else Modifier)
             .drawWithContent {
+                // 逐帧深度只在绘制阶段读取，避免整个直播 entry 跟随导航进度重组。
+                if (scope.relativeDepth < 0f) source.returnInFlight = returnInFlight
                 // 来源页景深在外层图层统一处理，前景展开仍只由自己的容器几何负责。
                 if (scope.role == NavRole.Covered || scope.relativeDepth > 0f) {
                     drawContent()
@@ -201,10 +207,13 @@ internal class SettingsContainerTransition(
                         if (sourceAlpha < 1f) drawContext.canvas.restore()
                     }
                     if (contentAlpha > 0f) {
-                        drawContext.canvas.saveLayer(destination, Paint().apply { alpha = contentAlpha })
+                        val needsContentLayer = contentAlpha < 1f || !isolateContentDrawing
+                        if (needsContentLayer) {
+                            drawContext.canvas.saveLayer(destination, Paint().apply { alpha = contentAlpha })
+                        }
                         // 页面按原始大小渲染，容器边界移动而不是反复测量页面。
                         translate(frame.bounds.left, frame.bounds.top) { this@drawWithContent.drawContent() }
-                        drawContext.canvas.restore()
+                        if (needsContentLayer) drawContext.canvas.restore()
                     }
                 }
                 // 昵称与直播标记位于圆形主容器之外，在同一飞行层按主容器几何移动，避免被圆形裁掉。
@@ -223,5 +232,14 @@ internal class SettingsContainerTransition(
                     if (companionAlpha < 1f) drawContext.canvas.restore()
                 }
             }
+            .then(if (useSharedSnapshotBlur) Modifier.videoCardTransitionSnapshotBlur(
+                frameProvider = {
+                    if (cardBackgroundEffectsEnabled && realtimeBlurEnabled &&
+                        (scope.role == NavRole.Covered || scope.relativeDepth > 0f)
+                    ) cardBackgroundFrame(scope) else null
+                },
+                refreshSourceProvider = { source.hasOpened && scope.relativeDepth < 1f },
+            ) else Modifier)
+            .then(if (isolateContentDrawing) Modifier.graphicsLayer() else Modifier)
     }
 }

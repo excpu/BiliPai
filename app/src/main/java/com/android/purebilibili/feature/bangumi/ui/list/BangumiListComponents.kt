@@ -115,6 +115,7 @@ fun BangumiCard(
         AppText(
             text = item.title,
             modifier = Modifier.padding(top = 6.dp),
+            minLines = 2,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.bodySmall

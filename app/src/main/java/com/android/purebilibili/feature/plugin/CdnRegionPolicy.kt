@@ -950,8 +950,11 @@ private fun normalizeRegionName(value: String): String {
 internal fun rewriteBilivideoHost(url: String, newHost: String): String? {
     val uri = runCatching { URI(url) }.getOrNull() ?: return null
     val originalHost = uri.host ?: return null
-    // 允许 PCDN 域名一起参与改写：mcdn.bilivideo.cn / .net 的 upgcxcode 路径与签名
+    // 与上游一致的短路：目标主机就是当前主机时不必改写，避免产生重复候选。
+    if (originalHost.equals(newHost, ignoreCase = true)) return null
+    // 内置线路只改写 B 站系域名，且包含 PCDN：mcdn.bilivideo.cn / .net 的 upgcxcode 路径与签名
     // 和常规 CDN 通用，用户屏蔽 mcdn 后正是靠换 host 才能继续下载/播放。
+    // 裸 IP、第三方镜像不在此列——它们只由用户手输的自定义线路（[rewriteCdnUrlHost]）无限制改写。
     val isBiliHost = originalHost == "bilivideo.com" ||
         originalHost.endsWith(".bilivideo.com") ||
         originalHost == "bilivideo.cn" ||
@@ -963,9 +966,11 @@ internal fun rewriteBilivideoHost(url: String, newHost: String): String? {
 
 /**
  * 用 [newHost] 替换 URL 的主机部分，不做任何域名限制：任意来源（bilivideo 镜像、mcdn、IP 直连）
- * 都可被替换，路径、查询串（含签名参数）与片段原样保留。用户手动输入的自定义线路走这里。
+ * 都可被替换，路径、查询串（含签名参数）与片段原样保留。
+ * 用户手动输入的自定义线路走这里——优先级最高，且不受内置线路的域名白名单约束。
  */
 private fun rewriteCdnUrlHost(url: String, newHost: String): String? {
+    if (newHost.isBlank()) return null
     val host = normalizePlaybackCdnHost(newHost) ?: return null
     val uri = runCatching { URI(url) }.getOrNull() ?: return null
     val scheme = uri.scheme?.lowercase() ?: return null
@@ -973,6 +978,7 @@ private fun rewriteCdnUrlHost(url: String, newHost: String): String? {
     if (uri.host.isNullOrEmpty()) return null
 
     val userInfo = uri.rawUserInfo?.let { "$it@" }.orEmpty()
+    // 自定义主机自带端口时不再追加原端口，否则会拼出 host:port:port。
     val port = if (host.contains(':') || uri.port < 0) "" else ":${uri.port}"
     val path = uri.rawPath.orEmpty()
     val query = uri.rawQuery?.let { "?$it" }.orEmpty()

@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import coil3.DrawableImage
+import coil3.BitmapImage
 import coil3.ImageLoader
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
@@ -84,7 +85,11 @@ internal fun PageAwareAsyncImage(
     val retainedPainter = remember(replayImage, context) {
         replayImage?.asPainter(context, FilterQuality.Low)
     }
-    if (loadingAllowed) {
+    // 首页静态位图已成功加载且关闭淡入，不再有加载或动画工作。保留同一个
+    // AsyncImage，避免开合详情时把所有封面/头像拆成 Image 再重新挂载请求。
+    // 未完成的请求仍立即取消；动图仍走静态回放，不能保活其逐帧回调。
+    val keepDecodedHomeImageMounted = homeFeedImage && retainedImage is BitmapImage
+    if (loadingAllowed || keepDecodedHomeImageMounted) {
         AsyncImage(
             model = request ?: model,
             imageLoader = resolvedImageLoader,

@@ -290,14 +290,21 @@ internal fun HistoryPersonalCard(
                         ),
                     ),
                     modifier = Modifier.size(48.dp),
+                    // 按钮撑满 48dp 锚点并只承担触控/菜单源；可见字形由外层
+                    // 严格叠放在锚点右下角，绕开 IconButton 内容居中/裁切的内部布局。
+                    anchorModifier = Modifier.fillMaxSize(),
                 ) {
-                    AppIcon(
-                        Icons.Outlined.MoreVert,
-                        contentDescription = "历史记录操作",
-                        tint = AppContentColors.secondaryText(),
-                        modifier = Modifier.size(18.dp),
-                    )
+                    Spacer(Modifier)
                 }
+                AppIcon(
+                    Icons.Outlined.MoreVert,
+                    contentDescription = "历史记录操作",
+                    tint = AppContentColors.secondaryText(),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 2.dp, bottom = 2.dp)
+                        .size(18.dp),
+                )
             }
         }
     }

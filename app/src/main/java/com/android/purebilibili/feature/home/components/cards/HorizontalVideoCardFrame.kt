@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.dp
 import com.android.purebilibili.core.ui.AppShapes
 import com.android.purebilibili.core.ui.AppSpacingTokens
+import com.android.purebilibili.core.ui.ContainerLevel
 
 /**
  * Shared side-by-side video-card geometry, based on the related-video row.
@@ -48,16 +49,25 @@ internal fun HorizontalVideoCardFrame(
     compactPartition: Boolean = false,
     allowPortraitCover: Boolean = false,
     fillInfoHeight: Boolean = compactPartition,
+    plainHorizontal: Boolean = false,
+    horizontalCoverMaxWidthDp: Float? = null,
 ) {
-    // MD3、Miuix 和玻璃共用布局；封面保持所选比例。
+    // 普通列表使用透明横卡；玻璃、MD3、Miuix 共用几何，紧凑分区保留独立布局。
+    val plainRow = plainHorizontal && !compactPartition && !stacked
+    val coverShape = if (plainHorizontal && !compactPartition) {
+        AppShapes.mediaCover(ContainerLevel.MediaCover)
+    } else {
+        AppShapes.mediaCover()
+    }
     val effectiveAspectRatio = coverAspectRatio.takeIf {
         it.isFinite() && if (allowPortraitCover) it > 0f else it > 1f
     }
         ?: HORIZONTAL_VIDEO_CARD_COVER_ASPECT_RATIO
-    val infoPadding = if (compactPartition) 4.dp else HORIZONTAL_VIDEO_CARD_INFO_PADDING_DP.dp
+    val infoPadding = if (plainRow) 0.dp else if (compactPartition) 4.dp else HORIZONTAL_VIDEO_CARD_INFO_PADDING_DP.dp
+    // The action occupies the bottom-end touch target in every material; reserve its
+    // width for the full info column so long metadata cannot run underneath it.
     val infoEndPadding = if (trailingContent == null) infoPadding else
-        (HORIZONTAL_VIDEO_CARD_ACTION_SIZE_DP + HORIZONTAL_VIDEO_CARD_ACTION_INSET_DP +
-            HORIZONTAL_VIDEO_CARD_INFO_SPACING_DP).dp
+        (HORIZONTAL_VIDEO_CARD_ACTION_SIZE_DP + HORIZONTAL_VIDEO_CARD_INFO_SPACING_DP).dp
     val infoArrangement = Arrangement.spacedBy(HORIZONTAL_VIDEO_CARD_INFO_SPACING_DP.dp)
 
     Box(modifier = modifier) {
@@ -71,7 +81,7 @@ internal fun HorizontalVideoCardFrame(
                     modifier = coverModifier
                         .fillMaxWidth()
                         .aspectRatio(effectiveAspectRatio)
-                        .clip(AppShapes.mediaCover())
+                        .clip(coverShape)
                         .background(MaterialTheme.colorScheme.surfaceVariant),
                 ) {
                     coverContent()
@@ -102,7 +112,7 @@ internal fun HorizontalVideoCardFrame(
                 content = {
                     Box(
                         modifier = coverModifier
-                            .clip(AppShapes.mediaCover())
+                            .clip(coverShape)
                             .background(MaterialTheme.colorScheme.surfaceVariant),
                     ) {
                         coverContent()
@@ -129,8 +139,15 @@ internal fun HorizontalVideoCardFrame(
                 // 窄列表为封面留出更多空间；宽列表保留文字和操作区的空间。
                 val widthDp = width.toDp().value
                 val widthFraction = 0.55f - 0.10f * ((widthDp - 320f) / 160f).coerceIn(0f, 1f)
-                // 同宽列表的封面尺寸固定，不随标题换行、关注标记或统计信息的高度变化。
-                val coverWidth = if (compactPartition) {
+                // 同宽列表的封面宽度与文字起点固定，不由单条内容的高度反推宽度。
+                val naturalCoverWidth = if (allowPortraitCover && effectiveAspectRatio < 1f) {
+                    // 竖版剧集海报按高度限制尺寸，不能套用横向封面的半行宽度。
+                    minOf(
+                        (120.dp.toPx() * effectiveAspectRatio).toInt(),
+                        (width * widthFraction).toInt(),
+                        width - gap,
+                    )
+                } else if (compactPartition) {
                     // 封面以 88dp 高度为基准，压缩封面宽度换取标题单行容量；窄窗口仍为文字保留空间。
                     minOf(
                         (88.dp.toPx() * effectiveAspectRatio).toInt(),
@@ -140,9 +157,18 @@ internal fun HorizontalVideoCardFrame(
                 } else if (coverWidthDp != null) {
                     // 固定封面宽度入口（例如更多推荐列表）：宽度不随卡片宽度扩张，比例保持不变。
                     coverWidthDp.roundToPx().coerceAtMost(width - gap).coerceAtLeast(0)
+                } else if (plainRow) {
+                    // 标准封面以 100dp 高度计算，窄窗口只收缩封面，不随单条文字增高而放大。
+                    resolvePlainHorizontalVideoCoverWidthDp(widthDp, effectiveAspectRatio)
+                        .dp.toPx().toInt().coerceAtMost(width - gap)
                 } else {
                     (width * widthFraction).toInt().coerceAtMost(width - gap)
                 }
+                // Only opted-in horizontal lists cap the cover; stacked and other callers keep their geometry.
+                val coverWidth = horizontalCoverMaxWidthDp
+                    ?.takeIf { it.isFinite() && it > 0f }
+                    ?.let { naturalCoverWidth.coerceAtMost(it.dp.roundToPx()) }
+                    ?: naturalCoverWidth
                 val coverHeight = (coverWidth / effectiveAspectRatio).toInt()
                 val infoWidth = (width - gap - coverWidth).coerceAtLeast(0)
                 // 按入口选择信息列与封面等高，供底部元信息使用弹性空白；上下排列不扩高。
@@ -160,6 +186,7 @@ internal fun HorizontalVideoCardFrame(
                     )
                 )
                 val height = constraints.constrainHeight(maxOf(coverHeight, info.height))
+                // 透明横卡的封面与时长保留固定比例，长标题只增高文字区，不改变图片裁剪。
                 val cover = measurables[0].measure(Constraints.fixed(coverWidth, minOf(coverHeight, height)))
                 // 信息列高于封面时（例如标题占满两行），封面在行内垂直居中而非贴顶。
                 val coverTop = if (centerCoverVertically) {
@@ -178,10 +205,9 @@ internal fun HorizontalVideoCardFrame(
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(HORIZONTAL_VIDEO_CARD_ACTION_INSET_DP.dp)
                     .widthIn(min = HORIZONTAL_VIDEO_CARD_ACTION_SIZE_DP.dp)
                     .heightIn(min = HORIZONTAL_VIDEO_CARD_ACTION_SIZE_DP.dp),
-                contentAlignment = Alignment.Center,
+                contentAlignment = Alignment.BottomEnd,
                 content = trailingContent,
             )
         }

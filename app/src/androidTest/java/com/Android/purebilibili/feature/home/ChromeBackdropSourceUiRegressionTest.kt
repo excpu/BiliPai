@@ -5,10 +5,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
@@ -33,6 +37,7 @@ import com.android.purebilibili.core.theme.LocalAppUiStyle
 import com.android.purebilibili.core.ui.components.LocalAppTopBarIconBackdrop
 import com.android.purebilibili.core.ui.blur.rememberChromeBackdropSource
 import com.android.purebilibili.core.ui.blur.ChromeBackdropSource
+import com.android.purebilibili.feature.home.components.floatingDockCaptureOverflow
 import com.android.purebilibili.core.ui.wallpaper.LocalGlobalWallpaperBackdropSource
 import com.android.purebilibili.core.ui.wallpaper.sharedGlobalWallpaperBackground
 import java.util.concurrent.atomic.AtomicInteger
@@ -52,6 +57,60 @@ import top.yukonga.miuix.kmp.blur.drawBackdrop
 class ChromeBackdropSourceUiRegressionTest {
     @get:Rule
     val composeRule = createComposeRule()
+
+    @Test
+    fun isolatedSourceReusesChildDrawingWhileBackdropChangesAndKeepsLiveUpdates() {
+        assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+        val background = mutableStateOf(Color.Red)
+        val content = mutableStateOf(Color.Green)
+        val childDraws = AtomicInteger()
+        lateinit var originalSource: ChromeBackdropSource
+        lateinit var currentSource: ChromeBackdropSource
+        composeRule.setContent {
+            val source = rememberChromeBackdropSource(
+                recordingBackground = background.value,
+                isolateContentDrawing = true,
+            )
+            SideEffect { currentSource = source }
+            Box(Modifier.size(80.dp).background(Color.Blue).testTag("isolated-backdrop")) {
+                Box(Modifier.matchParentSize().then(source.modifier).drawWithContent {
+                    childDraws.incrementAndGet()
+                    drawRect(
+                        color = content.value,
+                        topLeft = Offset(size.width / 2f, 0f),
+                        size = Size(size.width / 2f, size.height),
+                    )
+                })
+                Box(Modifier.matchParentSize().drawBackdrop(
+                    backdrop = source.backdrop,
+                    shape = { RectangleShape },
+                    effects = {},
+                ))
+            }
+        }
+        fun assertColors(left: Color, right: Color) {
+            val pixels = composeRule.onNodeWithTag("isolated-backdrop").captureToImage().toPixelMap()
+            for ((fraction, expected) in listOf(0.25f to left, 0.75f to right)) {
+                val actual = pixels[(pixels.width * fraction).toInt(), pixels.height / 2]
+                assertEquals(expected.red, actual.red, 0.03f)
+                assertEquals(expected.green, actual.green, 0.03f)
+                assertEquals(expected.blue, actual.blue, 0.03f)
+            }
+        }
+        assertColors(Color.Red, Color.Green)
+        composeRule.runOnIdle { originalSource = currentSource; childDraws.set(0) }
+        for (color in listOf(Color.Yellow, Color.Red)) {
+            composeRule.runOnIdle { background.value = color }
+            assertColors(color, Color.Green)
+            composeRule.runOnIdle {
+                assertSame(originalSource, currentSource)
+                assertEquals("Backdrop-only updates must reuse child drawing", 0, childDraws.get())
+            }
+        }
+        composeRule.runOnIdle { content.value = Color.Yellow }
+        assertColors(Color.Red, Color.Yellow)
+        composeRule.runOnIdle { assertEquals(1, childDraws.get()) }
+    }
 
     @Test
     fun scaffoldReusesPageSourceAndRestoresFallbackAndNativeIconScope() {
@@ -109,6 +168,41 @@ class ChromeBackdropSourceUiRegressionTest {
 
     @Test
     fun hiddenDockCaptureStillUpdatesItsConsumer() = verifySource(hidden = true)
+
+    @Test
+    fun hiddenDockCaptureIncludesBadgePixelsAboveItsContentBand() {
+        assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+        composeRule.setContent {
+            val source = rememberChromeBackdropSource(drawContentToScreen = false)
+            Box(Modifier.size(120.dp).background(Color.Blue).testTag("badge-capture-result")) {
+                Box(
+                    Modifier.align(Alignment.Center).width(100.dp)
+                        .floatingDockCaptureOverflow(56.dp, 16.dp)
+                        .then(source.modifier)
+                        .padding(vertical = 16.dp)
+                        .height(56.dp),
+                ) {
+                    // 背景与前景分层，徽标上半圆位于原有 56dp 内容带之外。
+                    Box(Modifier.matchParentSize().background(Color.DarkGray, RoundedCornerShape(28.dp)))
+                    Box(Modifier.matchParentSize().drawBehind {
+                        drawCircle(Color.Red, radius = 8.dp.toPx(), center = Offset(40.dp.toPx(), 0f))
+                    })
+                }
+                Box(Modifier.matchParentSize().drawBackdrop(
+                    backdrop = source.backdrop,
+                    shape = { RectangleShape },
+                    effects = {},
+                ))
+            }
+        }
+        composeRule.waitForIdle()
+        val pixels = composeRule.onNodeWithTag("badge-capture-result").captureToImage().toPixelMap()
+        for (yDp in listOf(28f, 36f)) {
+            val color = pixels[(pixels.width * 50f / 120f).toInt(), (pixels.height * yDp / 120f).toInt()]
+            assertEquals("Badge must retain both halves", 1f, color.red, 0.05f)
+            assertEquals(0f, color.blue, 0.05f)
+        }
+    }
 
     @Test
     fun nestedNavigationAndHomeSourcesDoNotMultiplyChildDrawing() =

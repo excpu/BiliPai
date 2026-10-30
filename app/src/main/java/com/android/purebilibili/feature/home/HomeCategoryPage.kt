@@ -302,6 +302,16 @@ internal fun HomeCategoryPageContent(
     val sourceRoute = remember(category) {
         resolveHomeCategoryVideoSourceRoute(category)
     }
+    val returningFromDetail = rememberUpdatedState(isReturningFromVideoDetail)
+    val quickReturningFromDetail = rememberUpdatedState(isQuickReturningFromVideoDetail)
+    val transitionBackground =
+        com.android.purebilibili.core.ui.transition.LocalVideoCardTransitionBackgroundState.current
+    val returnSourceKey = remember(transitionBackground) {
+        {
+            transitionBackground.sourceKeyProvider()
+                ?: com.android.purebilibili.core.util.CardPositionManager.lastClickedVideoSourceKey
+        }
+    }
     val widthSizeClass = com.android.purebilibili.core.util.LocalAppWindowAdaptiveInfo.current
         .windowSizeClass.widthSizeClass
     val cardLayout = remember(homeFeedCardStyle, gridColumns, widthSizeClass) {
@@ -472,8 +482,12 @@ internal fun HomeCategoryPageContent(
     val auxiliaryWorkAllowed = rememberHomeCardAuxiliaryWorkAllowed(
         pageActive = pageImageWorkAllowed,
         isScrolling = gridState.isScrollInProgress || pageScrollInProgress?.value == true,
+        visualWorkActive = visualWorkActive,
     )
     val renderVideoCard: @Composable (Int, VideoItem, Modifier, String) -> Unit = { index, video, itemModifier, lazyItemKey ->
+        val returnFlags by rememberHomeCardReturnFlags(
+            video.bvid, sourceRoute, returnSourceKey, returningFromDetail, quickReturningFromDetail,
+        )
         val cardVisible by remember(visibleLazyItemKeys, lazyItemKey) {
             derivedStateOf { lazyItemKey in visibleLazyItemKeys.value }
         }
@@ -556,8 +570,8 @@ internal fun HomeCategoryPageContent(
                         animationEnabled = cardAnimationEnabled,
                         motionTier = cardMotionTier,
                         transitionEnabled = cardTransitionEnabled && !isNativeNonVideoCard,
-                        isReturningFromVideoDetail = isReturningFromVideoDetail,
-                        isQuickReturningFromVideoDetail = isQuickReturningFromVideoDetail,
+                        isReturningFromVideoDetail = returnFlags.returning,
+                        isQuickReturningFromVideoDetail = returnFlags.quickReturn,
                         scrollLiteModeEnabled = false,
                         isDataSaverActive = isDataSaverActive,
                         preferLowQualityCover = preferLowQualityCover,
@@ -603,8 +617,8 @@ internal fun HomeCategoryPageContent(
                         animationEnabled = cardAnimationEnabled,
                         motionTier = cardMotionTier,
                         transitionEnabled = cardTransitionEnabled && !isNativeNonVideoCard,
-                        isReturningFromVideoDetail = isReturningFromVideoDetail,
-                        isQuickReturningFromVideoDetail = isQuickReturningFromVideoDetail,
+                        isReturningFromVideoDetail = returnFlags.returning,
+                        isQuickReturningFromVideoDetail = returnFlags.quickReturn,
                         scrollLiteModeEnabled = false,
                         cardWidthDp = estimatedCardWidthDp,
                         showPublishTime = showPublishTime,
@@ -662,7 +676,6 @@ internal fun HomeCategoryPageContent(
     }
     val sharedTransitionScope = LocalSharedTransitionScope.current
     val visibilityScope = LocalAnimatedVisibilityScope.current
-    val returningFromDetail = rememberUpdatedState(isReturningFromVideoDetail)
     val cardTransitionRunning = remember(sharedTransitionScope, visibilityScope) {
         derivedStateOf {
             returningFromDetail.value ||
@@ -737,7 +750,9 @@ internal fun HomeCategoryPageContent(
                     ) {
                         val heroVisible = "home_hero_carousel" in visibleLazyItemKeys.value
                         val heroWorkAllowed = pageImageWorkAllowed && heroVisible && visualWorkActive
-                        val heroMotionAllowed = heroWorkAllowed && componentMotionEnabled && !reduceMotion
+                        // Visible covers resume first; automatic motion shares the existing quiet window.
+                        val heroMotionAllowed = heroWorkAllowed && auxiliaryWorkAllowed &&
+                            componentMotionEnabled && !reduceMotion
                         CompositionLocalProvider(LocalPageImageLoadingAllowed provides heroWorkAllowed) {
                             if (LocalConfiguration.current.screenWidthDp >= HOME_HERO_CAROUSEL_WIDE_BREAKPOINT_DP.toInt()) {
                                 // 折叠屏/平板展开态:全幅沉浸式 hero(与 TV 首页同一视觉语言)

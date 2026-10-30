@@ -112,7 +112,7 @@ private fun ArticleInteractionSession(
     LaunchedEffect(article.articleId, selectedCommentId, openCommentRootRpid, openCommentTargetRpid) {
         if (!routeHandled || selectedCommentId != commentId) {
             val root = if (!routeHandled) {
-                openCommentRootRpid.takeIf { it > 0L } ?: openCommentTargetRpid.coerceAtLeast(0L)
+                openCommentRootRpid.coerceAtLeast(0L)
             } else 0L
             val target = if (!routeHandled) openCommentTargetRpid.coerceAtLeast(0L) else 0L
             routeHandled = true

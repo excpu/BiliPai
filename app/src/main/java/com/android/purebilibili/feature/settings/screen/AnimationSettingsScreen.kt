@@ -215,6 +215,11 @@ fun AnimationSettingsContent(
     }
     val homeConfiguration = rememberSettingsHomeConfiguration()
     val themeConfiguration = com.android.purebilibili.core.ui.LocalAppThemeConfig.current
+    val progressiveBlurRenderer by remember(context) {
+        com.android.purebilibili.core.store.home.LiquidGlassSettingsStore.observeProgressiveBlurRenderer(context)
+    }.collectAsStateWithLifecycle(
+        initialValue = com.android.purebilibili.core.store.home.ProgressiveBlurRenderer.MIUIX,
+    )
     val isLiquidGlassAvailable = shouldAllowHomeChromeLiquidGlass(Build.VERSION.SDK_INT)
     val liquidGlassPreviewImageUri by remember(context) { SettingsManager.getLiquidGlassPreviewImageUri(context) }
         .collectAsStateWithLifecycle(initialValue = null)
@@ -909,12 +914,41 @@ fun AnimationSettingsContent(
                                 checked = state.progressiveTopBlurEnabled,
                                 onCheckedChange = { viewModel.toggleProgressiveTopBlur(it) },
                                 titleTrailingContent = {
-                                    SettingsFeaturePreviewEntry(
-                                        feature = SettingsFeaturePreview.TOP_BLUR,
-                                        currentEnabled = state.progressiveTopBlurEnabled,
-                                    )
+                                    ProgressiveBlurComparisonPreviewEntry(liquidGlassAdvancedSettings)
                                 },
                                 iconTint = AppContentColors.secondaryText()
+                            )
+                        }
+                        AppPreferenceDivider()
+                        SettingsItemAnchor(PROGRESSIVE_BLUR_RENDERER_SETTING_ID) {
+                            SettingsSingleChoicePreference(
+                                icon = rememberSettingsSemanticIcon(SettingsIconRole.PROGRESSIVE_BLUR_RENDERER),
+                                title = settingItemTitle(PROGRESSIVE_BLUR_RENDERER_SETTING_ID, context),
+                                subtitle = stringResource(
+                                    if (com.android.purebilibili.feature.home.components.isOfficialProgressiveBlurSupported())
+                                        R.string.animation_progressive_renderer_summary
+                                    else R.string.animation_progressive_renderer_fallback_summary,
+                                ),
+                                options = listOf(
+                                    AppSegmentOption(
+                                        com.android.purebilibili.core.store.home.ProgressiveBlurRenderer.MIUIX,
+                                        "Miuix",
+                                        description = stringResource(R.string.animation_progressive_renderer_miuix_description),
+                                    ),
+                                    AppSegmentOption(
+                                        com.android.purebilibili.core.store.home.ProgressiveBlurRenderer.ANDROID,
+                                        stringResource(R.string.animation_progressive_renderer_android),
+                                        description = stringResource(R.string.animation_progressive_renderer_android_description),
+                                    ),
+                                ),
+                                selectedValue = progressiveBlurRenderer,
+                                onSelectionChange = { renderer ->
+                                    scope.launch {
+                                        com.android.purebilibili.core.store.home.LiquidGlassSettingsStore
+                                            .setProgressiveBlurRenderer(context, renderer)
+                                    }
+                                },
+                                iconTint = AppContentColors.secondaryText(),
                             )
                         }
                         AppPreferenceDivider()

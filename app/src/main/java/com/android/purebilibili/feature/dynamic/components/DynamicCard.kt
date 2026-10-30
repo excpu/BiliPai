@@ -79,6 +79,7 @@ import com.android.purebilibili.core.store.SettingsManager
 import com.android.purebilibili.core.store.TokenManager
 import com.android.purebilibili.core.util.BilibiliNavigationTarget
 import com.android.purebilibili.core.util.BilibiliNavigationTargetParser
+import com.android.purebilibili.core.util.hasCommentLocation
 
 import com.android.purebilibili.core.ui.common.TextSelectionBottomSheet
 import com.android.purebilibili.core.ui.common.TextSelectionPolicy
@@ -142,6 +143,8 @@ data class DynamicCardNavigationActions(
 @Immutable
 data class DynamicCardInteractionActions(
     val onCommentClick: (dynamicId: String) -> Unit = {},
+    /** 仅由已展示本条动态评论区的宿主提供；与卡片展开样式无关。 */
+    val onShowCommentsInPlace: (() -> Unit)? = null,
     val onRepostClick: (dynamicId: String) -> Unit = {},
     val onLikeClick: (dynamicId: String) -> Unit = {},
     val onLikeClickWithState: ((dynamicId: String, isLiked: Boolean) -> Unit)? = null,
@@ -201,6 +204,7 @@ fun DynamicCardV2(
     val onUnfoldRelatedClick = actions.navigation.onUnfoldRelatedClick
     val onPrimaryClickOverride = actions.navigation.onPrimaryClickOverride
     val onCommentClick = actions.interaction.onCommentClick
+    val onShowCommentsInPlace = actions.interaction.onShowCommentsInPlace
     val onRepostClick = actions.interaction.onRepostClick
     val onLikeClick = actions.interaction.onLikeClick
     val onLikeClickWithState = actions.interaction.onLikeClickWithState
@@ -1118,7 +1122,44 @@ fun DynamicCardV2(
             ) {
                 interactionItems.forEach { interactionItem ->
                     val desc = interactionItem.desc ?: return@forEach
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    val onPreviewClick: (() -> Unit)? =
+                        if (interactionItem.type == 1 && item.id_str.isNotBlank()) {
+                            {
+                                DynamicRepository.rememberDynamicDetailSeed(item)
+                                if (onShowCommentsInPlace != null) {
+                                    onShowCommentsInPlace()
+                                } else {
+                                    // 热评载荷通常没有 rpid；AT 节点的 rid 是用户 ID，不能拿来猜楼层。
+                                    val url = "bilibili://following/detail/${item.id_str}?tab=comment"
+                                    if (onOpenLink != null) {
+                                        onOpenLink(url)
+                                    } else {
+                                        val intent = android.content.Intent(
+                                            android.content.Intent.ACTION_VIEW,
+                                            android.net.Uri.parse(url),
+                                        ).setPackage(context.packageName)
+                                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        if (runCatching { context.startActivity(intent) }.isFailure) {
+                                            android.widget.Toast.makeText(
+                                                context, "无法打开评论区", android.widget.Toast.LENGTH_SHORT,
+                                            ).show()
+                                        }
+                                    }
+                                }
+                            }
+                        } else null
+                    Row(
+                        modifier = if (onPreviewClick != null) {
+                            Modifier
+                                .fillMaxWidth()
+                                .appActionClickable(
+                                    onClickLabel = "查看评论",
+                                    role = androidx.compose.ui.semantics.Role.Button,
+                                    onClick = onPreviewClick,
+                                )
+                        } else Modifier,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         AppIcon(
                             imageVector = if (interactionItem.type == 1) {
                                 Icons.Outlined.ChatBubbleOutline
@@ -1135,6 +1176,7 @@ fun DynamicCardV2(
                             desc = desc,
                             collapseWebLinks = isDetail,
                             onUserClick = onUserClick,
+                            onBlankTap = onPreviewClick,
                             fontSize = MaterialTheme.typography.bodySmall.fontSize,
                             lineHeight = MaterialTheme.typography.bodySmall.lineHeight,
                             extraEmoteUrlMap = dynamicCardEmoteMap,
@@ -2533,7 +2575,7 @@ private fun dispatchDynamicRichTextLinkPayload(
                         BilibiliNavigationTargetParser.resolve(rawUrl)
                     } else null
                 if (target != null) {
-                    val handled = when (target) {
+                    val handled = if (target.hasCommentLocation) false else when (target) {
                         is BilibiliNavigationTarget.Dynamic -> {
                             if (onDynamicDetailClick != null) {
                                 onDynamicDetailClick(target.dynamicId)
@@ -2573,6 +2615,7 @@ private fun dispatchDynamicRichTextLinkPayload(
                         // 文集交给宿主链接分发，保留文集身份进入对应页面。
                         is BilibiliNavigationTarget.ArticleCollection -> false
                         is BilibiliNavigationTarget.PopularFeed -> false
+                        is BilibiliNavigationTarget.CommentDetail -> false
                         is BilibiliNavigationTarget.Live -> {
                             if (onLiveClick != null) {
                                 onLiveClick(target.roomId, "", "")

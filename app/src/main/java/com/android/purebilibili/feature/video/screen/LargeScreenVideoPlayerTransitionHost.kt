@@ -166,7 +166,8 @@ internal fun LargeScreenVideoPlayerTransitionHost(
             local.copy(offsetYPx = local.offsetYPx + origin().y.roundToInt())
         }
     }
-    val corner = AppShapes.mediaCoverCornerDp()
+    val corner = transition.sourceChromeSnapshot?.coverPresentation?.cornerRadiusDp?.dp
+        ?: AppShapes.mediaCoverCornerDp()
     val followsRelatedSidebarDrag = transition.enabled &&
         transition.sourceLayout == com.android.purebilibili.core.ui.transition.VideoCardSourceLayout.SIDE_BY_SIDE
     val playerViewportModifier = modifier

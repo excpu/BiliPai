@@ -502,12 +502,14 @@ internal fun VideoDetailScreenStateHolder(
     val view = LocalView.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val configuration = LocalConfiguration.current
-    val directPortraitEntryEnabled by com.android.purebilibili.core.store.SettingsManager
-        .getAutoPortraitFullscreen(context)
-        .collectAsStateWithLifecycle(initialValue = false)
-    val homeUpBadgesVisible by com.android.purebilibili.core.store.SettingsManager
-        .getHomeUpBadgesVisible(context)
-        .collectAsStateWithLifecycle(initialValue = true
+    // 设置仍按生命周期实时收集；固定冷 Flow 身份，避免正文/播放状态重组时
+    // 反复取消并重启 DataStore 映射与订阅。
+    val directPortraitEntryEnabled by remember(context) {
+        com.android.purebilibili.core.store.SettingsManager.getAutoPortraitFullscreen(context)
+    }.collectAsStateWithLifecycle(initialValue = false)
+    val homeUpBadgesVisible by remember(context) {
+        com.android.purebilibili.core.store.SettingsManager.getHomeUpBadgesVisible(context)
+    }.collectAsStateWithLifecycle(initialValue = true
         )
     // Keep unknown distinct from false: the first PlayerView must use the persisted surface type.
     // The remembered flow never emits null, so lifecycle restarts retain the last known value.
@@ -578,9 +580,9 @@ internal fun VideoDetailScreenStateHolder(
         frozenTransitionSourceCornerDp
             ?: resolveVideoSharedTransitionSourceCornerDp(sourceRouteForSharedElement)
     }
-    val autoPlayOnOpenEnabled by com.android.purebilibili.core.store.SettingsManager
-        .getClickToPlay(context)
-        .collectAsStateWithLifecycle(
+    val autoPlayOnOpenEnabled by remember(context) {
+        com.android.purebilibili.core.store.SettingsManager.getClickToPlay(context)
+    }.collectAsStateWithLifecycle(
             initialValue = com.android.purebilibili.core.store.SettingsManager.getClickToPlaySync(context)
         )
     val videoSharedPlaybackIntent = remember(autoPlayOnOpenEnabled, startAudioFromRoute) {
@@ -1027,6 +1029,7 @@ internal fun VideoDetailScreenStateHolder(
 
                     // 先摘掉父详情壳 sharedBounds，再 push，避免相关卡嵌套在父壳内吃不到 morph。
                     // 只保留轻量 UI 位置快照；整屏位图捕获会把导航提交阻塞数百毫秒。
+                    viewModel.cancelRelatedPreload()
                     sharedDanmakuManager.clearForVideoChange()
                     hasCommittedRelatedVideoNavigation = true
                     presentationState.markNavigatingToVideo()
@@ -1227,13 +1230,15 @@ internal fun VideoDetailScreenStateHolder(
 
     // 普通导航与整卡导航共用落位后的工作错峰；不借卡片开关改变玻璃或原生布局。
     // 已有播放器复用入口不延后；entry 内阶段单向锁存，返回预览不重新关闭许可。
+    val entryPlaybackSettled = remember { kotlinx.coroutines.flow.MutableStateFlow(false) }
     val entryWorkPhase = rememberVideoDetailEntryWorkPhase(
         staggerWork = shouldStaggerVideoDetailEntryWork(
             deferEntryLoad = deferVideoDetailEntryLoad,
             reuseFromMiniPlayerAtEntry = reuseFromMiniPlayerAtEntry,
         ),
-        contentReady = isTransitionFinished && detailContentState != null,
+        contentReady = isTransitionFinished,
         isVisible = isVisible,
+        playbackSettled = entryPlaybackSettled,
     )
     val entryPlaybackReady = entryTransitionFinished && entryWorkPhase != VideoDetailEntryWorkPhase.Content
     val entryRelatedReady = entryWorkPhase == VideoDetailEntryWorkPhase.Related
@@ -1272,45 +1277,45 @@ internal fun VideoDetailScreenStateHolder(
         onOpenReplyFromRoute = commentViewModel::openSubReplyFromRoute,
         onHandled = { hasHandledCommentRootFromRoute = true },
     )
-    val commentDefaultSortMode by com.android.purebilibili.core.store.SettingsManager
-        .getCommentDefaultSortMode(context)
-        .collectAsStateWithLifecycle(
+    val commentDefaultSortMode by remember(context) {
+        com.android.purebilibili.core.store.SettingsManager.getCommentDefaultSortMode(context)
+    }.collectAsStateWithLifecycle(
             initialValue = com.android.purebilibili.core.store.SettingsManager.getCommentDefaultSortModeSync(context),
             lifecycle = lifecycleOwner.lifecycle
         )
-    val commentFraudDetectionEnabled by com.android.purebilibili.core.store.SettingsManager
-        .getCommentFraudDetectionEnabled(context)
-        .collectAsStateWithLifecycle(
+    val commentFraudDetectionEnabled by remember(context) {
+        com.android.purebilibili.core.store.SettingsManager.getCommentFraudDetectionEnabled(context)
+    }.collectAsStateWithLifecycle(
             initialValue = true,
             lifecycle = lifecycleOwner.lifecycle
         )
-    val commentMemberDecorationsEnabled by com.android.purebilibili.core.store.SettingsManager
-        .getCommentMemberDecorationsEnabled(context)
-        .collectAsStateWithLifecycle(
+    val commentMemberDecorationsEnabled by remember(context) {
+        com.android.purebilibili.core.store.SettingsManager.getCommentMemberDecorationsEnabled(context)
+    }.collectAsStateWithLifecycle(
             initialValue = false,
             lifecycle = lifecycleOwner.lifecycle
         )
-    val homeSettings by com.android.purebilibili.core.store.SettingsManager
-        .getHomeSettings(context)
-        .collectAsStateWithLifecycle(
+    val homeSettings by remember(context) {
+        com.android.purebilibili.core.store.SettingsManager.getHomeSettings(context)
+    }.collectAsStateWithLifecycle(
             initialValue = com.android.purebilibili.core.store.HomeSettings(),
             lifecycle = lifecycleOwner.lifecycle
         )
-    val tabletCommentPanelWidthPreset by com.android.purebilibili.core.store.SettingsManager
-        .getTabletCommentPanelWidthPreset(context)
-        .collectAsStateWithLifecycle(
+    val tabletCommentPanelWidthPreset by remember(context) {
+        com.android.purebilibili.core.store.SettingsManager.getTabletCommentPanelWidthPreset(context)
+    }.collectAsStateWithLifecycle(
             initialValue = com.android.purebilibili.core.store.TabletCommentPanelWidthPreset.STANDARD,
             lifecycle = lifecycleOwner.lifecycle
         )
-    val videoAiSummaryEntryEnabled by com.android.purebilibili.core.store.SettingsManager
-        .getVideoAiSummaryEntryEnabled(context)
-        .collectAsStateWithLifecycle(initialValue = true, lifecycle = lifecycleOwner.lifecycle)
-    val videoNoteEnabled by com.android.purebilibili.core.store.SettingsManager
-        .getVideoNoteEnabled(context)
-        .collectAsStateWithLifecycle(initialValue = true, lifecycle = lifecycleOwner.lifecycle)
-    val videoNoteDefaultCollapsed by com.android.purebilibili.core.store.SettingsManager
-        .getVideoNoteDefaultCollapsed(context)
-        .collectAsStateWithLifecycle(initialValue = true, lifecycle = lifecycleOwner.lifecycle)
+    val videoAiSummaryEntryEnabled by remember(context) {
+        com.android.purebilibili.core.store.SettingsManager.getVideoAiSummaryEntryEnabled(context)
+    }.collectAsStateWithLifecycle(initialValue = true, lifecycle = lifecycleOwner.lifecycle)
+    val videoNoteEnabled by remember(context) {
+        com.android.purebilibili.core.store.SettingsManager.getVideoNoteEnabled(context)
+    }.collectAsStateWithLifecycle(initialValue = true, lifecycle = lifecycleOwner.lifecycle)
+    val videoNoteDefaultCollapsed by remember(context) {
+        com.android.purebilibili.core.store.SettingsManager.getVideoNoteDefaultCollapsed(context)
+    }.collectAsStateWithLifecycle(initialValue = true, lifecycle = lifecycleOwner.lifecycle)
     val preferredCommentSortMode = remember(commentDefaultSortMode) {
         CommentSortMode.fromApiMode(commentDefaultSortMode)
     }
@@ -1322,12 +1327,12 @@ internal fun VideoDetailScreenStateHolder(
         fraudDetectionEnabled = commentFraudDetectionEnabled,
     )
     val sortPreferenceScope = rememberCoroutineScope()
-    val danmakuEnabledForDetail by com.android.purebilibili.core.store.SettingsManager
-        .getDanmakuEnabled(
+    val danmakuEnabledForDetail by remember(context) {
+        com.android.purebilibili.core.store.SettingsManager.getDanmakuEnabled(
             context,
             com.android.purebilibili.core.store.DanmakuSettingsScope.PORTRAIT
         )
-        .collectAsStateWithLifecycle(
+    }.collectAsStateWithLifecycle(
             initialValue = true,
             lifecycle = lifecycleOwner.lifecycle
         )
@@ -1350,15 +1355,15 @@ internal fun VideoDetailScreenStateHolder(
     val appWindowAdaptiveInfo =
         com.android.purebilibili.core.util.LocalAppWindowAdaptiveInfo.current
     val displayContext = appWindowAdaptiveInfo.displayContext
-    val horizontalAdaptationEnabled by com.android.purebilibili.core.store.SettingsManager
-        .getHorizontalAdaptationEnabled(context)
-        .collectAsStateWithLifecycle(
+    val horizontalAdaptationEnabled by remember(context) {
+        com.android.purebilibili.core.store.SettingsManager.getHorizontalAdaptationEnabled(context)
+    }.collectAsStateWithLifecycle(
             initialValue = windowSizeClass.isTabletDevice || displayContext.isKnownFoldableDevice,
             lifecycle = lifecycleOwner.lifecycle
         )
-    val immersiveVideoPageStatusBar by com.android.purebilibili.core.store.SettingsManager
-        .getHideVideoPageStatusBar(context)
-        .collectAsStateWithLifecycle(
+    val immersiveVideoPageStatusBar by remember(context) {
+        com.android.purebilibili.core.store.SettingsManager.getHideVideoPageStatusBar(context)
+    }.collectAsStateWithLifecycle(
             initialValue = com.android.purebilibili.core.store.SettingsManager
                 .getHideVideoPageStatusBarSync(context),
             lifecycle = lifecycleOwner.lifecycle
@@ -1403,9 +1408,9 @@ internal fun VideoDetailScreenStateHolder(
     // 📐 全屏模式逻辑：
     // - 紧凑窗口：横放时自动进入全屏
     // - 平板/展开态折叠屏：旋转时保留分栏，仅用户主动切换全屏
-    val fullscreenMode by com.android.purebilibili.core.store.SettingsManager
-        .getFullscreenMode(context)
-        .collectAsStateWithLifecycle(
+    val fullscreenMode by remember(context) {
+        com.android.purebilibili.core.store.SettingsManager.getFullscreenMode(context)
+    }.collectAsStateWithLifecycle(
             initialValue = com.android.purebilibili.core.store.FullscreenMode.AUTO,
             lifecycle = lifecycleOwner.lifecycle
         )
@@ -1539,9 +1544,9 @@ internal fun VideoDetailScreenStateHolder(
     // 📖 [新增] 监听视频章节数据
     val viewPoints by viewModel.viewPoints.collectAsStateWithLifecycle()
     val pbpProgressData by viewModel.pbpProgressData.collectAsStateWithLifecycle()
-    val progressPeakDanmakuEnabled by com.android.purebilibili.core.store.SettingsManager
-        .getProgressPeakDanmakuEnabled(context)
-        .collectAsStateWithLifecycle(initialValue = false)
+    val progressPeakDanmakuEnabled by remember(context) {
+        com.android.purebilibili.core.store.SettingsManager.getProgressPeakDanmakuEnabled(context)
+    }.collectAsStateWithLifecycle(initialValue = false)
     val visiblePbpProgressData = pbpProgressData.takeIf { progressPeakDanmakuEnabled }
     val sponsorProgressMarkers by viewModel.sponsorProgressMarkers.collectAsStateWithLifecycle()
 
@@ -1983,8 +1988,16 @@ internal fun VideoDetailScreenStateHolder(
     }
 
     // 🔄 自动横竖屏：紧凑窗口驱动全屏，大屏只自适应旋转并保留分栏。
-    val autoRotateEnabled by com.android.purebilibili.core.store.SettingsManager
-        .getAutoRotateEnabled(context).collectAsStateWithLifecycle(
+    val autoRotateEnabled by remember(context) {
+        com.android.purebilibili.core.store.SettingsManager.getAutoRotateEnabled(context)
+    }.collectAsStateWithLifecycle(
+            initialValue = false,
+            lifecycle = lifecycleOwner.lifecycle
+        )
+    // 横屏保持：自动进入横屏后不随倾回竖屏退出全屏，仅手动退出。
+    val landscapeHoldEnabled by remember(context) {
+        com.android.purebilibili.core.store.SettingsManager.getLandscapeHoldEnabled(context)
+    }.collectAsStateWithLifecycle(
             initialValue = false,
             lifecycle = lifecycleOwner.lifecycle
         )
@@ -2168,9 +2181,35 @@ internal fun VideoDetailScreenStateHolder(
         fallbackResumePositionMs = resumePositionMsFromRoute,
         startPaused = isPortraitFullscreen && !useSharedPortraitPlayer,
         entryTransitionFinished = entryPlaybackReady,
-        relatedPublicationAllowed = entryTransitionFinished,
+        // 请求可提前完成，但发布列表和播放队列应等播放器、评论的首轮工作错峰后再执行。
+        relatedPublicationAllowed = entryTransitionFinished &&
+            (entryRelatedReady || uiState is VideoPlaybackUiState.Error),
         playbackSessionActive = playbackSessionActiveForMorph,
     )
+    DisposableEffect(playerState.player) {
+        val player = playerState.player
+        val listener = object : Player.Listener {
+            override fun onRenderedFirstFrame() { entryPlaybackSettled.value = true }
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_ENDED ||
+                    (playbackState == Player.STATE_READY && !player.playWhenReady)
+                ) entryPlaybackSettled.value = true
+            }
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (!playWhenReady && player.playbackState == Player.STATE_READY) {
+                    entryPlaybackSettled.value = true
+                }
+            }
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                entryPlaybackSettled.value = true
+            }
+        }
+        player.addListener(listener)
+        onDispose { player.removeListener(listener) }
+    }
+    LaunchedEffect(uiState is VideoPlaybackUiState.Error) {
+        if (uiState is VideoPlaybackUiState.Error) entryPlaybackSettled.value = true
+    }
     LaunchedEffect(isFullscreenMode) {
         val restorePositionMs = pendingFullscreenPositionRestoreMs
         if (restorePositionMs <= 0L) return@LaunchedEffect
@@ -2491,9 +2530,9 @@ internal fun VideoDetailScreenStateHolder(
             player.removeListener(listener)
         }
     }
-    val subtitleAutoPreference by com.android.purebilibili.core.store.SettingsManager
-        .getSubtitleAutoPreference(context)
-        .collectAsStateWithLifecycle(
+    val subtitleAutoPreference by remember(context) {
+        com.android.purebilibili.core.store.SettingsManager.getSubtitleAutoPreference(context)
+    }.collectAsStateWithLifecycle(
             initialValue = SubtitleAutoPreference.OFF,
             lifecycle = lifecycleOwner.lifecycle
         )
@@ -2911,6 +2950,7 @@ internal fun VideoDetailScreenStateHolder(
         isFullscreenPlayerLocked,
         orientationRequestsAllowed,
         userRequestedFullscreen,
+        landscapeHoldEnabled,
     ) {
         val hostActivity = activity
         if (
@@ -2952,6 +2992,7 @@ internal fun VideoDetailScreenStateHolder(
                 val targetOrientation = resolvePhoneAutoRotateRequestedOrientation(
                     orientationDegrees = orientation,
                     isCurrentlyLandscape = isCurrentlyLandscape,
+                    landscapeHoldEnabled = landscapeHoldEnabled,
                     useExactLandscapeSide = orientationPolicyDevice,
                     // A manual fullscreen press can happen while the device is still upright.
                     // Wait for one physical landscape observation before allowing the sensor
@@ -3613,15 +3654,15 @@ internal fun VideoDetailScreenStateHolder(
     val isSendingDanmakuHandle = viewModel.isSendingDanmaku.collectAsStateWithLifecycle()
     val composerDraftsHandle = viewModel.composerDrafts.collectAsStateWithLifecycle()
     val danmakuSendPreferenceScope = rememberCoroutineScope()
-    val rememberedDanmakuSendColor by com.android.purebilibili.core.store.SettingsManager
-        .getDanmakuSendColor(context)
-        .collectAsStateWithLifecycle(initialValue = 16777215)
-    val rememberedDanmakuSendMode by com.android.purebilibili.core.store.SettingsManager
-        .getDanmakuSendMode(context)
-        .collectAsStateWithLifecycle(initialValue = 1)
-    val rememberedDanmakuSendFontSize by com.android.purebilibili.core.store.SettingsManager
-        .getDanmakuSendFontSize(context)
-        .collectAsStateWithLifecycle(initialValue = 25)
+    val rememberedDanmakuSendColor by remember(context) {
+        com.android.purebilibili.core.store.SettingsManager.getDanmakuSendColor(context)
+    }.collectAsStateWithLifecycle(initialValue = 16777215)
+    val rememberedDanmakuSendMode by remember(context) {
+        com.android.purebilibili.core.store.SettingsManager.getDanmakuSendMode(context)
+    }.collectAsStateWithLifecycle(initialValue = 1)
+    val rememberedDanmakuSendFontSize by remember(context) {
+        com.android.purebilibili.core.store.SettingsManager.getDanmakuSendFontSize(context)
+    }.collectAsStateWithLifecycle(initialValue = 25)
     val continuousPlayerUnitState = remember { mutableFloatStateOf(1f) }
     // Entry lifetime, not BVID lifetime: once attached, never defer the player again.
     val continuousPlayerHostMounted = remember { mutableStateOf(false) }
@@ -3848,6 +3889,7 @@ internal fun VideoDetailScreenStateHolder(
                             isRepliesEnd = commentState.isRepliesEnd, videoTags = success.videoTags,
                             paginationPage = commentState.nextPage,
                             voteCard = commentState.voteCard,
+                            pageControl = commentState.pageControl,
                             sortMode = commentState.sortMode,
                             currentMid = commentState.currentMid, showUpFlag = commentState.showUpFlag,
                             showIdentityDecorations = commentMemberDecorationsEnabled,
@@ -3876,7 +3918,7 @@ internal fun VideoDetailScreenStateHolder(
                             drawerWidth = com.android.purebilibili.feature.video.ui.overlay
                                 .resolveLandscapeEndDrawerLayoutPolicy(configuration.screenWidthDp)
                                 .drawerWidthDp.dp,
-                            threadContent = if (subReplyState.visible && subReplyState.rootReply != null) {
+                            threadContent = if (subReplyState.visible) {
                                 { onImagePreview ->
                                     VideoInlineSubReplyDetailContent(
                                         state = subReplyState,
@@ -4180,9 +4222,9 @@ internal fun VideoDetailScreenStateHolder(
                         }
 
                         //  读取竖屏播放器滚动缩小模式
-                        val portraitPlayerCollapseMode by com.android.purebilibili.core.store.SettingsManager
-                            .getPortraitPlayerCollapseMode(context)
-                            .collectAsStateWithLifecycle(initialValue = PortraitPlayerCollapseMode.OFF
+                        val portraitPlayerCollapseMode by remember(context) {
+                            com.android.purebilibili.core.store.SettingsManager.getPortraitPlayerCollapseMode(context)
+                        }.collectAsStateWithLifecycle(initialValue = PortraitPlayerCollapseMode.OFF
             )
                         var autoPausedByPlayerCollapse by remember(currentBvid) { mutableStateOf(false) }
                         DisposableEffect(playerState.player, currentBvid) {
@@ -4344,9 +4386,9 @@ internal fun VideoDetailScreenStateHolder(
                         )
 
                         // 缩小浏览相关/评论时自动暂停（设置默认开启）；仅恢复本功能触发的暂停。
-                        val pauseOnPlayerCollapseEnabled by com.android.purebilibili.core.store.SettingsManager
-                            .getPauseOnPlayerCollapseEnabled(context)
-                            .collectAsStateWithLifecycle(initialValue = true)
+                        val pauseOnPlayerCollapseEnabled by remember(context) {
+                            com.android.purebilibili.core.store.SettingsManager.getPauseOnPlayerCollapseEnabled(context)
+                        }.collectAsStateWithLifecycle(initialValue = true)
                         val playerCollapsedForAutoPause by remember(
                             inlinePortraitScrollEnabled,
                             autoPauseCollapseRangePx,
@@ -4805,7 +4847,8 @@ internal fun VideoDetailScreenStateHolder(
                         // A second media-cover radius exposes the live layer around its baked corners.
                         val returnMediaClipCornerDp = if (nativeSnapshotTargetBoundsProvider != null) {
                             0.dp
-                        } else AppShapes.mediaCoverCornerDp()
+                        } else miuixLandingState.sourceChromeSnapshot?.coverPresentation
+                            ?.cornerRadiusDp?.dp ?: AppShapes.mediaCoverCornerDp()
                         val returnMediaInverseScaleProvider: () ->
                             com.android.purebilibili.navigation3.predictiveback.MiuixVideoCardInverseScale = {
                             val landing = landingLayoutForMedia

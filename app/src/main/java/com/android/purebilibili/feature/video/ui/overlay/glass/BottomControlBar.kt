@@ -62,6 +62,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.platform.testTag
@@ -525,6 +527,15 @@ fun BottomControlBar(
     val onSubtitlePositionLockedChange = subtitleControlCallbacks.onPositionLockedChange
 
     val nearbyHandoff = com.android.purebilibili.feature.nearby.LocalNearbyHandoff.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val hideCenterPlayback = rememberHideGlassCenterPlayback()
+    val toggleCenterPlayback: () -> Unit = {
+        scope.launch {
+            com.android.purebilibili.core.store.player.PlayerSettingsStore
+                .setHideGlassCenterPlayback(context, !hideCenterPlayback)
+        }
+    }
     val configuration = LocalConfiguration.current
     val uiLayoutWidthDp = remember(configuration.screenWidthDp, viewportWidthDpOverride) {
         (viewportWidthDpOverride ?: configuration.screenWidthDp).coerceAtLeast(1)
@@ -896,8 +907,8 @@ fun BottomControlBar(
         ) {
             // 横屏保留两侧功能分组，玻璃材质在各入口独立提供。
             if (isFullscreen) {
-                // 玻璃使用中央播放入口，原生横屏保留左下角播放按钮。
-                if (!liquidGlassEnabled) {
+                // 隐藏玻璃中央按钮时，在控制栏保留播放入口。
+                if (!liquidGlassEnabled || hideCenterPlayback) {
                     PlayerPlayPauseButton(
                         isPlaying = isPlaying,
                         onClick = onPlayPauseClick,
@@ -1315,6 +1326,11 @@ fun BottomControlBar(
                                                     onPipClick()
                                                 },
                                             ) else null,
+                                            if (liquidGlassEnabled) AppWindowAction(
+                                                label = "隐藏中央播放按钮",
+                                                selected = hideCenterPlayback,
+                                                onClick = toggleCenterPlayback,
+                                            ) else null,
                                             if (sponsorContributionAvailable) {
                                                 AppWindowAction(
                                                     label = if (sponsorContributionMarking) "结束标记片段" else "标记片段起点",
@@ -1466,8 +1482,8 @@ fun BottomControlBar(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = if (compactInlineGlassControls) Arrangement.SpaceBetween else Arrangement.Start,
                 ) {
-                    // 原生保留原有播放槽位与间距，玻璃内嵌播放器统一由中央入口控制播放。
-                    if (!liquidGlassEnabled) {
+                    // 原生保留播放槽位；玻璃仅在隐藏中央按钮时使用该槽位。
+                    if (!liquidGlassEnabled || hideCenterPlayback) {
                         PlayerPlayPauseButton(
                             isPlaying = isPlaying,
                             onClick = onPlayPauseClick,
@@ -1812,6 +1828,11 @@ fun BottomControlBar(
                                                         onClick = { controller.openDevices() },
                                                     )
                                                 },
+                                                if (liquidGlassEnabled) AppWindowAction(
+                                                    label = "隐藏中央播放按钮",
+                                                    selected = hideCenterPlayback,
+                                                    onClick = toggleCenterPlayback,
+                                                ) else null,
                                                 if (sponsorContributionAvailable) {
                                                     AppWindowAction(
                                                         label = if (sponsorContributionMarking) "结束标记片段" else "标记片段起点",
@@ -2660,7 +2681,9 @@ fun VideoProgressBar(
         layoutPolicy.baseHeightWithoutChapterDp.dp
     }
     val previewImageHeightDp = if (videoshotData?.isValid == true) {
-        resolveSeekPreviewBubbleHeightDp(LocalConfiguration.current.screenWidthDp)
+        resolveSeekPreviewBubbleHeightDp(
+            LocalConfiguration.current.screenWidthDp, LocalConfiguration.current.screenHeightDp,
+        ).takeIf { it > 0 }
     } else null
     val previewAreaHeightDp = if (isSeekScrubbing) {
         resolveVideoProgressPreviewAreaHeightDp(

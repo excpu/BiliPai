@@ -2106,7 +2106,10 @@ class VideoPlayerSectionPolicyTest {
             .substringAfter("onDragStart = { offset ->")
             .substringBefore("onDragEnd = {")
 
-        assertTrue(dragStartBlock.contains("if (isLongPressing || longPressSpeedLocked)"))
+        // 长按进行中阻断常规拖拽（此时竖移在调倍速值）。
+        assertTrue(dragStartBlock.contains("if (isLongPressing) {"))
+        // 仅锁定倍速（手指已松开）不得阻断音量/亮度/进度滑动。
+        assertFalse(dragStartBlock.contains("longPressSpeedLocked"))
     }
 
     @Test

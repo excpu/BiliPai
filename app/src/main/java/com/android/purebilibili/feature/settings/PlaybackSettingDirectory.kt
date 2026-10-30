@@ -23,6 +23,7 @@ internal fun settingItemTitle(settingId: String): String =
     settingsItemDirectory.first { it.settingId == settingId }.title
 
 internal fun settingItemTitle(settingId: String, context: Context): String = when (settingId) {
+    PROGRESSIVE_BLUR_RENDERER_SETTING_ID -> context.getString(com.android.purebilibili.R.string.animation_progressive_renderer_title)
     GRID_CUSTOMIZATION_SETTING_ID -> context.getString(com.android.purebilibili.R.string.home_settings_grid_customization_title)
     GRID_SHARE_SETTING_ID -> context.getString(com.android.purebilibili.R.string.home_settings_grid_share_title)
     GRID_COMPACT_SETTING_ID -> context.getString(com.android.purebilibili.R.string.home_settings_grid_compact_title)
@@ -107,6 +108,7 @@ internal val playbackSettingDirectory = listOf(
         aliases = listOf("进度百分比", "快进比例", "快退比例", "滑动范围", "总时长比例", "25%", "50%", "90%", "100%")
     ),
     PlaybackSettingItem("playback.auto_rotate_enabled", "自动横竖屏切换", SettingsRootCategory.FULLSCREEN_GESTURE, SettingsSearchFocusIds.PLAYBACK_FULLSCREEN, { context -> com.android.purebilibili.core.store.SettingsManager .getAutoRotateEnabled(context).map { if (it) "开启" else "关闭" } }),
+    PlaybackSettingItem("playback.landscape_hold_enabled", "横屏保持", SettingsRootCategory.FULLSCREEN_GESTURE, SettingsSearchFocusIds.PLAYBACK_FULLSCREEN, { context -> com.android.purebilibili.core.store.SettingsManager .getLandscapeHoldEnabled(context).map { if (it) "开启" else "关闭" } }),
     PlaybackSettingItem("playback.horizontal_adaptation_enabled", "横屏适配", SettingsRootCategory.FULLSCREEN_GESTURE, SettingsSearchFocusIds.PLAYBACK_FULLSCREEN, { context -> com.android.purebilibili.core.store.SettingsManager .getHorizontalAdaptationEnabled(context).map { if (it) "开启" else "关闭" } }),
     PlaybackSettingItem("playback.player_control_visibility.show_cast_button", "显示投屏按钮", SettingsRootCategory.FULLSCREEN_GESTURE, SettingsSearchFocusIds.PLAYBACK_FULLSCREEN, { context -> com.android.purebilibili.core.store.SettingsManager.getPlayerControlVisibilitySettings(context).map { if (it.showCastButton) "开启" else "关闭" } }),
     PlaybackSettingItem("playback.player_control_visibility.show_follow_button", "显示关注按钮", SettingsRootCategory.FULLSCREEN_GESTURE, SettingsSearchFocusIds.PLAYBACK_FULLSCREEN, { context -> com.android.purebilibili.core.store.SettingsManager.getPlayerControlVisibilitySettings(context).map { if (it.showFollowButton) "开启" else "关闭" } }),

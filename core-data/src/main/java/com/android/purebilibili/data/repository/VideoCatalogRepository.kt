@@ -304,6 +304,8 @@ object VideoCatalogRepository {
         }
     }
 
+    fun getCachedCreatorCardStats(mid: Long): CreatorCardStats? = creatorCardStatsCache[mid]
+
     suspend fun getCreatorCardStats(mid: Long): Result<CreatorCardStats> = withContext(Dispatchers.IO) {
         if (mid <= 0L) return@withContext Result.failure(IllegalArgumentException("Invalid mid"))
         creatorCardStatsCache[mid]?.let { return@withContext Result.success(it) }

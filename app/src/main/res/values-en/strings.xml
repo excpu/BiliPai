@@ -954,4 +954,18 @@
     <string name="settings_donate_preview_hint">Original image · Touch and hold to save to your gallery</string>
     <string name="settings_donate_save_confirm_title">Save appreciation code?</string>
     <string name="settings_donate_save_confirm_message">Save the original appreciation code image to your gallery?</string>
+
+    <!-- Progressive top blur renderer -->
+    <string name="animation_progressive_renderer_title">Progressive blur renderer</string>
+    <string name="animation_progressive_renderer_summary">Both renderers share the same strength, coverage and falloff settings.</string>
+    <string name="animation_progressive_renderer_fallback_summary">This system does not support the platform renderer. Miuix is used even when it is selected.</string>
+    <string name="animation_progressive_renderer_miuix_description">The existing renderer, used by default.</string>
+    <string name="animation_progressive_renderer_android">Android platform</string>
+    <string name="animation_progressive_renderer_android_description">Uses system backdrop blur, with Miuix as a fallback when unavailable.</string>
+    <string name="preview_blur_compare_button">Compare previews</string>
+    <string name="preview_blur_compare_title">Compare progressive blur</string>
+    <string name="preview_blur_compare_summary">Both previews use the same scene and your current blur settings. Drag the slider to move both backgrounds. Saved settings remain unchanged.</string>
+    <string name="preview_blur_compare_scroll">Move preview background</string>
+    <string name="preview_blur_compare_unavailable">%1$s is unavailable. This device cannot display an actual preview of this renderer.</string>
+    <string name="preview_blur_compare_api_requirement">The platform renderer requires API 37.2 or later. This device runs API %1$s, so Miuix is used.</string>
 </resources>

@@ -185,15 +185,7 @@ internal fun HomeHeroCarousel(
         ) { page ->
             val video = resolveHomeHeroCarouselItemOrNull(videos, page)
                 ?: return@HorizontalPager
-            // 这里确实在组合期读了一个每帧变化的值，但**暂时无法就地修掉**：
-            // pageOffset 派生出的 transform 同时喂给三个不同阶段的消费者——
-            // Surface 的 shadowElevation（组合期）、Modifier.zIndex（布局期）、
-            // 以及多个 graphicsLayer 与渐变 Brush（绘制期）。
-            // 只把绘制期那部分下沉不解决问题，前两者仍然会拉着整张卡重组；
-            // 真正的修法是把 HomeHeroCarouselCard 的 transform 参数改成 () -> T
-            // 并重新安排三类消费者，属于卡片体系收编（计划 4.2）的范围，
-            // 不适合塞进一次 lint 清理提交里——那样会在首页最显眼的组件上
-            // 混入无法单独回滚的视觉风险。
+            // transform 同时用于层级、图层变换与渐变，当前仍在组合期统一计算。
             @Suppress("FrequentlyChangingValue")
             val pageOffset = (
                 (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
@@ -494,9 +486,9 @@ private fun HomeHeroCarouselCard(
         shape = cardShape,
         color = MaterialTheme.colorScheme.surfaceVariant,
         tonalElevation = AppSpacingTokens.None,
-        shadowElevation = (transform.shadowElevationFraction * 10f).dp,
+        shadowElevation = AppSpacingTokens.None,
         modifier = Modifier
-            .adaptiveCardHoverEffect(shape = cardShape)
+            .adaptiveCardHoverEffect(shape = cardShape, hoverShadowElevation = AppSpacingTokens.None)
             .videoCardShellSharedBoundsOrEmpty(
                 enabled = useCardShellSharedBounds,
                 sharedTransitionScope = sharedTransitionScope,

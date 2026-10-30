@@ -397,8 +397,10 @@ internal fun resolveCenterLoadingUiState(
     isSeekTransitionPending: Boolean,
     playWhenReady: Boolean,
     isPlaying: Boolean,
-    bandwidthEstimate: String
+    bandwidthEstimate: String,
+    playbackState: Int = androidx.media3.common.Player.STATE_READY,
 ): CenterLoadingUiState? {
+    if (playbackState == androidx.media3.common.Player.STATE_ENDED) return null
     val bandwidthLabel = bandwidthEstimate.trim().ifBlank { null }
     return when {
         isBuffering && isQualitySwitching -> {

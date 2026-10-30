@@ -125,11 +125,9 @@ class HorizontalVideoCardLayoutPolicyTest {
     @Test
     fun horizontalCardsUseTheThemeCardContainer() {
         val paths = listOf(
-            "feature/home/components/cards/HomeStyleSingleColumnVideoCard.kt",
             "feature/personal/PersonalMediaCard.kt",
             "feature/list/HistoryPersonalCard.kt",
             "feature/space/SpaceScreen.kt",
-            "feature/video/ui/components/RelatedVideoItem.kt",
         )
 
         paths.forEach { relativePath ->

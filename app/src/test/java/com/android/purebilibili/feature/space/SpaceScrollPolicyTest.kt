@@ -16,6 +16,25 @@ class SpaceScrollPolicyTest {
     }
 
     @Test
+    fun `solid top fade shares flowing layout with either blur and pins only when all are off`() {
+        for (progressiveBlur in listOf(false, true)) {
+            for (headerBlur in listOf(false, true)) {
+                for (solidFade in listOf(false, true)) {
+                    assertEquals(
+                        !progressiveBlur && !headerBlur && !solidFade,
+                        shouldPinSpaceContentTabs(
+                            progressiveTopBlurEnabled = progressiveBlur,
+                            headerBlurEnabled = headerBlur,
+                            progressiveTopFadeEnabled = solidFade,
+                        ),
+                        "progressive=$progressiveBlur, header=$headerBlur, fade=$solidFade",
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
     fun `tabs approach toolbar naturally and stop below its actual inset`() {
         assertFalse(shouldShowSpacePinnedTabs(240, 96, 96, 0))
         assertFalse(shouldShowSpacePinnedTabs(1, 96, 96, 0))

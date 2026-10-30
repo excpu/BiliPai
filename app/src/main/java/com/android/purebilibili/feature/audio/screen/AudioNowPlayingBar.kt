@@ -51,6 +51,7 @@ import com.android.purebilibili.core.ui.transition.rememberNativeVideoCardLayer
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -66,6 +67,7 @@ import com.android.purebilibili.core.util.CardPositionManager
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
@@ -119,6 +121,7 @@ internal fun AudioNowPlayingBar(
     onExpand: () -> Unit,
     onCompactClick: (() -> Unit)? = null,
     isLayoutStable: Boolean = true,
+    captureCardSourceOnExpand: Boolean = true,
     pauseArtworkRotation: Boolean = false,
     onPlayPause: () -> Unit,
     onSkipNext: () -> Unit,
@@ -161,6 +164,9 @@ internal fun AudioNowPlayingBar(
         val barCoordsRef = remember { arrayOfNulls<LayoutCoordinates>(1) }
         val coverCoordsRef = remember { arrayOfNulls<LayoutCoordinates>(1) }
         val dissolveContext = LocalContext.current
+        val artworkGate = com.android.purebilibili.core.ui.rememberDecorativeAnimationGate()
+        val reduceMotion = rememberSystemReduceMotion()
+        val cancelCaptureJob = remember { arrayOfNulls<kotlinx.coroutines.Job>(1) }
 
         // 从窗口已绘制的像素截取横条，避免离屏重绘实时模糊/旋转图层。
         // 点按取消立即暂停；粒子首帧隐藏本体，消散完成后再关闭会话。
@@ -183,10 +189,10 @@ internal fun AudioNowPlayingBar(
                 cancelDissolving = true
                 onCancelPlayback()
                 val hostWindow = dissolveContext.findHostActivity()?.window
-                if (hostWindow == null || !isThanosEffectSupported(dissolveContext)) {
+                if (hostWindow == null || !artworkGate.active || !isThanosEffectSupported(dissolveContext)) {
                     dismissAfterCancel()
                 } else {
-                    snapshotScope.launch {
+                    cancelCaptureJob[0] = snapshotScope.launch {
                         try {
                             withFrameNanos { }
                             val windowBounds = barCoordsRef[0]?.takeIf { it.isAttached }?.boundsInWindow()
@@ -233,8 +239,17 @@ internal fun AudioNowPlayingBar(
             }
         }
 
-        DisposableEffect(Unit) {
+        LaunchedEffect(artworkGate.active, cancelDissolving, state.bvid) {
+            // 关闭已开始而窗口不再呈现时，直接结束粒子和截图任务，不能在后台逐帧运行。
+            if (!artworkGate.active && cancelDissolving) {
+                cancelCaptureJob[0]?.cancel()
+                finishCancelDissolveCleanup()
+                dismissAfterCancel()
+            }
+        }
+        DisposableEffect(state.bvid) {
             onDispose {
+                cancelCaptureJob[0]?.cancel()
                 dissolveEffectView?.dispose()
                 dissolveEffectView = null
             }
@@ -243,7 +258,14 @@ internal fun AudioNowPlayingBar(
         val handleExpand = {
             if (onCompactClick != null) {
                 onCompactClick()
-            } else if (!captureInProgress && canOpenAudioNowPlayingBarSource(isLayoutStable)) {
+            } else if (!captureCardSourceOnExpand && !captureInProgress &&
+                canOpenAudioNowPlayingBarSource(isLayoutStable)
+            ) {
+                // 听视频页使用普通导航，不等待仅供视频详情形变使用的来源快照。
+                onExpand()
+            } else if (captureCardSourceOnExpand && !captureInProgress &&
+                canOpenAudioNowPlayingBarSource(isLayoutStable)
+            ) {
                 barCoordsRef[0]?.takeIf { it.isAttached }?.boundsInRoot()?.let { bounds ->
                     val sourceCoverBounds = coverCoordsRef[0]?.takeIf { it.isAttached }?.boundsInRoot()
                     val effectiveSourceLayout = if (iconOnlyProgress() >= 0.99f) {
@@ -301,11 +323,11 @@ internal fun AudioNowPlayingBar(
                 }
             }
         }
-        val reduceMotion = rememberSystemReduceMotion()
-        val sourceInActiveReturn = resolveNowPlayingBarReturnVisibility(
-            handoff = handoff,
-            currentBvid = state.bvid,
-        ) <= 0f
+        val sourceInActiveReturn by remember(handoff, state.bvid) {
+            derivedStateOf {
+                resolveNowPlayingBarReturnVisibility(handoff = handoff, currentBvid = state.bvid) <= 0f
+            }
+        }
 
         val chrome = resolveMusicPlayerChromeSpec(
             uiStyle = LocalAppUiStyle.current,
@@ -341,8 +363,10 @@ internal fun AudioNowPlayingBar(
         }
         // 各材质共用的旋转调度：卡片过渡时停止请求旋转帧，保留角度供结束后续转。
         // 只暂停装饰动画，不改变播放状态，也不改变液态玻璃 / MD3 / Miuix 的布局与样式。
+        val decorativeMotionAllowed = artworkGate.active && isLayoutStable &&
+            !pauseArtworkRotation && !captureInProgress && !cancelDissolving && !sourceInActiveReturn
         val coverRotationDegrees = rememberMusicArtworkRotationDegrees(
-            active = !pauseArtworkRotation && shouldRotateMusicArtwork(
+            active = decorativeMotionAllowed && shouldRotateMusicArtwork(
                 isPlaying = state.isPlaying,
                 reduceMotion = reduceMotion
             ),
@@ -353,6 +377,7 @@ internal fun AudioNowPlayingBar(
         val glassMotion = glassActive && miuixBackdrop != null
         Box(
             modifier = modifier
+                .then(artworkGate.modifier)
                 .appElasticPress(
                     enabled = !sourceInActiveReturn && !captureInProgress && !cancelDissolving,
                     state = elasticState,
@@ -423,7 +448,7 @@ internal fun AudioNowPlayingBar(
                 )
                 .then(if (sourceInActiveReturn) Modifier.clearAndSetSemantics {} else Modifier),
         ) {
-            Box(
+            if (!dissolveContentHidden) Box(
                 Modifier.matchParentSize()
                     .graphicsLayer { alpha = 1f - surfaceMergeProgress().coerceIn(0f, 1f) }
                     .biliPaiFloatingDockShell(
@@ -478,7 +503,7 @@ internal fun AudioNowPlayingBar(
                         ) {
                             AppText(
                                 text = state.title,
-                                modifier = if (state.isPlaying && isLayoutStable) {
+                                modifier = if (state.isPlaying && decorativeMotionAllowed) {
                                     Modifier.basicMarquee(iterations = Int.MAX_VALUE)
                                 } else {
                                     Modifier
@@ -733,6 +758,7 @@ internal fun AudioNowPlayingBarPresenceHost(
     content: @Composable () -> Unit,
 ) {
     val reduceMotion = rememberSystemReduceMotion()
+    val parentVisualWorkAllowed = com.android.purebilibili.core.ui.LocalVisualWorkAllowed.current
     val alphaEnterSpec = resolveAudioNowPlayingPresenceAnimationSpec(
         active = true,
         reduceMotion = reduceMotion,
@@ -766,6 +792,9 @@ internal fun AudioNowPlayingBarPresenceHost(
         },
         modifier = modifier,
     ) {
-        content()
+        CompositionLocalProvider(
+            com.android.purebilibili.core.ui.LocalVisualWorkAllowed provides
+                (parentVisualWorkAllowed && visible && !transition.isRunning),
+        ) { content() }
     }
 }

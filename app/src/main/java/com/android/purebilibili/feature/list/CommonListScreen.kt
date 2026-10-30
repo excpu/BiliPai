@@ -2240,7 +2240,11 @@ fun CommonListScreen(
                                 tapPressRefractionEnabled = true,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = historyFilterChrome.horizontalPaddingDp.dp),
+                                    .padding(
+                                        horizontal = historyFilterChrome.horizontalPaddingDp.dp,
+                                    )
+                                    // 仅下移历史页玻璃筛选 Dock，保留 MD3、Miuix 原生间距。
+                                    .padding(top = if (historyFilterChrome.useLiquidDock) 6.dp else 0.dp),
                                 miuixBackdrop = visibleHeaderBackdrop,
                                 indicatorPositionProvider = {
                                     historyPagerState.tabIndicatorPosition
@@ -2345,11 +2349,17 @@ fun CommonListScreen(
                             },
                         )
                         val filteredItems = filterCommonListVideosByQuery(pageItems, searchQuery)
-                        val visibleKeys = historyPagerGridStates[pageIndex]?.layoutInfo
-                            ?.visibleItemsInfo.orEmpty()
-                            .mapNotNull { item -> filteredItems.getOrNull(item.index) }
-                            .map(historyViewModel::resolveHistoryRenderKey)
-                            .toSet()
+                        val historyRenderKeys = resolveCommonListRenderKeys(filteredItems.map(historyViewModel::resolveHistoryRenderKey))
+                        val visibleItemKeys = historyPagerGridStates[pageIndex]?.layoutInfo
+                            ?.visibleItemsInfo.orEmpty().map { it.key.toString() }.toSet()
+                        val visibleIndices = if (personalListColumns > 1 && !homeSettings.showFullVideoCardContent) {
+                            resolveCommonListAlignedRows(filteredItems, historyRenderKeys, personalListColumns)
+                                .filter { it.key in visibleItemKeys }
+                                .flatMap { it.indices.toList() }
+                        } else {
+                            historyRenderKeys.indices.filter { historyRenderKeys[it] in visibleItemKeys }
+                        }
+                        val visibleKeys = visibleIndices.map { historyViewModel.resolveHistoryRenderKey(filteredItems[it]) }.toSet()
                         historyViewModel.startVideosDissolve(targetKeys, visibleKeys)
                         selectedHistoryKeys = emptySet()
                         isHistoryBatchMode = false
@@ -2834,7 +2844,9 @@ internal fun CommonListContent(
     val resolvedGridState = gridState ?: rememberCompatibleStaggeredGridState()
     val fixedHeaderInset = resolveCommonListViewportTopPadding(padding.calculateTopPadding())
     val scrollableHeaderInset = if (scrollUnderHeader) fixedHeaderInset else AppSpacingTokens.None
+    // History retains its own layout; other single-column lists share a bounded content width.
     val viewportModifier = Modifier
+        .then(if (columns == 1 && !isHistoryPersonalList) Modifier.responsiveContentWidth(resolveCommonListSingleColumnMaxWidth()) else Modifier)
         .fillMaxSize()
         .padding(top = if (scrollUnderHeader) AppSpacingTokens.None else fixedHeaderInset)
     val emptyViewportModifier = Modifier
@@ -2902,6 +2914,10 @@ internal fun CommonListContent(
         val renderKeys = androidx.compose.runtime.remember(filteredItems) {
             resolveCommonListRenderKeys(filteredItems.map(resolveHistoryItemKey))
         }
+        val alignRows = columns > 1 && !com.android.purebilibili.core.ui.LocalFullVideoCardContentVisible.current
+        val alignedRows = remember(filteredItems, renderKeys, columns) {
+            resolveCommonListAlignedRows(filteredItems, renderKeys, columns)
+        }
         val favoriteDragResources = remember(filteredItems, renderKeys, onFavoriteDragSelectionChange != null) {
             if (onFavoriteDragSelectionChange == null) emptyMap() else buildMap {
                 filteredItems.forEachIndexed { index, video ->
@@ -2911,6 +2927,12 @@ internal fun CommonListContent(
                 }
             }
         }
+        val favoriteDragRows = remember(alignedRows, renderKeys, favoriteDragResources, alignRows) {
+            if (!alignRows) emptyMap() else alignedRows.filterNot { it.fullWidth }.associate { row ->
+                row.key to row.indices.map { favoriteDragResources[renderKeys[it]] }
+            }
+        }
+        val gridSpacingPx = with(LocalDensity.current) { gridItemSpacingDp.dp.roundToPx().toFloat() }
         LaunchedEffect(
             searchPaginationFallbackEnabled,
             allowAutomaticLoadMore,
@@ -3007,6 +3029,9 @@ internal fun CommonListContent(
                         state = resolvedGridState,
                         contentPadding = gridContentPadding,
                         resourceKeys = favoriteDragResources,
+                        rowResourceKeys = favoriteDragRows,
+                        rowColumns = columns,
+                        rowSpacingPx = gridSpacingPx,
                         selectedKeys = historySelectedKeys,
                         enabled = onFavoriteDragSelectionChange != null,
                         onSelectionChange = { onFavoriteDragSelectionChange?.invoke(it) },
@@ -3061,15 +3086,10 @@ internal fun CommonListContent(
                         headerContent()
                     }
                 }
-                 itemsIndexed(
-                    items = filteredItems,
-                    key = { index, _ -> renderKeys[index] },
-                    span = { _, item ->
-                        if (item.isCollectionResource) StaggeredGridItemSpan.FullLine else StaggeredGridItemSpan.SingleLane
-                    }
-                ) { index, video ->
+                val renderCard: @Composable (Int, Modifier) -> Unit = { index, cardModifier ->
+                    val video = filteredItems[index]
                     AnimatedVideoListItem(
-                        modifier = videoListItemModifier(enabled = cardAnimationEnabled),
+                        modifier = cardModifier,
                         enabled = cardAnimationEnabled,
                         useLookaheadBounds = onHistoryLongDelete == null || onHistoryDissolveComplete == null,
                     ) {
@@ -3102,9 +3122,8 @@ internal fun CommonListContent(
 
                         val cardContent: @Composable () -> Unit = {
                             Box(
-                                modifier = if (onFavoriteDragSelectionChange != null) {
-                                    Modifier.semantics { selected = isSelected }
-                                } else Modifier,
+                                modifier = (if (alignRows && !video.isCollectionResource) Modifier.fillMaxHeight() else Modifier)
+                                    .then(if (onFavoriteDragSelectionChange != null) Modifier.semantics { selected = isSelected } else Modifier),
                             ) {
                                 if (video.isCollectionResource) {
                                     FavoriteCollectionRow(
@@ -3118,6 +3137,7 @@ internal fun CommonListContent(
                                 } else if (historyItem != null) {
                                     HistoryPersonalCard(
                                         item = historyItem,
+                                        modifier = if (alignRows) Modifier.fillMaxHeight() else Modifier,
                                         stacked = columns > 1,
                                         selected = isSelected,
                                         batchMode = historyBatchMode,
@@ -3151,6 +3171,7 @@ internal fun CommonListContent(
                                 } else if (isFavoritePersonalList) {
                                     FavoritePersonalCard(
                                         item = video,
+                                        modifier = if (alignRows) Modifier.fillMaxHeight() else Modifier,
                                         stacked = columns > 1,
                                         transitionEnabled = cardTransitionEnabled,
                                         batchMode = favoriteBatchMode,
@@ -3181,6 +3202,7 @@ internal fun CommonListContent(
                                 } else {
                                     ElegantVideoCard(
                                         video = displayedVideo,
+                                        modifier = if (alignRows) Modifier.fillMaxHeight() else Modifier,
                                         singleColumn = columns == 1,
                                         index = index,
                                         animationEnabled = false, // The stable item wrapper owns column-switch motion.
@@ -3281,6 +3303,32 @@ internal fun CommonListContent(
                             }
                         } else {
                             cardContent()
+                        }
+                    }
+                }
+                if (!alignRows) {
+                    itemsIndexed(
+                        items = filteredItems,
+                        key = { index, _ -> renderKeys[index] },
+                        span = { _, item -> if (item.isCollectionResource) StaggeredGridItemSpan.FullLine else StaggeredGridItemSpan.SingleLane },
+                    ) { index, _ ->
+                        renderCard(index, videoListItemModifier(enabled = cardAnimationEnabled))
+                    }
+                } else {
+                    alignedRows.forEach { row ->
+                        item(key = row.key, span = StaggeredGridItemSpan.FullLine) {
+                            if (row.fullWidth) {
+                                renderCard(row.indices.first, videoListItemModifier(enabled = cardAnimationEnabled))
+                            } else {
+                                com.android.purebilibili.feature.home.HomeAlignedVideoRow(
+                                    indices = row.indices,
+                                    itemKeys = renderKeys,
+                                    columns = columns,
+                                    horizontalArrangement = Arrangement.spacedBy(gridItemSpacingDp.dp),
+                                    modifier = videoListItemModifier(enabled = cardAnimationEnabled).fillMaxWidth(),
+                                    content = renderCard,
+                                )
+                            }
                         }
                     }
                 }

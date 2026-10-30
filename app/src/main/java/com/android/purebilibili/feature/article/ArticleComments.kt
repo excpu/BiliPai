@@ -63,7 +63,7 @@ internal fun rememberArticleCommentContent(
                 comments = if (belongsToArticle) state.comments else emptyList(),
                 isLoading = loading,
                 isLoadingMore = belongsToArticle && state.isLoadingMore,
-                onViewReplies = { viewModel.openSubReply(it) },
+                onViewReplies = viewModel::openSubReply,
                 onReply = viewModel::startCommentReply,
                 onLike = { viewModel.likeComment(it.rpid) },
                 onHate = { viewModel.hateComment(it.rpid) { _, message -> notify(message) } },

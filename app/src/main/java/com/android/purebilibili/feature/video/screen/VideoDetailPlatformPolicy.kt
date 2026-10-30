@@ -758,6 +758,7 @@ internal fun resolvePhoneAutoRotateRequestedOrientation(
     isCurrentlyLandscape: Boolean,
     useExactLandscapeSide: Boolean = true,
     allowPortraitTransitions: Boolean = true,
+    landscapeHoldEnabled: Boolean = false,
     portraitSnapDegrees: Int = 25,
     landscapeEnterMinDegrees: Int = 60,
     landscapeEnterMaxDegrees: Int = 120,
@@ -801,7 +802,8 @@ internal fun resolvePhoneAutoRotateRequestedOrientation(
         // Already landscape: only 0° exits to portrait. 180° is the midpoint of a
         // landscape-to-landscape flip; treating it as portrait makes cover screens
         // recognize the other side, then snap back to the original 90° landscape.
-        isCurrentlyLandscape && uprightPortraitStable && allowPortraitTransitions ->
+        // 横屏保持开启时不因倾回竖屏退出横屏，仅手动退出（manualPortraitHold）返回竖屏。
+        isCurrentlyLandscape && uprightPortraitStable && allowPortraitTransitions && !landscapeHoldEnabled ->
             ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         !isCurrentlyLandscape && portraitStable && allowPortraitTransitions ->
             ActivityInfo.SCREEN_ORIENTATION_PORTRAIT

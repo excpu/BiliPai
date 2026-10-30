@@ -281,7 +281,12 @@ fun BottomControlBar(
                     pbpRidgeSamples = if (heatmapEnabled) pbpRidgeSamples else emptyList(),
                     currentChapterProvider = { null },
                     onChapterClick = onChapterClick,
-                    modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter).testTag("player_progress"),
+                    // 进度条槽位固定为 14dp；预览按完整高度向上展开，不能被槽位压缩到按钮区。
+                    // 横竖屏与玻璃开关共用该槽位，控件行的位置不随拖动改变。
+                    modifier = Modifier
+                        .align(androidx.compose.ui.Alignment.BottomCenter)
+                        .testTag("player_progress")
+                        .wrapContentHeight(androidx.compose.ui.Alignment.Bottom, unbounded = isSeekScrubbing),
                 )
                 PlayerControlViewPointSegments(
                     progressProvider = progressProvider,

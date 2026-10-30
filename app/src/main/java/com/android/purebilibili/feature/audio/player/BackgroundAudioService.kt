@@ -26,7 +26,6 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
-import com.android.purebilibili.MainActivity
 import com.android.purebilibili.R
 import com.android.purebilibili.core.network.NetworkModule
 import com.android.purebilibili.core.player.SharedPlaybackRepository
@@ -37,6 +36,7 @@ import com.android.purebilibili.core.util.MediaUtils
 import com.android.purebilibili.core.util.Logger
 import com.android.purebilibili.feature.video.playback.audio.resolveAudioStreamSelection
 import com.android.purebilibili.feature.video.player.PlayMode
+import com.android.purebilibili.feature.video.player.resolveActivePlaybackLaunchIntent
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
 import kotlinx.coroutines.CancellationException
@@ -100,9 +100,8 @@ class BackgroundAudioService : MediaSessionService() {
                     .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true).build()
                 addListener(listener)
             }
-        val activity = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        session = MediaSession.Builder(this, player).setCallback(callback).setSessionActivity(activity).build()
+        session = MediaSession.Builder(this, player).setCallback(callback).build()
+        updateSessionActivity(null)
         setMediaNotificationProvider(DefaultMediaNotificationProvider.Builder(this)
             .setNotificationId(NOTIFICATION_ID).setChannelId(CHANNEL_ID).build())
         scope.launch {
@@ -131,6 +130,13 @@ class BackgroundAudioService : MediaSessionService() {
                 }
             }
         }
+    }
+
+    private fun updateSessionActivity(bvid: String?) {
+        session.setSessionActivity(PendingIntent.getActivity(
+            this, 1, resolveActivePlaybackLaunchIntent(this, bvid),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        ))
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? =
@@ -278,6 +284,7 @@ class BackgroundAudioService : MediaSessionService() {
         snapshot = request
         committed = resume
         val item = request.current ?: error("Missing audio entry")
+        updateSessionActivity(item.bvid)
         val media = if (request.audioUrl.isNotBlank()) mediaItem(request.index, item, request.audioUrl) else resolve(request.index)
         player.setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA)
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), request.handleAudioFocus)
@@ -416,6 +423,7 @@ class BackgroundAudioService : MediaSessionService() {
             snapshot = current.copy(index = index, queue = current.queue.toMutableList().also {
                 it[index] = it[index].copy(cid = cid)
             }, audioUrl = "")
+            updateSessionActivity(bvid)
             generation++
             nextLoad?.cancel()
             if (player.currentMediaItemIndex > 1) player.removeMediaItems(0, player.currentMediaItemIndex - 1)

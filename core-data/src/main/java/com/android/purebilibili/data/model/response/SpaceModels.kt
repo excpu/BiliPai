@@ -715,6 +715,7 @@ data class SpaceDynamicModules(
     val module_more: DynamicMoreModule? = null,
     val module_stat: SpaceDynamicStat? = null,
     val module_dispute: DynamicDisputeModule? = null,
+    val module_interaction: DynamicInteractionModule? = null,
 )
 
 @kotlinx.serialization.Serializable

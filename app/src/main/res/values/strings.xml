@@ -955,4 +955,18 @@
     <string name="settings_donate_preview_hint">原图展示 · 长按可保存到相册</string>
     <string name="settings_donate_save_confirm_title">保存赞赏码？</string>
     <string name="settings_donate_save_confirm_message">是否将赞赏码原图保存到相册？</string>
+
+    <!-- Progressive top blur renderer -->
+    <string name="animation_progressive_renderer_title">渐进模糊方案</string>
+    <string name="animation_progressive_renderer_summary">两种方案共用模糊强度、覆盖范围与过渡设置。</string>
+    <string name="animation_progressive_renderer_fallback_summary">当前系统不支持官方方案，选择后仍使用 Miuix。</string>
+    <string name="animation_progressive_renderer_miuix_description">现有方案，默认使用。</string>
+    <string name="animation_progressive_renderer_android">Android 官方</string>
+    <string name="animation_progressive_renderer_android_description">使用系统背景模糊；不支持时自动使用 Miuix。</string>
+    <string name="preview_blur_compare_button">对照预览</string>
+    <string name="preview_blur_compare_title">渐进模糊对照</string>
+    <string name="preview_blur_compare_summary">使用同一画面和当前模糊参数。拖动下方滑块可同步移动背景，预览不会修改已保存的设置。</string>
+    <string name="preview_blur_compare_scroll">移动预览背景</string>
+    <string name="preview_blur_compare_unavailable">%1$s 暂不可用，当前设备无法显示该方案的实际效果。</string>
+    <string name="preview_blur_compare_api_requirement">官方方案需要平台 API 37.2 或更高版本；当前为 API %1$s，暂时使用 Miuix。</string>
 </resources>

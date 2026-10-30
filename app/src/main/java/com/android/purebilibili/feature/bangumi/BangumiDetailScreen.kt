@@ -609,6 +609,7 @@ private fun TabletBangumiDetailContent(
                      items(displayedEpisodes, key = { it.id }) { episode ->
                          EpisodeChip(
                                 episode = episode,
+                                alignGridTitles = true,
                                 progressFraction = rememberBangumiEpisodeProgressLookup()(episode),
                                 onClick = { onEpisodeClick(episode) }
                          )
@@ -630,6 +631,7 @@ private fun TabletBangumiDetailContent(
                          items(section.episodes.orEmpty(), key = { it.id }) { episode ->
                              EpisodeChip(
                                  episode = episode,
+                                 alignGridTitles = true,
                                  progressFraction = rememberBangumiEpisodeProgressLookup()(episode),
                                  onClick = { onEpisodeClick(episode) }
                              )
@@ -1623,8 +1625,15 @@ private fun BangumiFollowStatusDialog(
 private fun EpisodeChip(
     episode: BangumiEpisode,
     progressFraction: Float? = null,
+    alignGridTitles: Boolean = false,
     onClick: () -> Unit
 ) {
+    val titleMaxLines = if (alignGridTitles) {
+        com.android.purebilibili.core.ui.videoCardTitleMaxLines(1)
+    } else Int.MAX_VALUE
+    val titleOverflow = if (alignGridTitles) {
+        com.android.purebilibili.core.ui.videoCardTitleOverflow()
+    } else TextOverflow.Clip
     //  带封面图的设计，集数和标题在同一行
     Column(
         modifier = Modifier
@@ -1699,7 +1708,9 @@ private fun EpisodeChip(
                 text = episode.title.ifEmpty { episode.id.toString() },
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
-                color = AppContentColors.primaryText()
+                color = AppContentColors.primaryText(),
+                maxLines = titleMaxLines,
+                overflow = titleOverflow,
             )
 
             // 标题
@@ -1996,16 +2007,15 @@ private fun EpisodeListItem(
                 }
             }
 
-            // 标题
-            if (episode.longTitle.isNotEmpty()) {
-                AppText(
-                    text = episode.longTitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AppContentColors.secondaryText(),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            // 标题区预留一行，使同排剧集在大字号下仍然等高。
+            AppText(
+                text = episode.longTitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = AppContentColors.secondaryText(),
+                minLines = 1,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

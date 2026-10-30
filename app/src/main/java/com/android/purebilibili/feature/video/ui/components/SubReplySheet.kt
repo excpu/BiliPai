@@ -57,7 +57,7 @@ fun SubReplySheet(
     onAvatarClick: ((String) -> Unit)? = null,
     onCoveredBlurProgressChange: ((Float) -> Unit)? = null,
 ) {
-    if (state.visible && state.rootReply != null) {
+    if (state.visible) {
         val rootReply = state.rootReply
         val backState = rememberNavigationEventState(NavigationEventInfo.None)
         val transition = backState.transitionState as? NavigationEventTransitionState.InProgress
@@ -68,7 +68,7 @@ fun SubReplySheet(
         )
         val threadDrag = rememberCommentThreadDrag(
             visible = state.visible,
-            rootReplyId = rootReply.rpid,
+            rootReplyId = rootReply?.rpid,
             onDismiss = onDismiss,
         )
         val coveredBlurProgress = resolveCommentThreadCoveredBlurProgress(
@@ -107,6 +107,14 @@ fun SubReplySheet(
                     isBackEnabled = true,
                     onBackCompleted = onDismiss,
                 )
+                if (rootReply == null) {
+                    SubReplyInitialContent(
+                        isLoading = state.isLoading,
+                        error = state.error,
+                        onRetry = onLoadMore,
+                        onDismiss = onDismiss,
+                    )
+                } else {
                 SubReplyDetailContent(
                     headerDragModifier = threadDrag.headerModifier,
                     rootReply = rootReply,
@@ -143,6 +151,7 @@ fun SubReplySheet(
                     onAvatarClick = onAvatarClick,
                     targetReplyId = state.targetReplyId
                 )
+                }
             }
         }
     }

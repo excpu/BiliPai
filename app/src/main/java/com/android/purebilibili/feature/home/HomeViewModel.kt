@@ -2206,6 +2206,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         isVip = isVip,
                         vipLabel = navData.vip.label.text.orEmpty(),
                         vipType = navData.vip.type,
+                        officialVerifyType = navData.officialVerify.type,
                     )
                 )
                 refreshMessageUnreadInBackground()

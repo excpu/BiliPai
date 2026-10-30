@@ -8,6 +8,7 @@ import com.android.purebilibili.feature.dynamic.components.DynamicCardPrimaryAct
 import com.android.purebilibili.feature.dynamic.components.resolveDynamicCardPrimaryAction
 import com.android.purebilibili.feature.video.viewmodel.SubReplyPageRequest
 import com.android.purebilibili.feature.video.viewmodel.SubReplyUiState
+import com.android.purebilibili.feature.video.viewmodel.mergeSentSubReplies
 import kotlinx.collections.immutable.toImmutableList
 import kotlin.math.ceil
 
@@ -110,21 +111,19 @@ internal fun resolveDynamicDetailInteractionModel(
 
 internal fun resolveDynamicSubReplyStateAfterSuccess(
     currentState: SubReplyUiState,
-    newItems: List<ReplyItem>,
+    remoteItems: List<ReplyItem>,
     page: Int,
     isEnd: Boolean,
     totalCount: Int = currentState.totalCount,
-    grpcNextOffset: String? = currentState.grpcNextOffset
+    grpcNextOffset: String? = currentState.grpcNextOffset,
+    sentReplies: Collection<ReplyItem> = emptyList(),
 ): SubReplyUiState {
-    val mergedItems = if (page == 1) {
-        newItems
-    } else {
-        (currentState.items + newItems).distinctBy { it.rpid }
-    }
+    val mergedItems = mergeSentSubReplies(remoteItems, sentReplies)
     return currentState.copy(
         items = mergedItems.toImmutableList(),
         totalCount = totalCount,
         isLoading = false,
+        isRefreshing = false,
         page = page,
         isEnd = isEnd,
         error = null,
@@ -200,6 +199,7 @@ internal data class DynamicCommentCacheSnapshot(
     val target: DynamicCommentTarget,
     val cachedAtMs: Long,
     val mainListContinuation: CommentMainListContinuation? = null,
+    val remoteReplies: List<ReplyItem> = replies,
 )
 
 /**

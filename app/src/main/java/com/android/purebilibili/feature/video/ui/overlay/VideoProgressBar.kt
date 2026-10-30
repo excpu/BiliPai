@@ -144,7 +144,9 @@ fun VideoProgressBar(
         else layoutPolicy.baseHeightWithoutChapterDp.dp
     ) * verticalHeightScale
     val previewImageHeightDp = if (videoshotData?.isValid == true) {
-        resolveSeekPreviewBubbleHeightDp(LocalConfiguration.current.screenWidthDp)
+        resolveSeekPreviewBubbleHeightDp(
+            LocalConfiguration.current.screenWidthDp, LocalConfiguration.current.screenHeightDp,
+        ).takeIf { it > 0 }
     } else null
     val previewAreaHeightDp = if (isSeekScrubbing) {
         resolveVideoProgressPreviewAreaHeightDp(
@@ -464,9 +466,11 @@ private fun ProgressSeekPreview(
     if (videoshotData != null && videoshotData.isValid) {
         SeekPreviewBubble(videoshotData = videoshotData, targetPositionMs = target,
             currentPositionMs = currentPosition, durationMs = duration, offsetX = thumbCenterXPx,
-            containerWidth = containerWidthPx, placement = placement)
+            containerWidth = containerWidthPx, placement = placement,
+            modifier = Modifier.testTag("player_seek_preview"))
     } else {
         SeekPreviewBubbleSimple(targetPositionMs = target, currentPositionMs = currentPosition,
-            offsetX = thumbCenterXPx, containerWidth = containerWidthPx, placement = placement)
+            offsetX = thumbCenterXPx, containerWidth = containerWidthPx, placement = placement,
+            modifier = Modifier.testTag("player_seek_preview"))
     }
 }

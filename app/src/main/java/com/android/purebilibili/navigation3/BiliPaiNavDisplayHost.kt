@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.runtime.getValue
@@ -242,6 +243,8 @@ internal fun BiliPaiNavDisplayHost(
                 // 专栏使用视频卡片的导航时钟、曲线与景深，正文仍保持自己的页面底色。
                 videoCardMotionEnabled = articleTarget,
                 cardBackgroundEffectsEnabled = articleTarget || target is BiliPaiNavKey.Live || target is BiliPaiNavKey.LiveAreaDetail,
+                isolateContentDrawing = target is BiliPaiNavKey.Live,
+                useSharedSnapshotBlur = target is BiliPaiNavKey.Live,
                 realtimeBlurEnabled = if (generalContainer) settingsContainerRealtimeBlurEnabled
                     else videoTransitionRealtimeBlurEnabled,
                 isLightBackground = { liveContainerIsLightBackground.value },
@@ -406,6 +409,7 @@ internal fun BiliPaiNavDisplayHost(
         sourceMetadata.sourceBounds,
         sourceMetadata.sourceCornerDp,
         sourceMetadata.sourceLayout,
+        sourceMetadata.sourceRoute,
         videoSharedTransitionDurationMillis,
         heroMotion,
         videoCardTransitionProgress,
@@ -429,6 +433,7 @@ internal fun BiliPaiNavDisplayHost(
                 returningProvider = returningProvider,
                 deviceCornerDp = effectiveDeviceCornerDp,
                 sourceLayout = sourceMetadata.sourceLayout,
+                sourceRoute = sourceMetadata.sourceRoute,
             )
         } else {
             observedVideoFallbackTransition
@@ -439,6 +444,7 @@ internal fun BiliPaiNavDisplayHost(
         sourceMetadata.sourceBounds,
         sourceMetadata.sourceCornerDp,
         sourceMetadata.sourceLayout,
+        sourceMetadata.sourceRoute,
         videoSharedTransitionDurationMillis,
         heroMotion,
         videoCardTransitionProgress,
@@ -461,6 +467,7 @@ internal fun BiliPaiNavDisplayHost(
                 returningProvider = returningProvider,
                 deviceCornerDp = effectiveDeviceCornerDp,
                 sourceLayout = sourceMetadata.sourceLayout,
+                sourceRoute = sourceMetadata.sourceRoute,
             )
         } else {
             observedVideoFallbackTransition
@@ -941,6 +948,18 @@ internal fun BiliPaiNavDisplayHost(
                 videoCardTransition = videoCardTransition,
                 fullscreenVideoCardTransition = fullscreenVideoCardTransition,
             ) { key ->
+                // 返回尚未落位时可开始另一张卡片的转场。旧 entry 保留自身的文字、
+                // 几何和进度驱动，不能因同样来自首页而接收新卡片的快照。
+                var retainedCardTransition by remember(key) {
+                    mutableStateOf(MiuixVideoCardTransitionState())
+                }
+                val entryCardTransitionState = resolveVideoCardEntryTransitionState(
+                    key = key,
+                    source = sourceMetadata,
+                    current = miuixCardTransitionState,
+                    retained = retainedCardTransition,
+                )
+                SideEffect { retainedCardTransition = entryCardTransitionState }
                 // Freeze this per entry so popping the key cannot remove its backing during exit.
                 val opaqueVideoChild = remember(key) {
                     shouldUseOpaqueVideoChildBackground(key, stackSnapshot)
@@ -974,7 +993,7 @@ internal fun BiliPaiNavDisplayHost(
                         LocalVideoCardSharedElementSourceRoute provides key.toLegacyRoute(),
                         LocalVideoCardTransitionClock provides videoCardClock,
                         LocalVideoCardTransitionBackgroundState provides transitionBackgroundState,
-                        LocalMiuixVideoCardTransitionState provides miuixCardTransitionState,
+                        LocalMiuixVideoCardTransitionState provides entryCardTransitionState,
                         LocalPredictiveBackBackgroundState provides predictiveBackBackgroundState,
                         LocalClickToPlayEnabled provides clickToPlayEnabled,
                         LocalDynamicImagePreviewTextVisible provides dynamicImagePreviewTextVisible,

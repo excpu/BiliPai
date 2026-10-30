@@ -157,7 +157,8 @@ internal fun BiliPaiNavKey.toLegacyRoute(): String {
         is BiliPaiNavKey.DynamicDetail -> ScreenRoutes.DynamicDetail.createRoute(
             dynamicId = dynamicId,
             commentRootRpid = commentRootRpid,
-            commentTargetRpid = commentTargetRpid
+            commentTargetRpid = commentTargetRpid,
+            openComments = openComments,
         )
         is BiliPaiNavKey.CommentDetail ->
             "comment_detail/$oid/$rootId?targetId=$targetId&type=$type&enterUri=${encodeRouteValue(enterUri)}"
@@ -408,7 +409,8 @@ internal fun legacyRouteToBiliPaiNavKey(route: String?): BiliPaiNavKey {
             BiliPaiNavKey.DynamicDetail(
                 dynamicId = decodeRouteValue(segments[1]),
                 commentRootRpid = query["commentRootRpid"]?.toLongOrNull() ?: 0L,
-                commentTargetRpid = query["commentTargetRpid"]?.toLongOrNull() ?: 0L
+                commentTargetRpid = query["commentTargetRpid"]?.toLongOrNull() ?: 0L,
+                openComments = query["openComments"]?.toBooleanStrictOrNull() ?: false,
             )
         }
         segments.firstOrNull() == "comment_detail" && segments.size >= 3 -> {

@@ -189,22 +189,25 @@ fun LiveFollowingScreen(
         AdaptivePullToRefreshBox(
             isRefreshing = isRefreshing,
             onRefresh = { loadPage(refresh = true) },
-            modifier = Modifier.fillMaxSize().padding(innerPadding),
+            indicatorTopInset = innerPadding.calculateTopPadding(),
+            modifier = Modifier.fillMaxSize(),
         ) {
         when {
             isLoading -> ContentVideoGridSkeletonFixedColumns(
                 columns = gridColumns,
                 modifier = Modifier
-                    .fillMaxSize(),
+                    .fillMaxSize()
+                    .padding(innerPadding),
             )
             error != null && items.isEmpty() && !hasMore -> Box(
                 modifier = Modifier
-                    .fillMaxSize(),
+                    .fillMaxSize()
+                    .padding(innerPadding),
                 contentAlignment = Alignment.Center,
             ) {
                 AppText(text = error ?: "", color = colorScheme.onSurfaceVariant)
             }
-            items.isEmpty() && !hasMore -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            items.isEmpty() && !hasMore -> Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     AppText("关注的主播暂时都未开播", color = colorScheme.onSurfaceVariant)
                     AppButton(onClick = { loadPage(refresh = true) }) { AppText("重新加载") }
@@ -218,7 +221,7 @@ fun LiveFollowingScreen(
                     contentPadding = PaddingValues(
                         start = metrics.safeSpaceDp.dp,
                         end = metrics.safeSpaceDp.dp,
-                        top = AppSpacingTokens.Small,
+                        top = innerPadding.calculateTopPadding() + AppSpacingTokens.Small,
                         bottom = maxOf(innerPadding.calculateBottomPadding(), LocalBottomBarContentPadding.current, 100.dp),
                     ),
                     horizontalArrangement = Arrangement.spacedBy(metrics.cardSpaceDp.dp),

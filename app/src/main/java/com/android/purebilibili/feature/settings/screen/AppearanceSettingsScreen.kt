@@ -251,6 +251,8 @@ fun AppearanceSettingsContent(
     val themeConfiguration = rememberSettingsThemeConfiguration()
     val liquidControlsUseThemeColor by remember(context) { SettingsManager.getLiquidControlsUseThemeColor(context) }
         .collectAsStateWithLifecycle(initialValue = false)
+    val switchThumbMode by remember(context) { SettingsManager.getLiquidSwitchThumbMode(context) }
+        .collectAsStateWithLifecycle(initialValue = com.android.purebilibili.core.ui.LiquidSwitchThumbMode.THEME)
     val activity = context as? android.app.Activity
     val supportedDisplayModes = remember(activity) {
         activity?.supportedAppDisplayModes().orEmpty()
@@ -676,6 +678,23 @@ fun AppearanceSettingsContent(
                                 enabled = effectiveLiquidGlassEnabled && isLiquidGlassAvailable,
                                 onCheckedChange = { enabled ->
                                     scope.launch { SettingsManager.setLiquidControlsUseThemeColor(context, enabled) }
+                                },
+                            )
+                        }
+                        AppPreferenceDivider()
+
+                        SettingsItemAnchor("appearance.switch_thumb_mode") {
+                            SettingsSingleChoicePreference(
+                                title = settingItemTitle("appearance.switch_thumb_mode"),
+                                subtitle = "选择开关滑块的颜色",
+                                options = com.android.purebilibili.core.ui.LiquidSwitchThumbMode.entries.map {
+                                    AppSegmentOption(it, it.label)
+                                },
+                                selectedValue = switchThumbMode,
+                                // 拇指强制色只作用于液态玻璃开启后的开关；关闭玻璃时不可选。
+                                enabled = effectiveLiquidGlassEnabled && isLiquidGlassAvailable,
+                                onSelectionChange = { mode ->
+                                    scope.launch { SettingsManager.setLiquidSwitchThumbMode(context, mode) }
                                 },
                             )
                         }

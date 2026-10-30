@@ -316,6 +316,10 @@ object CommentGrpcRepository {
                 top = upTop
             ),
             control = ReplyPageControl(
+                title = subject.title,
+                backgroundText = subject.backgroundText,
+                emptyText = subject.emptyText,
+                emptyHighlightText = subject.emptyHighlightText,
                 inputDisable = subject.inputDisable,
                 rootInputText = subject.rootText,
                 childInputText = subject.childText,
@@ -389,6 +393,10 @@ object CommentGrpcRepository {
             replies = root.replies.orEmpty(),
             root = root,
             control = ReplyPageControl(
+                title = subject.title,
+                backgroundText = subject.backgroundText,
+                emptyText = subject.emptyText,
+                emptyHighlightText = subject.emptyHighlightText,
                 inputDisable = subject.inputDisable,
                 rootInputText = subject.rootText,
                 childInputText = subject.childText,
@@ -418,6 +426,10 @@ object CommentGrpcRepository {
             config = ReplyConfig(showUpFlag = subject.showUpAction),
             replies = replies,
             control = ReplyPageControl(
+                title = subject.title,
+                backgroundText = subject.backgroundText,
+                emptyText = subject.emptyText,
+                emptyHighlightText = subject.emptyHighlightText,
                 inputDisable = subject.inputDisable,
                 rootInputText = subject.rootText,
                 childInputText = subject.childText,
@@ -452,6 +464,10 @@ object CommentGrpcRepository {
         ProtoWire.parseFields(bytes).forEach { field ->
             control = when (field.number) {
                 1 -> control.copy(upMid = field.varint)
+                7 -> control.copy(backgroundText = ProtoWire.stringValue(field))
+                17 -> control.copy(title = ProtoWire.stringValue(field))
+                21 -> control.copy(emptyText = ProtoWire.stringValue(field))
+                22 -> control.copy(emptyHighlightText = ProtoWire.stringValue(field))
                 11 -> control.copy(showUpAction = field.varint != 0L)
                 13 -> control.copy(inputDisable = field.varint != 0L)
                 14 -> control.copy(rootText = ProtoWire.stringValue(field))
@@ -830,6 +846,10 @@ object CommentGrpcRepository {
     )
 
     private data class GrpcSubjectControl(
+        val title: String = "",
+        val backgroundText: String = "",
+        val emptyText: String = "",
+        val emptyHighlightText: String = "",
         val upMid: Long = 0L,
         val showUpAction: Boolean = false,
         val inputDisable: Boolean = false,

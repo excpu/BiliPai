@@ -204,7 +204,7 @@ class PureApplication : Application(), SingletonImageLoader.Factory, ComponentCa
             .also { _imageLoader = it }  // 保存引用
     }
     
-    @OptIn(ExperimentalFoundationApi::class)
+    @OptIn(ExperimentalFoundationApi::class, dev.chrisbanes.haze.ExperimentalHazeApi::class)
     override fun onCreate() {
         instance = this
         if (com.android.purebilibili.feature.message.notification.isLightweightServiceProcess(this)) {
@@ -212,6 +212,10 @@ class PureApplication : Application(), SingletonImageLoader.Factory, ComponentCa
             com.android.purebilibili.feature.message.notification.initializeMessageNotificationProcess(this)
             return
         }
+
+        // 在效果节点挂载前开放官方窗口背景渲染；只有显式选择窗口背景的
+        // 同窗口入口参与，指定源采样和 Miuix 渐进模糊继续使用各自路径。
+        dev.chrisbanes.haze.HazeFeatureFlags.isPlatformBackdropEnabled = true
 
         // Compose 1.13's staggered-grid cache-window prefetch can assign an invalid lane
         // after rapid scroll-to-top and subsequent scrolling. Keep the established prefetcher

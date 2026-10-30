@@ -72,19 +72,25 @@ internal fun shouldRestoreHomeFeedScrollAnchor(
     return isTopLevelActive && hasSyncedPagerWithState && anchor != null
 }
 
-internal fun shouldApplyHomeFeedScrollAnchor(
+internal data class HomeFeedScrollRestorePlan(
+    val restoreGrid: Boolean,
+    val restoreHeader: Boolean,
+)
+
+/** 顶栏和列表分别校正，避免只有顶栏漂移时重置瀑布流的各列锚点。 */
+internal fun resolveHomeFeedScrollRestorePlan(
     currentIndex: Int,
     currentOffset: Int,
     currentHeaderOffsetPx: Float,
     anchor: HomeFeedScrollAnchor,
     offsetTolerancePx: Int = 1,
     headerTolerancePx: Float = 0.5f
-): Boolean {
-    if (currentIndex != anchor.firstVisibleItemIndex) return true
-    if (kotlin.math.abs(currentOffset - anchor.firstVisibleItemScrollOffset) > offsetTolerancePx) {
-        return true
-    }
-    return kotlin.math.abs(currentHeaderOffsetPx - anchor.headerOffsetPx) > headerTolerancePx
+): HomeFeedScrollRestorePlan {
+    return HomeFeedScrollRestorePlan(
+        restoreGrid = currentIndex != anchor.firstVisibleItemIndex ||
+            kotlin.math.abs(currentOffset - anchor.firstVisibleItemScrollOffset) > offsetTolerancePx,
+        restoreHeader = kotlin.math.abs(currentHeaderOffsetPx - anchor.headerOffsetPx) > headerTolerancePx,
+    )
 }
 
 /**

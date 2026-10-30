@@ -1,5 +1,6 @@
 package com.android.purebilibili.feature.video.screen
 
+import com.android.purebilibili.feature.video.ui.components.commentSectionNotice
 import com.android.purebilibili.navigation.tabSelectedPage
 import com.android.purebilibili.navigation.tabIndicatorPosition
 import com.android.purebilibili.feature.video.ui.components.RelatedVideoList
@@ -1407,7 +1408,7 @@ private fun CinemaCommentsPane(
         )
     }
 
-    if (subReplyState.visible && subReplyState.rootReply != null) {
+    if (subReplyState.visible) {
         VideoInlineSubReplyDetailContent(
             state = subReplyState,
             commentState = commentState,
@@ -1470,6 +1471,7 @@ private fun CinemaCommentsPane(
                         .layerBackdrop(commentChromeBackdrop),
                     contentPadding = PaddingValues(bottom = 112.dp)
                 ) {
+            commentSectionNotice(commentState.pageControl)
             commentState.voteCard?.let { card ->
                 item(key = "curtain_vote_${card.voteId}") {
                     com.android.purebilibili.feature.video.ui.components.VideoCommentVoteCard(
@@ -1580,7 +1582,7 @@ private fun CinemaCommentsPane(
                         contentAlignment = Alignment.Center
                     ) {
                         AppText(
-                            text = "还没有评论，先看看相关推荐",
+                            text = commentState.pageControl?.emptyMessage()?.takeIf { it.isNotBlank() } ?: "还没有评论，先看看相关推荐",
                             style = MaterialTheme.typography.bodyMedium,
                             color = commentAppearance.secondaryTextColor
                         )

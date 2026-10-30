@@ -12,6 +12,7 @@ import android.app.HandoffActivityDataRequestInfo
 import android.app.HandoffActivityParams
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Outline
@@ -178,6 +179,8 @@ import com.android.purebilibili.feature.video.ui.overlay.MiniPlayerOverlay
 import com.android.purebilibili.navigation.AppNavigation
 import com.android.purebilibili.navigation.ScreenRoutes
 import com.android.purebilibili.navigation.VideoRoute
+import com.android.purebilibili.navigation3.BiliPaiNavKey
+import com.android.purebilibili.navigation3.toLegacyRoute
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
@@ -199,6 +202,7 @@ import com.android.purebilibili.core.ui.ContainerLevel
 private const val TAG = "MainActivity"
 private const val PREFS_NAME = "app_welcome"
 private const val KEY_FIRST_LAUNCH = "first_launch_shown"
+private const val STATE_MAIN_ACTIVITY_INTENT = "main_activity_intent"
 internal const val EXTRA_PENDING_NAVIGATION_ROUTE = "pending_navigation_route"
 internal const val EXTRA_OPEN_ACTIVE_PLAYBACK = "open_active_playback"
 private val PLUGIN_INSTALL_HTTPS_HOSTS = setOf(
@@ -367,12 +371,45 @@ internal fun resolveMainActivityLinkNavigation(
     target: BilibiliNavigationTarget
 ): MainActivityLinkNavigation? {
     return when (target) {
-        is BilibiliNavigationTarget.Video -> MainActivityLinkNavigation(
-            pendingVideoId = target.videoId
-        )
+        is BilibiliNavigationTarget.Video -> {
+            if (target.commentRootRpid > 0L || target.commentTargetRpid > 0L) {
+                MainActivityLinkNavigation(
+                    pendingNavigationRoute = VideoRoute.resolveVideoRoutePath(
+                        bvid = target.videoId,
+                        cid = 0L,
+                        encodedCover = "",
+                        startAudio = false,
+                        autoPortrait = false,
+                        commentRootRpid = target.commentRootRpid,
+                        commentTargetRpid = target.commentTargetRpid,
+                    )
+                )
+            } else {
+                MainActivityLinkNavigation(pendingVideoId = target.videoId)
+            }
+        }
 
         is BilibiliNavigationTarget.Dynamic -> MainActivityLinkNavigation(
-            pendingNavigationRoute = resolveMainActivityDynamicRoute(target.dynamicId)
+            pendingNavigationRoute = if (target.openComments || target.commentRootRpid > 0L || target.commentTargetRpid > 0L) {
+                ScreenRoutes.DynamicDetail.createRoute(
+                    target.dynamicId,
+                    commentRootRpid = target.commentRootRpid,
+                    commentTargetRpid = target.commentTargetRpid,
+                    openComments = target.openComments,
+                )
+            } else {
+                resolveMainActivityDynamicRoute(target.dynamicId)
+            }
+        )
+
+        is BilibiliNavigationTarget.CommentDetail -> MainActivityLinkNavigation(
+            pendingNavigationRoute = BiliPaiNavKey.CommentDetail(
+                oid = target.oid,
+                rootId = target.rootReplyId,
+                targetId = target.targetReplyId,
+                type = target.businessId,
+                enterUri = target.enterUri,
+            ).toLegacyRoute()
         )
 
         is BilibiliNavigationTarget.Search -> MainActivityLinkNavigation(
@@ -581,12 +618,16 @@ internal fun resolveSplashIconResIdForComponentClassName(className: String?): In
 }
 
 @Suppress("DEPRECATION")
-internal fun resolveLaunchIconResId(context: Context, launchIntent: Intent?): Int {
-    resolveSplashIconResIdForComponentClassName(context::class.java.name)
+internal fun resolveLaunchIconResId(
+    context: Context,
+    launchIntent: Intent?,
+    launcherInfo: ActivityInfo?
+): Int {
+    resolveSplashIconResIdForComponentClassName(launcherInfo?.targetActivity ?: launcherInfo?.name)
         .takeIf { it != 0 }
         ?.let { return it }
 
-    resolveSplashIconResIdForComponentClassName(launchIntent?.component?.className)
+    resolveSplashIconResIdForComponentClassName(launcherInfo?.name ?: launchIntent?.component?.className)
         .takeIf { it != 0 }
         ?.let { return it }
 
@@ -875,7 +916,7 @@ internal fun shouldRefreshMainActivitySystemThemeSnapshot(
 }
 
 @OptIn(UnstableApi::class) // 解决 UnsafeOptInUsageError，因为 AppNavigation 内部使用了不稳定的 API
-open class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity() {
     private var startupRecoveryRedirected = false
     
     //  PiP 状态
@@ -1025,22 +1066,34 @@ open class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun redirectToStartupRecovery() {
+        startActivity(Intent(intent).apply {
+            setClass(this@MainActivity, StartupRecoveryActivity::class.java)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        })
+        finish()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        // setIntent() updates from singleTask delivery must also survive process recreation.
+        @Suppress("DEPRECATION")
+        val restoredIntent = savedInstanceState?.getParcelable<Intent>(STATE_MAIN_ACTIVITY_INTENT)
+        restoredIntent?.let(::setIntent)
         if (StartupRecovery.isRecoveryMode) {
             startupRecoveryRedirected = true
             // Do not restore Compose/navigation/player state on the emergency route.
-            // Launcher aliases use a SplashScreen theme until installSplashScreen runs;
-            // explicitly select the AppCompat host theme since we bypass that path here.
+            // Explicitly use the AppCompat host theme when bypassing installSplashScreen.
             setTheme(R.style.Theme_PureBiliBili_Main)
             super.onCreate(null)
-            startActivity(Intent(this, StartupRecoveryActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-            })
-            finish()
+            redirectToStartupRecovery()
             return
         }
         Logger.recordStartupStage("main_create")
         applyAppLanguage(SettingsManager.getAppLanguageSync(this))
+        val launcherInfo = resolveForwardedLauncherActivityInfo(this, intent)
+        resolveSplashThemeResIdForActivityClassName(launcherInfo?.targetActivity ?: launcherInfo?.name)
+            .takeIf { it != 0 }
+            ?.let(::setTheme)
         //  安装 SplashScreen
         val splashScreen = installSplashScreen()
         val runColdStartSplash = shouldRunColdStartSplash(savedInstanceStatePresent = savedInstanceState != null)
@@ -1066,7 +1119,7 @@ open class MainActivity : AppCompatActivity() {
         val keepSystemSplashForPreload = shouldKeepSystemSplashForPreload(
             runColdStartSplash = runColdStartSplash
         )
-        val splashFlyoutIconResId = resolveLaunchIconResId(this, intent)
+        val splashFlyoutIconResId = resolveLaunchIconResId(this, intent, launcherInfo)
         splashFlyoutEnabledAtCreate = splashFlyoutEnabled
         Logger.d(
             TAG,
@@ -1428,9 +1481,12 @@ open class MainActivity : AppCompatActivity() {
                 .collectAsStateWithLifecycle(initialValue = true)
             val liquidControlsUseThemeColor by SettingsManager.getLiquidControlsUseThemeColor(context)
                 .collectAsStateWithLifecycle(initialValue = false)
+            val liquidSwitchThumbMode by SettingsManager.getLiquidSwitchThumbMode(context)
+                .collectAsStateWithLifecycle(initialValue = com.android.purebilibili.core.ui.LiquidSwitchThumbMode.THEME)
             val appThemeConfig = remember(
                 liquidGlassEnabled,
                 liquidControlsUseThemeColor,
+                liquidSwitchThumbMode,
                 blurIntensity,
                 headerBlurEnabled,
                 bottomBarBlurEnabled,
@@ -1447,6 +1503,7 @@ open class MainActivity : AppCompatActivity() {
                 AppThemeConfig(
                     liquidGlassEnabled = liquidGlassEnabled,
                     liquidControlsUseThemeColor = liquidControlsUseThemeColor,
+                    liquidSwitchThumbMode = liquidSwitchThumbMode,
                     blurIntensity = blurIntensity,
                     headerBlurEnabled = headerBlurEnabled,
                     bottomBarBlurEnabled = bottomBarBlurEnabled,
@@ -2638,11 +2695,24 @@ open class MainActivity : AppCompatActivity() {
         Logger.d(TAG, " PiP 模式变化: $isInPictureInPictureMode")
     }
     
-    //  [新增] 处理 singleTop 模式下的新 Intent
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putParcelable(STATE_MAIN_ACTIVITY_INTENT, intent)
+        super.onSaveInstanceState(outState)
+    }
+
+    // Every launcher, link and media entry reuses the canonical singleTask host.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (startupRecoveryRedirected) return
+        if (!intent.hasExtra(EXTRA_LAUNCHER_COMPONENT)) {
+            getIntent()?.getStringExtra(EXTRA_LAUNCHER_COMPONENT)?.let {
+                intent.putExtra(EXTRA_LAUNCHER_COMPONENT, it)
+            }
+        }
         setIntent(intent)
+        if (startupRecoveryRedirected) {
+            redirectToStartupRecovery()
+            return
+        }
         handleIntent(intent)
     }
     

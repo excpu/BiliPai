@@ -330,9 +330,24 @@ internal fun isPcdnUrl(url: String): Boolean {
     if (lower.contains("mcdn") || lower.contains("pcdn") || lower.contains("gotcha")) return true
     if (lower.contains("os=mcdn")) return true
     if (lower.contains("szbdyd.com")) return true
+    // 已知的第三方 PCDN 域名（B 站会动态下发，逐个补齐）
+    pcdnHostSuffixes.forEach { if (lower.contains(it)) return true }
     val host = lower.substringAfter("://", "").substringBefore("/").substringBefore(":")
     return host.matches(Regex("^\\d{1,3}(?:\\.\\d{1,3}){3}$"))
 }
+
+/**
+ * 已知的第三方 PCDN 域名后缀。
+ *
+ * B 站下发的地址里除 mcdn/gotcha 之外还有一批独立域名，同样属于 PCDN，
+ * 这里按后缀兜底匹配。
+ */
+private val pcdnHostSuffixes = listOf(
+    "szbdyd.com",
+    "mountaintoys.cn",
+    "qrstuvwxyzab.com",
+    "zhenidc.cn",
+)
 
 /**
  * 选线：优先常规 CDN，全部候选都是 PCDN 时替换 host 兜底。

@@ -16,7 +16,7 @@ class BiliPaiNavDisplayHostStructureTest {
         assertTrue(source.contains("followNavigationDriver("))
         assertTrue(source.contains("snapshotFlow { videoCardTransitionProgress.settleStateOrNull() }"))
         assertFalse(source.contains("animateFallbackTo("))
-        assertTrue(source.contains("LocalMiuixVideoCardTransitionState provides miuixCardTransitionState"))
+        assertTrue(source.contains("LocalMiuixVideoCardTransitionState provides entryCardTransitionState"))
         assertTrue(source.contains("ProvideMiuixNavViewModelApplicationExtras(application)"))
     }
 

@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import kotlinx.coroutines.CompletableDeferred
 import top.yukonga.miuix.kmp.blur.Backdrop
@@ -38,11 +39,14 @@ class ChromeBackdropSource internal constructor(
  * another offscreen raster pass. Miuix still owns coordinates and backdrop lifecycle.
  * Set [drawContentToScreen] to false for hidden captures: record without an alpha-zero layer
  * that can cause the renderer to skip drawing the source content.
+ * [isolateContentDrawing] explicitly isolates live child commands for navigation/home sources;
+ * other callers retain their existing drawing structure by default.
  */
 @Composable
 fun rememberChromeBackdropSource(
     drawContentToScreen: Boolean = true,
     recordingBackground: Color = Color.Unspecified,
+    isolateContentDrawing: Boolean = false,
 ): ChromeBackdropSource {
     val contentLayer = rememberGraphicsLayer()
     // Theme frames update the recording in draw, without replacing the source passed
@@ -60,7 +64,7 @@ fun rememberChromeBackdropSource(
         // Publish once, after the source has actually recorded; never guess using a delay.
         firstRecording.complete(Unit)
     })
-    return remember(backdrop, contentLayer, drawContentToScreen) {
+    return remember(backdrop, contentLayer, drawContentToScreen, isolateContentDrawing) {
         ChromeBackdropSource(
             backdrop = ContinuousBackdrop(backdrop),
             recorded = recorded,
@@ -78,7 +82,10 @@ fun rememberChromeBackdropSource(
                         this@drawWithContent.drawContent()
                     }
                     if (drawContentToScreen) drawLayer(contentLayer)
-                },
+                }
+                // 显式用于首页/导航的采样壳：背景色或外层录制失效时只引用内层指令。
+                // Auto 图层不强制离屏纹理；子内容自行失效仍刷新，不冻结图片或视频。
+                .then(if (isolateContentDrawing) Modifier.graphicsLayer() else Modifier),
         )
     }
 }

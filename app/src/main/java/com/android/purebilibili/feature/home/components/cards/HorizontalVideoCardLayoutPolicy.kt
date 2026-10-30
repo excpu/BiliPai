@@ -4,13 +4,15 @@ package com.android.purebilibili.feature.home.components.cards
  * Shared metrics for every side-by-side video row
  * (partition, related, space contributions, personal lists).
  *
- * Cover defaults to 16:10 and follows the selected video-cover ratio. Info column must **not** be height-locked to the cover, or
- * title + author + play/danmaku squeeze and wrap the danmaku count.
+ * Transparent video rows use a 100dp-high cover with the selected aspect ratio. Narrow windows
+ * can shrink it; full titles and large fonts only grow the info area, keeping the cover unchanged.
  */
 internal const val HORIZONTAL_VIDEO_CARD_COVER_ASPECT_RATIO = 16f / 10f
 internal const val HORIZONTAL_VIDEO_CARD_COVER_WIDTH_DP = 140
 /** 更多推荐列表的封面宽度：固定尺寸而非按比例扩张，保证行高与原生一致。 */
 internal const val RELATED_VIDEO_HORIZONTAL_COVER_WIDTH_DP = 128
+/** 宽列表（收藏、稍后再看、下载等）封面的最大宽度，按比例扩张到此值后封顶。 */
+internal const val WIDE_LIST_COVER_MAX_WIDTH_DP = 220f
 internal const val HORIZONTAL_VIDEO_CARD_COVER_INFO_GAP_DP = 10
 internal const val HORIZONTAL_VIDEO_CARD_MIN_HEIGHT_DP = 90f
 internal const val HORIZONTAL_VIDEO_CARD_INFO_PADDING_DP = 8
@@ -21,6 +23,20 @@ internal const val HORIZONTAL_VIDEO_STAT_ROW_SPACING_DP = 8
 internal const val HORIZONTAL_VIDEO_STAT_WRAP_SPACING_DP = 2
 internal const val HORIZONTAL_VIDEO_STAT_ICON_SIZE_DP = 13
 internal const val HORIZONTAL_VIDEO_STAT_ICON_TEXT_GAP_DP = 2
+
+/** 真实横卡与加载占位按同一可用行宽收缩，避免窄分栏加载完成后封面跳宽。 */
+internal fun resolvePlainHorizontalVideoCoverWidthDp(
+    availableWidthDp: Float,
+    coverAspectRatio: Float,
+): Float {
+    val width = availableWidthDp.coerceAtLeast(0f)
+    val fraction = 0.55f - 0.10f * ((width - 320f) / 160f).coerceIn(0f, 1f)
+    return minOf(
+        100f * coverAspectRatio,
+        width * fraction,
+        (width - HORIZONTAL_VIDEO_CARD_COVER_INFO_GAP_DP).coerceAtLeast(0f),
+    )
+}
 
 internal fun resolveHorizontalVideoCoverHeightDp(
     coverWidthDp: Float = HORIZONTAL_VIDEO_CARD_COVER_WIDTH_DP.toFloat(),

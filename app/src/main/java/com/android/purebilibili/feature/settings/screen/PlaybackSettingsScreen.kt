@@ -2634,6 +2634,7 @@ SettingsItemAnchor("playback.fullscreen_swipe_seek_seconds") {
         }
         AppPreferenceDivider()
         val autoRotateEnabled by remember(context) { com.android.purebilibili.core.store.SettingsManager.getAutoRotateEnabled(context) }.collectAsStateWithLifecycle(initialValue = false)
+        val landscapeHoldEnabled by remember(context) { com.android.purebilibili.core.store.SettingsManager.getLandscapeHoldEnabled(context) }.collectAsStateWithLifecycle(initialValue = false)
         val fullscreenGestureReverse = playerConfiguration.fullscreenGestureReverse
         val autoEnterFullscreen = playerConfiguration.autoEnterFullscreenEnabled
         val autoExitFullscreen = playerConfiguration.autoExitFullscreenEnabled
@@ -2706,6 +2707,21 @@ SettingsItemAnchor("playback.fullscreen_swipe_seek_seconds") {
                 },
                 iconTint = AppContentColors.secondaryText()
             )
+            }
+        AppPreferenceDivider()
+            SettingsItemAnchor("playback.landscape_hold_enabled") {
+                AppSwitchPreference(
+                    title = playbackSettingTitle("playback.landscape_hold_enabled"),
+                    subtitle = "躺卧场景：自动进入横屏后不再因倾斜回正退出全屏，需手动退出",
+                    checked = landscapeHoldEnabled,
+                    enabled = autoRotateEnabled,
+                    onCheckedChange = {
+                        scope.launch {
+                            com.android.purebilibili.core.store.SettingsManager
+                                .setLandscapeHoldEnabled(context, it)
+                        }
+                    },
+                )
             }
         AppPreferenceDivider()
             SettingsItemAnchor("playback.horizontal_adaptation_enabled") {

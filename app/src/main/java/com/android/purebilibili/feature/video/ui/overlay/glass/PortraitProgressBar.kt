@@ -335,7 +335,7 @@ fun ThinWigglyProgressBar(
                 val isPortraitVideo = videoAspectRatio
                     ?.let { it.isFinite() && it > 0f && it < 1f }
                     ?: false
-                val compactPreviewOffsetY = if (isPortraitVideo) {
+                val preferredCompactPreviewOffsetY = if (isPortraitVideo) {
                     layoutPolicy.compactPortraitPreviewOffsetYDp
                 } else {
                     layoutPolicy.compactLandscapePreviewOffsetYDp
@@ -344,15 +344,20 @@ fun ThinWigglyProgressBar(
                     videoshotData.img_x_size,
                     videoshotData.img_y_size,
                     configuration.screenWidthDp,
-                    videoAspectRatio
+                    videoAspectRatio,
+                    configuration.screenHeightDp,
                 ) {
                     resolveCompactSeekPreviewSize(
                         sourceWidthPx = videoshotData.img_x_size,
                         sourceHeightPx = videoshotData.img_y_size,
                         screenWidthDp = configuration.screenWidthDp,
-                        videoAspectRatio = videoAspectRatio
+                        videoAspectRatio = videoAspectRatio,
+                        containerHeightDp = configuration.screenHeightDp,
                     )
                 }
+                val compactPreviewOffsetY = if (configuration.screenHeightDp < 480) {
+                    -(compactPreviewSize.heightDp + 48)
+                } else preferredCompactPreviewOffsetY
                 val previewWidthPx = with(LocalDensity.current) {
                     compactPreviewSize.widthDp.dp.toPx()
                 }

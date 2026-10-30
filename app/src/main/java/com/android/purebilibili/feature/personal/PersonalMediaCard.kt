@@ -74,6 +74,7 @@ internal fun PersonalMediaCardFrame(
     enabled: Boolean = true,
     coverAspectRatio: Float = com.android.purebilibili.core.ui.videoCardCoverAspectRatio(),
     allowPortraitCover: Boolean = false,
+    horizontalCoverMaxWidthDp: Float? = null,
     supportingContent: (@Composable () -> Unit)? = null,
     overlineContent: (@Composable () -> Unit)? = null,
     coverOverlayContent: (@Composable BoxScope.() -> Unit)? = null,
@@ -143,6 +144,7 @@ internal fun PersonalMediaCardFrame(
                     coverOverlayContent = coverOverlayContent,
                     coverAspectRatio = coverAspectRatio,
                     allowPortraitCover = allowPortraitCover,
+                    horizontalCoverMaxWidthDp = horizontalCoverMaxWidthDp,
                     infoContent = {
                         overlineContent?.invoke()
                         androidx.compose.material3.ProvideTextStyle(
@@ -229,6 +231,7 @@ internal fun PersonalMediaCardSkeleton(
     modifier: Modifier = Modifier,
     blockColor: (() -> Color)? = null,
     stacked: Boolean = false,
+    horizontalCoverMaxWidthDp: Float? = null,
 ) {
     val color = blockColor ?: rememberContentSkeletonBlockColor(rememberContentSkeletonPulseState())
     val cardShape = AppShapes.container(ContainerLevel.Card)
@@ -241,6 +244,7 @@ internal fun PersonalMediaCardSkeleton(
     ) {
         HorizontalVideoCardFrame(
             stacked = stacked,
+            horizontalCoverMaxWidthDp = horizontalCoverMaxWidthDp,
             coverContent = {
                 ContentSkeletonBlock(
                     color = color,

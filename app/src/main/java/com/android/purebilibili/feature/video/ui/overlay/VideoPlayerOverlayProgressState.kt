@@ -8,6 +8,21 @@ import androidx.media3.common.Player
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
+internal fun resolvePlayerProgressSnapshot(
+    currentPositionMs: Long,
+    durationMs: Long,
+    bufferedPositionMs: Long,
+    playbackState: Int,
+): PlayerProgress {
+    // 解码结束时最后一个媒体时间戳可能早于时间轴终点；仅在明确结束后补齐显示。
+    val ended = playbackState == Player.STATE_ENDED && durationMs > 0L
+    return PlayerProgress(
+        current = if (ended) durationMs else currentPositionMs.coerceAtLeast(0L),
+        duration = durationMs.coerceAtLeast(0L),
+        buffered = if (ended) durationMs else bufferedPositionMs.coerceAtLeast(0L),
+    )
+}
+
 /** Keeps the polling snapshot unread until a progress consumer needs it. */
 @Composable
 internal fun rememberVideoPlayerOverlayProgress(
@@ -36,13 +51,14 @@ internal fun rememberVideoPlayerOverlayProgress(
         // Take one snapshot while stopped, and keep updating paused playback while started.
         // This also preserves progress immediately after rotating or seeking.
         do {
-            value = PlayerProgress(
-                current = player.currentPosition,
-                duration = resolveSeekableDurationMs(
+            value = resolvePlayerProgressSnapshot(
+                currentPositionMs = player.currentPosition,
+                durationMs = resolveSeekableDurationMs(
                     playbackDurationMs = player.duration,
                     fallbackDurationMs = videoDuration,
                 ),
-                buffered = player.bufferedPosition,
+                bufferedPositionMs = player.bufferedPosition,
+                playbackState = player.playbackState,
             )
             currentOnPlayingChanged.value(
                 resolveOverlayPlaybackButtonPlayingState(

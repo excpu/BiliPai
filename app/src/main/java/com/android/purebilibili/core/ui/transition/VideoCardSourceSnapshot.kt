@@ -66,6 +66,8 @@ internal data class VideoCardSourceCoverPresentation(
     val premiumBadgeText: String = "",
     val showHistoryProgressBar: Boolean = false,
     val historyProgressFraction: Float = 0f,
+    /** 源封面的实际圆角，与透明横卡的整行外框圆角独立；未记录时沿用默认值。 */
+    val cornerRadiusDp: Float? = null,
 )
 
 /**

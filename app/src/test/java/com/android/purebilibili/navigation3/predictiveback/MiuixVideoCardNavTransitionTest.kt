@@ -585,6 +585,32 @@ class MiuixVideoCardNavTransitionTest {
     }
 
     @Test
+    fun transparentHorizontalRow_doesNotCutCoverWithAnOuterFloatingCorner() {
+        for (shortSide in listOf(20f, 120f, 1080f)) {
+            for (deviceCorner in listOf(12f, 32f, 96f, 240f)) {
+                // 同一策略覆盖进入、返回及预测返回取消；外框保持矩形，媒体层拥有封面圆角。
+                for (step in 0..100) {
+                    assertEquals(0f, resolveMiuixVideoCardGestureCornerPx(
+                        sourceCornerPx = 0f,
+                        morphProgress = step / 100f,
+                        floatingCornerPx = deviceCorner,
+                        sourceLayout = VideoCardSourceLayout.SIDE_BY_SIDE,
+                        currentShortSidePx = shortSide,
+                    ))
+                }
+                // 无底板的横卡例外不能改变其他来源布局的悬浮圆角。
+                assertEquals(minOf(deviceCorner, shortSide / 2f), resolveMiuixVideoCardGestureCornerPx(
+                    sourceCornerPx = 0f,
+                    morphProgress = .5f,
+                    floatingCornerPx = deviceCorner,
+                    sourceLayout = VideoCardSourceLayout.COVER_ONLY,
+                    currentShortSidePx = shortSide,
+                ))
+            }
+        }
+    }
+
+    @Test
     fun horizontalCardCornersReachDeviceRadiusAndReverseToTheirSourceRadius() {
         for (source in listOf(8f, 12f, 48f)) {
             for (deviceCorner in listOf(12f, 28f, 96f, 240f)) {

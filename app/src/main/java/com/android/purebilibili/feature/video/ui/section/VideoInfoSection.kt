@@ -756,35 +756,33 @@ fun VideoTitleWithDesc(
                     )
                 }
             }
+            // BV 号并入日期行：展开简介时作为流式项跟随日期，不再独占一行。
+            androidx.compose.animation.AnimatedVisibility(
+                visible = expanded,
+                enter = if (animateLayout) {
+                    folmeExpandEnterTransition(useMiuixSpring)
+                } else {
+                    androidx.compose.animation.EnterTransition.None
+                },
+                exit = if (animateLayout) {
+                    folmeExpandExitTransition(useMiuixSpring)
+                } else {
+                    androidx.compose.animation.ExitTransition.None
+                }
+            ) {
+                AppText(
+                    text = info.bvid,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AppContentColors.secondaryText(),
+                    modifier = Modifier.copyOnClick(info.bvid, "BV号")
+                )
+            }
         }
         if (inlineDeclarations) {
             Spacer(Modifier.height(4.dp))
             if (argueMsg.isNotBlank()) VideoArgueMsgRow(argueMsg = argueMsg)
             if (argueMsg.isNotBlank() && noReprint) Spacer(Modifier.height(2.dp))
             if (noReprint) VideoArgueMsgRow(argueMsg = "未经作者授权，请勿转载")
-        }
-        // BV 号与统计信息共用一列，避免右侧操作按钮的行高再叠加独立 BV 行。
-        androidx.compose.animation.AnimatedVisibility(
-            visible = expanded,
-            enter = if (animateLayout) {
-                folmeExpandEnterTransition(useMiuixSpring)
-            } else {
-                androidx.compose.animation.EnterTransition.None
-            },
-            exit = if (animateLayout) {
-                folmeExpandExitTransition(useMiuixSpring)
-            } else {
-                androidx.compose.animation.ExitTransition.None
-            }
-        ) {
-            AppText(
-                text = info.bvid,
-                style = MaterialTheme.typography.labelSmall,
-                color = AppContentColors.secondaryText(),
-                modifier = Modifier
-                    .padding(top = 2.dp)
-                    .copyOnClick(info.bvid, "BV号")
-            )
         }
         }
         trailingStatsContent?.invoke()
@@ -808,8 +806,10 @@ fun VideoTitleWithDesc(
             }
         }
         // 内容属性与榜单荣誉共用流式标签区，空间不足时自动换行。
-        if (videoBadges.isNotEmpty() || honorChips.isNotEmpty()) {
-            Spacer(Modifier.height(if (videoBadges.isNotEmpty()) 6.dp else 3.dp))
+        // UP 主声明与禁止转载以非交互项并入同一流式行，避免各自独占整行。
+        val showDeclarationRows = !inlineDeclarations && argueMsgShown && (argueMsg.isNotBlank() || noReprint)
+        if (videoBadges.isNotEmpty() || honorChips.isNotEmpty() || showDeclarationRows) {
+            Spacer(Modifier.height(if (videoBadges.isNotEmpty() || honorChips.isNotEmpty()) 6.dp else 3.dp))
             androidx.compose.foundation.layout.FlowRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -826,21 +826,14 @@ fun VideoTitleWithDesc(
                         onClick = { onDescriptionUrlClick?.invoke(jumpUrl) },
                     )
                 }
-            }
-        }
-
-        // UP 主视频声明(PiliPlus argue_msg)+ 禁止转载(rights.no_reprint):
-        // 声明小字置于 BGM 胶囊之上,与荣誉胶囊形成"胶囊区→声明区"的统一观感。
-        if (!inlineDeclarations && argueMsgShown && (argueMsg.isNotBlank() || noReprint)) {
-            Spacer(Modifier.height(4.dp))
-            if (argueMsg.isNotBlank()) {
-                VideoArgueMsgRow(argueMsg = argueMsg)
-            }
-            if (argueMsg.isNotBlank() && noReprint) {
-                Spacer(Modifier.height(2.dp))
-            }
-            if (noReprint) {
-                VideoArgueMsgRow(argueMsg = "未经作者授权，请勿转载")
+                if (showDeclarationRows) {
+                    if (argueMsg.isNotBlank()) {
+                        VideoArgueMsgRow(argueMsg = argueMsg)
+                    }
+                    if (noReprint) {
+                        VideoArgueMsgRow(argueMsg = "未经作者授权，请勿转载")
+                    }
+                }
             }
         }
 
@@ -1128,9 +1121,10 @@ fun UpInfoSection(
         )
     }
     // 统计是所有材质共有的详情信息，不调整 MD3、Miuix 或玻璃的原生控件参数。
-    val upStatsLabels = resolveVideoDetailOwnerStatsLabels(
-        followerCount = followerCount,
-        videoCount = videoCount
+    val cachedOwner = VideoRepository.getCachedCreatorCardStats(info.owner.mid)
+    val upStatsLabels = listOf(
+        resolveVideoDetailOwnerStatsLabels(followerCount ?: cachedOwner?.followerCount, null).firstOrNull() ?: "—粉丝",
+        resolveVideoDetailOwnerStatsLabels(null, videoCount ?: cachedOwner?.videoCount).firstOrNull() ?: "—视频",
     )
     val showInlineOwnerIdentity = shouldShowInlineOwnerIdentity(showOwnerAvatar = showOwnerAvatar)
 
@@ -1234,7 +1228,7 @@ fun UpInfoSection(
                                 .data(FormatUtils.fixImageUrl(
                                     info.owner.face
                                 ))
-                                .crossfade(true)
+                                .crossfade(false)
                                 .build(),
                             contentDescription = "UP主头像",
                             modifier = Modifier
@@ -1256,12 +1250,14 @@ fun UpInfoSection(
                 val secondaryColor = com.android.purebilibili.core.ui.components.userVipPink()
                 val ownerNameColor by produceState<Color>(
                     initialValue = resolveUpNameColor(
-                        vipStatus = fallbackVipStatus,
-                        vipType = fallbackVipType,
+                        vipStatus = cachedOwner?.vipStatus ?: fallbackVipStatus,
+                        vipType = cachedOwner?.vipType ?: fallbackVipType,
                         onSurface = onSurfaceColor,
                         secondary = secondaryColor,
                     ),
                     key1 = info.owner.mid,
+                    key2 = onSurfaceColor,
+                    key3 = secondaryColor,
                 ) {
                     val card = if (info.owner.mid > 0L) {
                         VideoRepository.getCreatorCardStats(info.owner.mid).getOrNull()
@@ -1567,7 +1563,7 @@ private fun CreatorTeamMemberChip(
                     .data(FormatUtils.fixImageUrl(
                         member.face
                     ))
-                    .crossfade(true)
+                    .crossfade(false)
                     .build(),
                 contentDescription = "${member.name} 头像",
                 modifier = Modifier

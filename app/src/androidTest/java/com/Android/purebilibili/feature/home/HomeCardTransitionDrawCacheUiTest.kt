@@ -41,6 +41,101 @@ class HomeCardTransitionDrawCacheUiTest {
     @get:Rule val rule = createComposeRule()
 
     @Test
+    fun refreshingSnapshotMidReturnDrawsSourceOnceAndKeepsLiveHandoffReversible() {
+        assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+        val progress = mutableFloatStateOf(0.3f)
+        val exposure = mutableStateOf(VideoCardTransitionExposure.BackPreview)
+        val color = mutableStateOf(Color.Blue)
+        val passes = AtomicInteger()
+        val sourceDraws = AtomicInteger()
+        rule.setContent {
+            Box(Modifier.size(120.dp)
+                .drawWithContent { passes.incrementAndGet(); drawContent() }
+                .videoCardTransitionBackgroundEffect(
+                    progressProvider = { progress.floatValue },
+                    phaseProvider = {
+                        if (exposure.value == VideoCardTransitionExposure.Returning) {
+                            VideoCardTransitionBackgroundPhase.RETURNING
+                        } else VideoCardTransitionBackgroundPhase.HELD
+                    },
+                    exposureProvider = { exposure.value },
+                    realtimeBlurEnabledProvider = { true },
+                    reuseJustRecordedSourceForHandoff = true,
+                )
+                .drawWithContent {
+                    sourceDraws.incrementAndGet()
+                    drawRect(color.value)
+                }
+                .testTag("refresh-return"))
+        }
+        fun pixel(): Color {
+            val pixels = rule.onNodeWithTag("refresh-return").captureToImage().toPixelMap()
+            return pixels[pixels.width / 2, pixels.height / 2]
+        }
+        assertTrue(pixel().blue > 0.8f)
+        rule.runOnIdle {
+            assertEquals("Capture and live underlay must share one source draw per pass", passes.get(), sourceDraws.get())
+            color.value = Color.Green
+            exposure.value = VideoCardTransitionExposure.Returning
+        }
+        val blended = pixel()
+        assertTrue("Following frames still show updated live content", blended.green > 0.1f && blended.blue > 0.1f)
+        rule.runOnIdle {
+            exposure.value = VideoCardTransitionExposure.Restoring
+            progress.floatValue = 1f
+        }
+        val cancelled = pixel()
+        assertTrue("Reversal must keep the original frozen scene", cancelled.blue > 0.8f && cancelled.green < 0.1f)
+        rule.runOnIdle {
+            exposure.value = VideoCardTransitionExposure.BackPreview
+            progress.floatValue = 0f
+        }
+        assertTrue("Landing must restore current live pixels", pixel().green > 0.9f)
+    }
+
+    @Test
+    fun effectResolutionChangesWithoutRecapturingOrChangingTheSourceScene() {
+        assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+        val progress = mutableFloatStateOf(0f)
+        val sourceDraws = AtomicInteger()
+        lateinit var snapshot: VideoCardTransitionSnapshotHandle
+        rule.setContent {
+            snapshot = rememberVideoCardTransitionSnapshotHandle()
+            Box(Modifier.size(120.dp)
+                .videoCardTransitionBackgroundEffect(
+                    progressProvider = { progress.floatValue },
+                    phaseProvider = { VideoCardTransitionBackgroundPhase.OPENING },
+                    exposureProvider = { VideoCardTransitionExposure.Opening },
+                    realtimeBlurEnabledProvider = { true },
+                    snapshotHandle = snapshot,
+                )
+                .drawWithContent {
+                    sourceDraws.incrementAndGet()
+                    drawRect(Color.Blue)
+                }
+                .testTag("raster-home"))
+        }
+        fun pixel(): Color {
+            val pixels = rule.onNodeWithTag("raster-home").captureToImage().toPixelMap()
+            return pixels[pixels.width / 2, pixels.height / 2]
+        }
+        assertTrue(pixel().blue > 0.9f)
+        val fullSize = snapshot.contentLayer.size
+        val frozenDraws = sourceDraws.get()
+        for (depth in listOf(1f, 0f, 0.8f, 0f)) {
+            rule.runOnIdle { progress.floatValue = depth }
+            assertTrue(pixel().blue > 0.5f)
+            assertEquals("Resolution switches cannot redraw the source scene", frozenDraws, sourceDraws.get())
+            rule.runOnIdle {
+                val expectedWidth = if (depth == 0f) fullSize.width else (fullSize.width + 1) / 2
+                val expectedHeight = if (depth == 0f) fullSize.height else (fullSize.height + 1) / 2
+                assertEquals(expectedWidth, snapshot.contentLayer.size.width)
+                assertEquals(expectedHeight, snapshot.contentLayer.size.height)
+            }
+        }
+    }
+
+    @Test
     fun blurredSnapshotSurvivesLiveHandoffCancellationAndNextSession() {
         assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
         val progress = mutableFloatStateOf(0f)

@@ -84,16 +84,18 @@ sealed class ScreenRoutes(val route: String) {
     object Dynamic : ScreenRoutes("dynamic")
 
     //  动态详情页面
-    object DynamicDetail : ScreenRoutes("dynamic_detail/{dynamicId}?commentRootRpid={commentRootRpid}&commentTargetRpid={commentTargetRpid}") {
+    object DynamicDetail : ScreenRoutes("dynamic_detail/{dynamicId}?commentRootRpid={commentRootRpid}&commentTargetRpid={commentTargetRpid}&openComments={openComments}") {
         fun createRoute(
             dynamicId: String,
             commentRootRpid: Long = 0L,
-            commentTargetRpid: Long = 0L
+            commentTargetRpid: Long = 0L,
+            openComments: Boolean = false,
         ): String {
             val encodedDynamicId = URLEncoder.encode(dynamicId, StandardCharsets.UTF_8.name())
             return "dynamic_detail/$encodedDynamicId" +
                 "?commentRootRpid=${commentRootRpid.coerceAtLeast(0L)}" +
-                "&commentTargetRpid=${commentTargetRpid.coerceAtLeast(0L)}"
+                "&commentTargetRpid=${commentTargetRpid.coerceAtLeast(0L)}" +
+                if (openComments) "&openComments=true" else ""
         }
     }
 

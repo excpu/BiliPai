@@ -635,7 +635,11 @@ fun PartitionContent(
                 contentPadding = if (liquidGlassIndicatorEnabled) {
                     PaddingValues(
                         horizontal = ((startPadding + 4.dp) / 2 - 4.dp).coerceAtLeast(4.dp),
-                        vertical = 8.dp,
+                        // 竖向首末项与左右边沿共用 dock 的比例内缩，避免固定 8dp 多留一层空白。
+                        vertical = com.android.purebilibili.feature.home.components
+                            .resolveFloatingDockRestIndicatorVerticalInsetDp(
+                                (sideRailWidth - 8.dp).value,
+                            ).dp,
                     )
                 } else PaddingValues(
                     start = startPadding,
@@ -701,6 +705,10 @@ private fun PartitionSideRail(
     }
     val selectedIndex = partitions.indexOfFirst { it.id == selectedId }.coerceAtLeast(0)
     val density = LocalDensity.current
+    // 玻璃侧栏使用纵向槽位；随文字缩放保留胶囊比例，原生 MD3/Miuix 沿用 48dp。
+    val railItemHeight = if (liquidGlassIndicatorEnabled) {
+        64.dp * density.fontScale.coerceIn(1f, 1.35f)
+    } else PartitionSideRailItemHeight
     val animationScope = rememberCoroutineScope()
     val motionSpec = remember { resolveSegmentedControlMotionSpec() }
     val resolvedLabelMode = resolvePartitionSideRailLabelMode(labelMode)
@@ -897,8 +905,8 @@ private fun PartitionSideRail(
         // 在约束作用域内读取宽度，内层 Box 仅使用计算结果。
         val railDockWidth = maxWidth
         val dockShellLensIntensity = (railDockWidth / 64.dp).coerceIn(0f, 1f)
-        val itemHeightPx = with(density) { PartitionSideRailItemHeight.toPx() }
-        val itemSlotHeightPx = with(density) { (PartitionSideRailItemHeight + PartitionSideRailItemSpacing).toPx() }
+        val itemHeightPx = with(density) { railItemHeight.toPx() }
+        val itemSlotHeightPx = with(density) { (railItemHeight + PartitionSideRailItemSpacing).toPx() }
         val contentTopPaddingPx = with(density) { contentPadding.calculateTopPadding().toPx() }
         holder.itemSlotHeightPx = itemSlotHeightPx
         holder.itemHeightPx = itemHeightPx
@@ -912,12 +920,12 @@ private fun PartitionSideRail(
         val indicatorWidth = if (liquidGlassIndicatorEnabled) {
             resolveFloatingDockIndicatorHeightDp(
                 requestedHeightDp = resolveMatchedLiquidIndicatorHeightDp(railDockWidth.value),
-                tabWidthDp = PartitionSideRailItemHeight.value,
+                tabWidthDp = railItemHeight.value,
                 geometryMode = FloatingBottomBarGeometryMode.TopNavigation,
                 shellHeightDp = railDockWidth.value,
             ).dp
         } else (railDockWidth - nativeIndicatorPadding.start - nativeIndicatorPadding.end).coerceAtLeast(0.dp)
-        val indicatorHeight = if (liquidGlassIndicatorEnabled) PartitionSideRailItemHeight
+        val indicatorHeight = if (liquidGlassIndicatorEnabled) railItemHeight
             else PartitionSideRailIndicatorHeight
         val indicatorHorizontalPadding = if (liquidGlassIndicatorEnabled) {
             val inset = ((railDockWidth - indicatorWidth) / 2).coerceAtLeast(0.dp)
@@ -1062,7 +1070,7 @@ private fun PartitionSideRail(
                 ) {
                     partitions.forEach { partition ->
                         Box(
-                            Modifier.fillMaxWidth().height(PartitionSideRailItemHeight),
+                            Modifier.fillMaxWidth().height(railItemHeight),
                             contentAlignment = Alignment.Center,
                         ) {
                             PartitionSideRailItem(
@@ -1103,6 +1111,7 @@ private fun PartitionSideRail(
                 ) { index, partition ->
                     PartitionSideRailItem(
                         partition = partition,
+                        itemHeight = railItemHeight,
                         selected = partition.id == selectedId,
                         selectionProgress = resolvePartitionSideRailItemSelectionProgress(
                             itemIndex = index,
@@ -1497,13 +1506,17 @@ private fun PartitionVideoList(
         ?: "partition"
     when {
         state.videos.isEmpty() && state.isLoading -> {
-            ContentMediaListSkeleton(
-                modifier = modifier.fillMaxHeight(),
-                itemCount = 8,
-                mediaRowCoverWidth = 140.dp,
-                mediaRowContentPadding = PaddingValues(8.dp),
-                mediaRowContentGap = 10.dp,
-            )
+            BoxWithConstraints(modifier = modifier.fillMaxHeight().padding(contentPadding)) {
+                ContentMediaListSkeleton(
+                    modifier = Modifier.fillMaxSize(),
+                    itemCount = 8,
+                    contentPadding = PaddingValues(0.dp),
+                    mediaRowCoverWidth = com.android.purebilibili.feature.home.components.cards
+                        .resolvePlainHorizontalVideoCoverWidthDp(maxWidth.value, 16f / 10f).dp,
+                    mediaRowContentPadding = PaddingValues(vertical = 6.dp),
+                    mediaRowContentGap = 10.dp,
+                )
+            }
         }
         state.videos.isEmpty() && state.error != null -> {
             Box(modifier = modifier.fillMaxHeight()) {
@@ -1519,7 +1532,7 @@ private fun PartitionVideoList(
                 state = listState,
                 modifier = modifier.fillMaxHeight(),
                 contentPadding = contentPadding,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 itemsIndexed(
                     items = state.videos,
@@ -1544,7 +1557,6 @@ private fun PartitionVideoList(
                         durationStyle = homeDurationStyle,
                         showPublishTime = showHomePublishTime,
                         transparentCardBackground = true,
-                        compactPartition = true,
                         modifier = Modifier.fillMaxWidth(),
                         onClick = { onVideoClick(video) },
                     )
@@ -1574,6 +1586,9 @@ private fun PartitionSeasonRankCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // AppText 按主题读取自身默认样式，不能仅依赖父级 Material ProvideTextStyle。
+    // 在入口显式分配标题、更新信息和统计字阶，两种材质及原生主题共用。
+    val typography = com.android.purebilibili.feature.home.components.cards.horizontalVideoCardTypography()
     com.android.purebilibili.feature.personal.PersonalMediaCardFrame(
         modifier = modifier,
         coverAspectRatio = 3f / 4f,
@@ -1582,15 +1597,24 @@ private fun PartitionSeasonRankCard(
         headlineContent = {
             AppText(
                 text = video.title,
+                style = typography.title,
+                color = AppContentColors.primaryText(),
                 maxLines = com.android.purebilibili.core.ui.videoCardTitleMaxLines(),
                 overflow = com.android.purebilibili.core.ui.videoCardTitleOverflow(),
             )
         },
         supportingContent = {
-            if (video.owner.name.isNotBlank()) AppText(video.owner.name)
+            if (video.owner.name.isNotBlank()) {
+                AppText(
+                    text = video.owner.name,
+                    style = typography.author,
+                    color = AppContentColors.secondaryText(),
+                )
+            }
             AppText(
                 text = "${com.android.purebilibili.core.util.FormatUtils.formatStat(video.stat.view.toLong())} 播放 · " +
                     "${com.android.purebilibili.core.util.FormatUtils.formatStat(video.stat.favorite.toLong())} 追剧",
+                style = typography.statistic,
                 color = AppContentColors.secondaryText(),
             )
         },

@@ -241,7 +241,6 @@ internal fun LinkedBottomDock(
         ) { if (it == LinkedDockPhase.Search || it == LinkedDockPhase.Compact) 1f else 0f }
         val imeSettled = WindowInsets.ime
             .getBottom(LocalDensity.current) == 0
-        val nowPlayingLayoutStable = !transition.isRunning && imeSettled
         val mergeProgressProvider = remember(merge) {
             { merge.value.coerceIn(0f, 1f) }
         }
@@ -255,6 +254,7 @@ internal fun LinkedBottomDock(
         // handoff alpha hides it; replaying an entrance spring causes a second landing.
         val presence = remember { Animatable(if (hasAudio) 1f else 0f) }
         val slotEntering = remember { mutableStateOf(false) }
+        val nowPlayingLayoutStable = !transition.isRunning && !presence.isRunning && imeSettled
         LaunchedEffect(hasAudio, animateNowPlayingPresence, reduceMotion) {
             val target = if (hasAudio) 1f else 0f
             when {
@@ -623,24 +623,29 @@ internal fun LinkedBottomDock(
                                 )
                             },
                     ) {
-                        nowPlayingSlot.invoke(
-                            Modifier.fillMaxSize(),
-                            mergeProgressProvider,
-                            searchProgressProvider,
-                            zeroProgressProvider,
-                            if (shouldExpandPlaybackFromSearch(phase, hasAudio)) {
-                                {
-                                    if (!transition.isRunning) {
-                                        focusManager.clearFocus()
-                                        keyboardController?.hide()
-                                        updatePhase(LinkedDockPhase.Playback)
+                        androidx.compose.runtime.CompositionLocalProvider(
+                            com.android.purebilibili.core.ui.LocalVisualWorkAllowed provides
+                                (com.android.purebilibili.core.ui.LocalVisualWorkAllowed.current && hasAudio),
+                        ) {
+                            nowPlayingSlot.invoke(
+                                Modifier.fillMaxSize(),
+                                mergeProgressProvider,
+                                searchProgressProvider,
+                                zeroProgressProvider,
+                                if (shouldExpandPlaybackFromSearch(phase, hasAudio)) {
+                                    {
+                                        if (!transition.isRunning) {
+                                            focusManager.clearFocus()
+                                            keyboardController?.hide()
+                                            updatePhase(LinkedDockPhase.Playback)
+                                        }
                                     }
-                                }
-                            } else {
-                                null
-                            },
-                            nowPlayingLayoutStable,
-                        )
+                                } else {
+                                    null
+                                },
+                                nowPlayingLayoutStable,
+                            )
+                        }
                     }
                 }
                 Box(

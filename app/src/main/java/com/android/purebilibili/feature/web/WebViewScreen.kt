@@ -46,6 +46,7 @@ import com.android.purebilibili.core.ui.AppTopBar
 import com.android.purebilibili.core.ui.rememberAppBackIcon
 import com.android.purebilibili.core.ui.components.AppIconButton
 import com.android.purebilibili.core.util.BilibiliNavigationTarget
+import com.android.purebilibili.core.util.hasCommentLocation
 
 /**
  * WebViewScreen - 应用内浏览器
@@ -75,6 +76,7 @@ fun WebViewScreen(
     onMusicClick: ((musicId: String) -> Unit)? = null,
     onMatchClick: ((contestId: Long) -> Unit)? = null,
     onArticleCollectionClick: ((collectionId: Long) -> Unit)? = null,
+    onCommentLink: ((url: String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
@@ -284,6 +286,20 @@ fun WebViewScreen(
                                             android.util.Log.d("WebViewScreen", "🔍 Scheme: $scheme, Host: $host")
 
                                             fun dispatchTarget(target: BilibiliNavigationTarget): Boolean {
+                                                if (target.hasCommentLocation) {
+                                                    if (onCommentLink != null) {
+                                                        onCommentLink(urlString)
+                                                    } else {
+                                                        val intent = android.content.Intent(
+                                                            android.content.Intent.ACTION_VIEW,
+                                                            android.net.Uri.parse(urlString),
+                                                        ).setPackage(context.packageName)
+                                                        runCatching { context.startActivity(intent) }.onFailure {
+                                                            Toast.makeText(context, "无法打开评论链接", Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    }
+                                                    return true
+                                                }
                                                 return when (target) {
                                                     is BilibiliNavigationTarget.Video -> {
                                                         onVideoClick?.invoke(target.videoId)
@@ -332,6 +348,7 @@ fun WebViewScreen(
                                                     is BilibiliNavigationTarget.Search -> false
                                                     is BilibiliNavigationTarget.Article -> false
                                                     is BilibiliNavigationTarget.PopularFeed -> false
+                                                    is BilibiliNavigationTarget.CommentDetail -> false
                                                 }
                                             }
 

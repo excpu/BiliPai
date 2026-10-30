@@ -170,11 +170,14 @@ internal fun resolvePlayerPanelPopupPosition(
     bounds: androidx.compose.ui.unit.IntRect,
     windowSize: androidx.compose.ui.unit.IntSize,
     popupContentSize: androidx.compose.ui.unit.IntSize,
+    bottomAligned: Boolean = false,
 ): androidx.compose.ui.unit.IntOffset = androidx.compose.ui.unit.IntOffset(
     x = (bounds.right - popupContentSize.width).coerceIn(
         0, (windowSize.width - popupContentSize.width).coerceAtLeast(0),
     ),
-    y = bounds.top.coerceIn(0, (windowSize.height - popupContentSize.height).coerceAtLeast(0)),
+    // 竖屏按实际测量高度贴底；横屏侧栏保留顶部锚点。
+    y = (if (bottomAligned) bounds.bottom - popupContentSize.height else bounds.top)
+        .coerceIn(0, (windowSize.height - popupContentSize.height).coerceAtLeast(0)),
 )
 
 /** Window coordinates. Inline panels occupy detail space, never the playing video. */

@@ -493,7 +493,8 @@ internal sealed interface BiliPaiNavKey : NavKey {
     data class DynamicDetail(
         val dynamicId: String,
         val commentRootRpid: Long = 0L,
-        val commentTargetRpid: Long = 0L
+        val commentTargetRpid: Long = 0L,
+        val openComments: Boolean = false,
     ) : BiliPaiNavKey {
         override val routeBase: String = "dynamic_detail"
     }

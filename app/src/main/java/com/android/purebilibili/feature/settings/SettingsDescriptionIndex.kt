@@ -52,6 +52,7 @@ internal val settingsStaticDescriptionIndex: Map<String, String> = mapOf(
     "appearance.is_header_collapse_enabled" to "向下滚动时收起搜索框和标签，点底栏「首页」回顶后重新出现",
     "appearance.is_splash_enabled" to "应用启动时显示官方或相册壁纸",
     "appearance.liquid_controls_use_theme_color" to "开启后开关和滑块使用主题色；关闭保留默认绿色开关、蓝色滑块",
+    "appearance.switch_thumb_mode" to "选择开关滑块跟随主题、固定深色或固定浅色",
     "appearance.md3_color_source" to "跟随系统壁纸直接使用系统配色；系统壁纸重新调色可自选色彩风格与色彩标准；自定义颜色可使用取色器或输入色值；壁纸取色需要 Android 12 及以上",
     GRID_CUSTOMIZATION_SETTING_ID to "关闭后恢复自动布局并保留已选参数，不影响单列视频模式",
     GRID_SHARE_SETTING_ID to "共用并保存最后列数；关闭后各页独立调整，窄屏与宽屏分别记忆",
@@ -192,5 +193,8 @@ internal val settingsStaticDescriptionIndex: Map<String, String> = mapOf(
     "playback.wifi_quality" to "关闭“自动最高画质”后生效；仅无线网络环境生效",
     "privacy.privacy_content_authentication_enabled" to "进入收藏、历史等页面前使用指纹、人脸或锁屏密码确认身份",
     "privacy.privacy_mode_enabled" to "开启后不再新增播放和搜索历史，已有记录不会被删除",
+    "privacy.search_hot_control" to "关闭后隐藏搜索页对应分区",
+    "privacy.search_history_control" to "关闭后隐藏搜索历史，记录设置和已有历史不变",
+    "privacy.search_discover_control" to "关闭后隐藏搜索页对应分区",
     "privacy.search_suggestions_enabled" to "开启时使用官方搜索推荐；关闭后改用公开热搜词",
 )

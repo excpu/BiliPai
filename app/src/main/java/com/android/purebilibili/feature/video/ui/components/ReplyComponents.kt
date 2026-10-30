@@ -1681,8 +1681,8 @@ fun ReplyItemView(
             )
             .combinedClickable(
                 onClick = appActionWithFeedback {
-                    // 条目内部的空白可直接回复；正文、头像及操作按钮各自消费点击。
-                    if (onReplyClick != null) {
+                    // 主列表空白可直接回复；详情正文不冒泡到回复输入框。
+                    if (onReplyClick != null && !hideSubPreview) {
                         onReplyClick()
                     } else if (openThreadFromRootClick) {
                         onSubClick(previewRoot, 0L)

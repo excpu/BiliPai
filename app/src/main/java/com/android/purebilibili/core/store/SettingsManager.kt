@@ -1607,6 +1607,7 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
     private val KEY_ANDROID_NATIVE_LIQUID_GLASS_ENABLED =
         booleanPreferencesKey("android_native_liquid_glass_enabled")
     private val KEY_LIQUID_CONTROLS_USE_THEME_COLOR = booleanPreferencesKey("liquid_controls_use_theme_color")
+    private val KEY_LIQUID_SWITCH_THUMB_MODE = stringPreferencesKey("liquid_switch_thumb_mode")
     private val KEY_LEGACY_ANDROID_NATIVE_TOP_TAB_LIQUID_GLASS_ENABLED =
         booleanPreferencesKey("android_native_top_tab_liquid_glass_enabled")
     //  Legacy shared Liquid Glass toggle, kept as migration fallback.
@@ -4175,6 +4176,19 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
         }
     }
 
+    private val searchLandingSectionKeys = listOf(
+        booleanPreferencesKey("search_hot_control_visible"),
+        booleanPreferencesKey("search_history_control_visible"),
+        booleanPreferencesKey("search_discover_control_visible"),
+    )
+
+    fun getSearchLandingSectionVisible(context: Context, index: Int): Flow<Boolean> =
+        context.settingsDataStore.data.map { it[searchLandingSectionKeys[index]] ?: true }
+
+    suspend fun setSearchLandingSectionVisible(context: Context, index: Int, visible: Boolean) {
+        context.settingsDataStore.edit { it[searchLandingSectionKeys[index]] = visible }
+    }
+
     fun getSearchHotSectionEnabled(context: Context): Flow<Boolean> = context.settingsDataStore.data
         .map { preferences -> preferences[KEY_SEARCH_HOT_SECTION_ENABLED] ?: true }
 
@@ -4750,6 +4764,17 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
 
     fun getLiquidControlsUseThemeColor(context: Context): Flow<Boolean> =
         context.settingsDataStore.data.map { it[KEY_LIQUID_CONTROLS_USE_THEME_COLOR] ?: false }
+
+    fun getLiquidSwitchThumbMode(context: Context): Flow<com.android.purebilibili.core.ui.LiquidSwitchThumbMode> =
+        context.settingsDataStore.data.map { preferences ->
+            com.android.purebilibili.core.ui.LiquidSwitchThumbMode.entries.firstOrNull {
+                it.name == preferences[KEY_LIQUID_SWITCH_THUMB_MODE]
+            } ?: com.android.purebilibili.core.ui.LiquidSwitchThumbMode.THEME
+        }
+
+    suspend fun setLiquidSwitchThumbMode(context: Context, value: com.android.purebilibili.core.ui.LiquidSwitchThumbMode) {
+        context.settingsDataStore.edit { it[KEY_LIQUID_SWITCH_THUMB_MODE] = value.name }
+    }
 
     suspend fun setLiquidControlsUseThemeColor(context: Context, value: Boolean) {
         context.settingsDataStore.edit { it[KEY_LIQUID_CONTROLS_USE_THEME_COLOR] = value }
@@ -6376,6 +6401,16 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
         context.getSharedPreferences("auto_rotate_cache", Context.MODE_PRIVATE)
             .edit().putBoolean("enabled", value).apply()
     }
+
+    // --- 横屏保持 (自动横竖屏进入横屏后不随倾斜回竖屏，仅手动退出，默认关闭) ---
+    private val KEY_LANDSCAPE_HOLD_ENABLED = booleanPreferencesKey("landscape_hold_enabled")
+
+    fun getLandscapeHoldEnabled(context: Context): Flow<Boolean> = context.settingsDataStore.data
+        .map { preferences -> preferences[KEY_LANDSCAPE_HOLD_ENABLED] ?: false }
+
+    suspend fun setLandscapeHoldEnabled(context: Context, value: Boolean) {
+        context.settingsDataStore.edit { preferences -> preferences[KEY_LANDSCAPE_HOLD_ENABLED] = value }
+    }
     
     fun isAutoRotateEnabledSync(context: Context): Boolean {
         val prefs = context.getSharedPreferences("auto_rotate_cache", Context.MODE_PRIVATE)
@@ -6392,6 +6427,7 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
     private val KEY_VIDEO_SECOND_CODEC = stringPreferencesKey("video_second_codec_preference")
     private val KEY_AUDIO_QUALITY = intPreferencesKey("audio_quality_preference")
     private val KEY_SUBSCRIBED_COLLECTION_IDS = stringPreferencesKey("subscribed_collection_ids")
+    private val KEY_KNOWN_COLLECTION_SUBSCRIPTION_IDS = stringPreferencesKey("known_collection_subscription_ids")
     private val KEY_COLLECTION_SORT_PREFERENCES = stringPreferencesKey("collection_sort_preferences")
     
     // --- WiFi 默认画质 (默认 80 = 1080P) ---
@@ -6443,6 +6479,17 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
             .distinctUntilChanged()
     }
 
+    /** 缓存缺失为未知；已订阅集合也可作为旧版本的肯定记录。 */
+    fun getCollectionSubscriptionState(context: Context, collectionId: Long): Flow<Boolean?> =
+        context.settingsDataStore.data.map { preferences ->
+            val id = collectionId.toString()
+            when {
+                id in decodeCollectionSubscriptionIds(preferences[KEY_SUBSCRIBED_COLLECTION_IDS]) -> true
+                id in decodeCollectionSubscriptionIds(preferences[KEY_KNOWN_COLLECTION_SUBSCRIPTION_IDS]) -> false
+                else -> null
+            }
+        }.distinctUntilChanged()
+
     suspend fun toggleCollectionSubscription(context: Context, collectionId: Long) {
         if (collectionId <= 0L) return
         context.settingsDataStore.edit { preferences ->
@@ -6456,6 +6503,9 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
     suspend fun setCollectionSubscription(context: Context, collectionId: Long, subscribed: Boolean) {
         if (collectionId <= 0L) return
         context.settingsDataStore.edit { preferences ->
+            preferences[KEY_KNOWN_COLLECTION_SUBSCRIPTION_IDS] = encodeCollectionSubscriptionIds(
+                decodeCollectionSubscriptionIds(preferences[KEY_KNOWN_COLLECTION_SUBSCRIPTION_IDS]) + collectionId.toString()
+            )
             val current = decodeCollectionSubscriptionIds(preferences[KEY_SUBSCRIBED_COLLECTION_IDS])
             preferences[KEY_SUBSCRIBED_COLLECTION_IDS] = encodeCollectionSubscriptionIds(
                 setCollectionSubscription(current, collectionId, subscribed)

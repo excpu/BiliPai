@@ -196,8 +196,8 @@ android {
         targetSdk = 37
         // 版本名按发行计划确定；versionCode 每次发布单调 +1
         // 规范：docs/wiki/VERSIONING.md · 更新日志：CHANGELOG.md
-        versionCode = 532
-        versionName = "0.6.8"
+        versionCode = 539
+        versionName = "0.7.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -244,6 +244,7 @@ android {
 
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("officialRelease")
             // Disable PNG crunching to avoid AAPT errors
             isCrunchPngs = false
             buildConfigField("boolean", "ALLOW_HARDCODED_DNS_FALLBACK", "false")

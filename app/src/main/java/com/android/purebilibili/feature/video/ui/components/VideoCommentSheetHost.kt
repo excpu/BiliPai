@@ -792,8 +792,7 @@ fun VideoCommentSheetHost(
                             }
                         }
                         AnimatedVisibility(
-                            visible = hostContent == VideoCommentSheetHostContent.THREAD_DETAIL &&
-                                subReplyState.rootReply != null,
+                            visible = hostContent == VideoCommentSheetHostContent.THREAD_DETAIL,
                             enter = motionSpec.contentEnter,
                             exit = if (threadBackCompleted) androidx.compose.animation.ExitTransition.None else motionSpec.contentExit,
                         ) {
@@ -858,6 +857,13 @@ fun VideoCommentSheetHost(
                                         targetReplyId = subReplyState.targetReplyId
                                     )
                                 }
+                            } else {
+                                SubReplyInitialContent(
+                                    isLoading = subReplyState.isLoading,
+                                    error = subReplyState.error,
+                                    onRetry = commentViewModel::loadMoreSubReplies,
+                                    onDismiss = commentViewModel::closeSubReply,
+                                )
                             }
                         }
                     }
@@ -951,6 +957,19 @@ internal fun VideoCommentMainList(
                             .layerBackdrop(commentChromeBackdrop),
                         contentPadding = WindowInsets.navigationBars.asPaddingValues()
                     ) {
+                    commentSectionNotice(state.pageControl)
+                    if (state.replies.isEmpty() && !state.isRepliesLoading &&
+                        !state.isRepliesRefreshing && repliesError == null) {
+                        state.pageControl?.emptyMessage()?.takeIf { it.isNotBlank() }?.let { message ->
+                            item(key = "comment_server_empty", contentType = "comment_server_empty") {
+                                AppText(
+                                    text = message,
+                                    color = AppContentColors.secondaryText(),
+                                    modifier = Modifier.fillMaxWidth().padding(24.dp),
+                                )
+                            }
+                        }
+                    }
                     state.voteCard?.let { card ->
                         item(key = "comment_vote_${card.voteId}") {
                             VideoCommentVoteCard(

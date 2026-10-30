@@ -718,17 +718,22 @@ fun AppNavigation(
             SettingsManager.isDataSaverActive(context)
         }
         var previousRouteForStopPolicy by remember { mutableStateOf<String?>(null) }
-        var previousVideoBvidForStopPolicy by remember { mutableStateOf<String?>(null) }
-        val currentVideoBvidForStopPolicy = (currentNavigation3Key as? BiliPaiNavKey.VideoDetail)?.bvid
+        var previousVideoKeyForStopPolicy by remember { mutableStateOf<BiliPaiNavKey.VideoDetail?>(null) }
+        val currentVideoKeyForStopPolicy = currentNavigation3Key as? BiliPaiNavKey.VideoDetail
 
-        LaunchedEffect(currentRoute, currentVideoBvidForStopPolicy) {
-            if (shouldStopPlaybackEagerlyOnVideoRouteExit(previousRouteForStopPolicy, currentRoute)) {
+        LaunchedEffect(currentRoute, currentVideoKeyForStopPolicy) {
+            if (shouldStopPlaybackEagerlyOnVideoRouteExit(
+                    previousRouteForStopPolicy,
+                    currentRoute,
+                    isVideoEntryRetained = previousVideoKeyForStopPolicy?.let { it in navigation3BackStack } == true,
+                )
+            ) {
                 if (miniPlayerManager?.isMiniMode != true) {
-                    miniPlayerManager?.markLeavingByNavigation(expectedBvid = previousVideoBvidForStopPolicy)
+                    miniPlayerManager?.markLeavingByNavigation(expectedBvid = previousVideoKeyForStopPolicy?.bvid)
                 }
             }
             previousRouteForStopPolicy = currentRoute
-            previousVideoBvidForStopPolicy = currentVideoBvidForStopPolicy
+            previousVideoKeyForStopPolicy = currentVideoKeyForStopPolicy
         }
 
         var navigationHostOriginInRoot by remember { mutableStateOf(Offset.Zero) }
@@ -2115,7 +2120,10 @@ fun AppNavigation(
         val bottomBarBackdropSource = if (shouldCaptureBottomBarBackdrop) {
             // Bind the shared recording to every frame of the app theme palette,
             // rather than waiting for navigation/layout to invalidate a static page.
-            rememberChromeBackdropSource(recordingBackground = backgroundColor)
+            rememberChromeBackdropSource(
+                recordingBackground = backgroundColor,
+                isolateContentDrawing = true,
+            )
         } else {
             null
         }
@@ -2625,6 +2633,7 @@ fun AppNavigation(
                             contentTransitionReady = contentReady,
                             openCommentRootRpid = dynamicKey.commentRootRpid,
                             openCommentTargetRpid = dynamicKey.commentTargetRpid,
+                            openComments = dynamicKey.openComments,
                             onBack = onBack,
                             onVideoClick = { bvid -> navigateToVideoInNavigation3(bvid, 0L, "") },
                             onBangumiClick = { seasonId, epId ->
@@ -2981,13 +2990,20 @@ fun AppNavigation(
                                                         pageImageLoadingAllowed
                                                     ),
                                                 ) {
-                                                    RenderNavigationContent(
-                                                        key = pageKey,
-                                                        isBottomPagerPageActive = page == bottomPagerState.settledPage &&
-                                                            bottomPagerBackgroundWorkAllowed,
-                                                        isBottomPagerPageVisibleDuringNavigation = pageVisibleDuringNavigation,
-                                                        isBottomPagerHosted = true,
-                                                    )
+                                                    MainHostTabBackScope(
+                                                        enabled = page == bottomPagerState.settledPage &&
+                                                            page == mainBottomPagerState.selectedPage &&
+                                                            !bottomPagerState.isScrollInProgress &&
+                                                            !mainBottomPagerState.isNavigating,
+                                                    ) {
+                                                        RenderNavigationContent(
+                                                            key = pageKey,
+                                                            isBottomPagerPageActive = page == bottomPagerState.settledPage &&
+                                                                bottomPagerBackgroundWorkAllowed,
+                                                            isBottomPagerPageVisibleDuringNavigation = pageVisibleDuringNavigation,
+                                                            isBottomPagerHosted = true,
+                                                        )
+                                                    }
                                                 }
                                             }
                                         } else {
@@ -4821,6 +4837,10 @@ fun AppNavigation(
                                     title = webKey.title.ifEmpty { null },
                                     mobileUserAgent = webKey.mobileUserAgent,
                                     onBack = { performSystemBackAction() },
+                                    onCommentLink = { url ->
+                                        replaceNavigation3BackStack(popBiliPaiNavKey(navigation3BackStack))
+                                        openBilibiliLinkInNavigation3(url)
+                                    },
                                     onVideoClick = { bvid ->
                                         replaceNavigation3BackStack(
                                             popBiliPaiNavKey(navigation3BackStack)
@@ -5192,6 +5212,7 @@ fun AppNavigation(
                                         onCompactClick = compactClick,
                                         isLayoutStable = layoutStable && !driveBottomBarByProgress,
                                         pauseArtworkRotation = pauseNowPlayingArtworkRotation,
+                                        captureCardSourceOnExpand = !audioNowPlayingBarOpensAudioMode,
                                         sourceRoute = currentRoute ?: ScreenRoutes.Home.route,
                                         handoff = audioNowPlayingHandoff,
                                         onExpand = {
@@ -5471,6 +5492,7 @@ fun AppNavigation(
                     },
                     isLayoutStable = !driveBottomBarByProgress,
                     pauseArtworkRotation = pauseNowPlayingArtworkRotation,
+                    captureCardSourceOnExpand = !audioNowPlayingBarOpensAudioMode,
                     sourceRoute = currentRoute ?: ScreenRoutes.Home.route,
                     handoff = audioNowPlayingHandoff,
                     onExpand = {

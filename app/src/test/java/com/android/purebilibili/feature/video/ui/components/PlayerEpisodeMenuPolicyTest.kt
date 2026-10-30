@@ -14,6 +14,24 @@ import androidx.compose.ui.unit.IntSize
 
 class PlayerEpisodeMenuPolicyTest {
     @Test
+    fun `portrait panel stays attached to safe bottom when measured shorter`() {
+        assertEquals(
+            IntOffset(0, 500),
+            resolvePlayerPanelPopupPosition(
+                IntRect(0, 400, 400, 1000), IntSize(400, 1020), IntSize(400, 500),
+                bottomAligned = true,
+            ),
+        )
+        assertEquals(
+            IntOffset(0, 450),
+            resolvePlayerPanelPopupPosition(
+                IntRect(0, 400, 400, 1000), IntSize(400, 950), IntSize(400, 500),
+                bottomAligned = true,
+            ),
+        )
+    }
+
+    @Test
     fun `panel popup retains its safe right edge in the normal window`() {
         assertEquals(
             IntOffset(680, 10),

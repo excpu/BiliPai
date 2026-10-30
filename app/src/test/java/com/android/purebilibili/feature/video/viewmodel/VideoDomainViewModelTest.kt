@@ -37,6 +37,34 @@ class VideoDomainViewModelTest {
     }
 
     @Test
+    fun `unknown playback seed preserves confirmed relations but confirmed changes still apply`() {
+        val viewModel = VideoEngagementViewModel()
+        viewModel.bindSubject(subject("BV1", generation = 1L), VideoEngagementSeed(
+            isLiked = true, isFollowing = true, isFavorited = true, isDisliked = true,
+            coinCount = 2, likeStatusKnown = true, followStatusKnown = true,
+            relationshipStatusKnown = true,
+        ))
+
+        viewModel.sync(VideoEngagementSeed())
+        val retained = viewModel.uiState.value
+        assertTrue(retained.isLiked)
+        assertTrue(retained.isFollowing)
+        assertTrue(retained.isFavorited)
+        assertTrue(retained.isDisliked)
+        assertEquals(2, retained.coinCount)
+        assertTrue(retained.likeStatusKnown)
+        assertTrue(retained.followStatusKnown)
+
+        viewModel.sync(VideoEngagementSeed(
+            likeStatusKnown = true, followStatusKnown = true, relationshipStatusKnown = true,
+        ))
+        assertFalse(viewModel.uiState.value.isLiked)
+        assertFalse(viewModel.uiState.value.isFollowing)
+        assertFalse(viewModel.uiState.value.isFavorited)
+        assertEquals(0, viewModel.uiState.value.coinCount)
+    }
+
+    @Test
     fun `engagement keeps transient state for same generation and resets for next video`() {
         val viewModel = VideoEngagementViewModel()
         val first = subject("BV1", generation = 1L)

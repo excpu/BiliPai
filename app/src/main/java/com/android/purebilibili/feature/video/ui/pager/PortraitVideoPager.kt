@@ -2757,8 +2757,13 @@ private fun VideoPageItem(
                     val realDuration = if (exoPlayer.duration > 0) exoPlayer.duration else initialDuration
                     seekSession = syncPlaybackSeekSession(
                         state = seekSession,
-                        playbackPositionMs = effectivePosition,
-                        hasPlaybackResumedAfterPendingSeek = exoPlayer.isPlaying
+                        playbackPositionMs = if (exoPlayer.playbackState == Player.STATE_ENDED && realDuration > 0L) {
+                            realDuration
+                        } else {
+                            effectivePosition
+                        },
+                        hasPlaybackResumedAfterPendingSeek = exoPlayer.isPlaying,
+                        playbackEnded = exoPlayer.playbackState == Player.STATE_ENDED,
                     )
                     progressState = PlayerProgress(
                         current = seekSession.sliderPositionMs,
@@ -3493,14 +3498,17 @@ private fun VideoPageItem(
                 val gesturePreviewSize = remember(
                     gestureVideoshotData.img_x_size,
                     gestureVideoshotData.img_y_size,
-                    previewConfiguration.screenWidthDp
+                    previewConfiguration.screenWidthDp,
+                    previewConfiguration.screenHeightDp,
+                    currentVideoAspect,
                 ) {
                     com.android.purebilibili.feature.video.ui.components.resolveCompactSeekPreviewSize(
                         sourceWidthPx = gestureVideoshotData.img_x_size,
                         sourceHeightPx = gestureVideoshotData.img_y_size,
                         screenWidthDp = previewConfiguration.screenWidthDp,
                         // 使用真实视频宽比：横屏内容预览不再被强行裁成 9:16
-                        videoAspectRatio = currentVideoAspect
+                        videoAspectRatio = currentVideoAspect,
+                        containerHeightDp = previewConfiguration.screenHeightDp,
                     )
                 }
                 val previewWidthPx = with(density) { gesturePreviewSize.widthDp.dp.toPx() }
@@ -3514,7 +3522,9 @@ private fun VideoPageItem(
                         containerWidth = portraitPageWidthPx.toFloat(),
                         bubbleWidthPx = previewWidthPx
                     )
-                val previewBottomOffsetPx = with(density) { 120.dp.roundToPx() }
+                val previewBottomOffsetPx = with(density) {
+                    (if (previewConfiguration.screenHeightDp < 320) 64.dp else 120.dp).roundToPx()
+                }
                 com.android.purebilibili.feature.video.ui.components.CompactSeekPreview(
                     videoshotData = gestureVideoshotData,
                     targetPositionMs = seekTargetPosition,
@@ -4510,11 +4520,12 @@ private fun VideoPageItem(
         )
 
             LaunchedEffect(activeAid, commentFraudDetectionEnabled) {
-                viewModel.commentSentEvent.collect { reply ->
+                viewModel.commentSentEvent.collect { event ->
                     commentViewModel.onExternalCommentSent(
-                        aid = activeAid,
-                        newReply = reply,
-                        fraudDetectionEnabled = commentFraudDetectionEnabled
+                        aid = event.aid,
+                        newReply = event.reply,
+                        fraudDetectionEnabled = commentFraudDetectionEnabled,
+                        senderAccount = event.account,
                     )
                 }
             }

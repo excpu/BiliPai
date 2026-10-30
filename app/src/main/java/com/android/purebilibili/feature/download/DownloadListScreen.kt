@@ -1,5 +1,7 @@
 package com.android.purebilibili.feature.download
 
+import com.android.purebilibili.core.util.responsiveContentWidth
+
 import com.android.purebilibili.core.ui.components.AppTextButton as TextButton
 
 import com.android.purebilibili.core.util.rememberHapticFeedback
@@ -40,7 +42,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import com.android.purebilibili.core.ui.components.AppLazyVerticalGrid as LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 //  Material Icons
 import androidx.compose.material.icons.Icons
@@ -244,13 +246,14 @@ fun DownloadListScreen(
                 )
             }
         } else {
+            val alignRows = columns > 1 && !com.android.purebilibili.core.ui.LocalFullVideoCardContentVisible.current
             LazyVerticalGrid(
                 columns = GridCells.Fixed(columns),
                 state = gridState,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier
-                    .fillMaxSize()
-                    ,
+                    .then(if (columns == 1) Modifier.responsiveContentWidth(com.android.purebilibili.core.util.resolveSingleColumnFeedMaxWidth()) else Modifier)
+                    .fillMaxSize(),
                 contentPadding = PaddingValues(
                     start = 16.dp,
                     end = 16.dp,
@@ -291,9 +294,11 @@ fun DownloadListScreen(
                         }
                     }
                 }
-                items(taskList, key = { it.id }) { task ->
+                val taskKeys = taskList.map { it.id }
+                val renderTask: @Composable (Int, Modifier) -> Unit = { index, cardModifier ->
+                    val task = taskList[index]
                     val isDissolving = task.id in dissolvingTaskIds
-                    AnimatedVideoListItem(modifier = videoListItemModifier(), enabled = true, useLookaheadBounds = false) {
+                    AnimatedVideoListItem(modifier = cardModifier, enabled = true, useLookaheadBounds = false) {
                     com.android.purebilibili.core.ui.animation.MaybeDissolvableVideoCard(
                         isDissolving = isDissolving,
                         onDissolveComplete = {
@@ -322,6 +327,7 @@ fun DownloadListScreen(
                         }
                         DownloadTaskItem(
                             task = task,
+                            modifier = if (alignRows) Modifier.fillMaxHeight() else Modifier,
                             stacked = columns > 1,
                             onClick = {
                                 if (selectionMode) {
@@ -372,6 +378,25 @@ fun DownloadListScreen(
                         )
                     }
                     }
+                }
+                if (!alignRows) {
+                    itemsIndexed(taskList, key = { _, task -> task.id }) { index, _ ->
+                        renderTask(index, videoListItemModifier())
+                    }
+                } else {
+                    com.android.purebilibili.feature.home.resolveHomeFeedAlignedRows(taskList.size, columns)
+                        .forEach { row ->
+                            item(key = "download_row_${taskKeys[row.first]}", span = { GridItemSpan(maxLineSpan) }) {
+                                com.android.purebilibili.feature.home.HomeAlignedVideoRow(
+                                    indices = row,
+                                    itemKeys = taskKeys,
+                                    columns = columns,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = videoListItemModifier().fillMaxWidth(),
+                                    content = renderTask,
+                                )
+                            }
+                        }
                 }
 
                 // [新增] 显示当前存储路径
@@ -531,6 +556,7 @@ private fun DownloadTaskItem(
     // 与相关推荐/个人列表一致：复用全局横向卡骨架（顶对齐、共享封面宽度与信息区排版）。
     HorizontalVideoCardFrame(
         stacked = stacked,
+        horizontalCoverMaxWidthDp = com.android.purebilibili.feature.home.components.cards.WIDE_LIST_COVER_MAX_WIDTH_DP,
         modifier = modifier
             .fillMaxWidth()
             .clip(AppShapes.container(ContainerLevel.Card))

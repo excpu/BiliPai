@@ -28,7 +28,6 @@ internal data class HomeHeroCarouselCardTransform(
     val contentScale: Float,
     val edgeShadeAlpha: Float,
     val edgeShadeStartFromLeft: Boolean,
-    val shadowElevationFraction: Float
 )
 
 internal fun resolveHomeFeedTopPaddingDp(
@@ -189,10 +188,6 @@ internal fun resolveHomeHeroCarouselCardTransform(
     val edgeShadeAlpha = (distance * 0.25f).coerceIn(0f, 0.25f)
     val edgeShadeStartFromLeft = clampedOffset < 0f
 
-    // Dynamic elevation: prominent when centered, subtle dip when pressed or swiped away
-    val shadowElevationFraction = ((1f - distance * 0.6f).coerceIn(0f, 1f) *
-        (1f - pressedProgress.coerceIn(0f, 1f) * 0.3f)) * 0.35f
-
     return HomeHeroCarouselCardTransform(
         rotationY = rotationY,
         rotationZ = 0f,
@@ -206,7 +201,6 @@ internal fun resolveHomeHeroCarouselCardTransform(
         contentScale = contentScale,
         edgeShadeAlpha = edgeShadeAlpha,
         edgeShadeStartFromLeft = edgeShadeStartFromLeft,
-        shadowElevationFraction = shadowElevationFraction,
     )
 }
 

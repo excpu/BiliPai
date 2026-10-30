@@ -33,6 +33,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Alignment
 import com.android.purebilibili.core.ui.wallpaper.sharedGlobalWallpaperBackground
 import androidx.compose.ui.graphics.compositeOver
@@ -258,15 +259,14 @@ internal fun resolveHomeVideoCardMetadataColors(
 }
 
 private fun resolveVideoCardMetadataModifier(
-    hasTrailingCardAction: Boolean
+    trailingActionCount: Int
 ): Modifier {
     return Modifier
         .fillMaxWidth()
         .then(
-            if (hasTrailingCardAction) {
-                // 右下角"⋮"/取消收藏按钮的视觉图标只占约 20dp，预留 24dp 即可
-                // 防遮挡，把更多宽度让给 UP 名称/日期，避免名称提前折叠省略。
-                Modifier.padding(end = AppSpacingTokens.ExtraLarge)
+            if (trailingActionCount > 0) {
+                // Each bottom-end action owns a full touch target, including when both are present.
+                Modifier.padding(end = AppChromeSizeTokens.MinimumTouchTarget * trailingActionCount)
             } else {
                 Modifier
             }
@@ -1219,10 +1219,13 @@ internal fun ElegantVideoCard(
         onClick(video.bvid, video.cid)
     })
     val homeCardScrolling = LocalHomeCardScrolling.current
+    val homeCardTransitionAtMount = LocalHomeCardTransitionRunning.current
     val enterAnimationEnabledAtMount = remember(video.bvid) {
         resolveHomeCardEnterAnimationEnabledAtMount(
             baseAnimationEnabled = animationEnabled,
-            isReturningFromDetail = isReturningFromVideoDetail,
+            // Mount-only sampling must not subscribe every neighboring card to transition changes.
+            isReturningFromDetail = isReturningFromVideoDetail ||
+                Snapshot.withoutReadObservation { homeCardTransitionAtMount?.value == true },
             isSwitchingCategory = CardPositionManager.isSwitchingCategory,
             // Read only at mount: stopping a scroll must not replay skipped entrances.
             isScrollInProgress = scrollLiteModeEnabled || homeCardScrolling?.value == true
@@ -2038,7 +2041,9 @@ internal fun ElegantVideoCard(
         Spacer(modifier = Modifier.height(if (compactMetadata) AppSpacingTokens.ExtraSmall else AppSpacingTokens.ExtraSmall + AppSpacingTokens.Micro))
 
         Column(
-            modifier = resolveVideoCardMetadataModifier(hasTrailingCardAction)
+            modifier = resolveVideoCardMetadataModifier(
+                (if (onUnfavorite != null) 1 else 0) + (if (hasOverflowMenu) 1 else 0)
+            )
         ) {
         val metadataColors = resolveHomeVideoCardMetadataColors(
             onSurfaceColor = adaptiveContentColors.titleColor,
@@ -2162,17 +2167,16 @@ internal fun ElegantVideoCard(
                                 menuGlassAnchorBounds = null
                                 openDismissMenu(menuButtonCoordsRef.value, null)
                             },
+                        // 触控区 48dp，但图标光学上贴卡片右下角，与发布时间行对齐。
                         contentAlignment = Alignment.BottomEnd
                     ) {
-                        AppText(
-                            text = "⋮",
-                            color = adaptiveContentColors.subtitleColor,
-                            fontSize = MaterialTheme.typography.labelMedium.fontSize,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(
-                                end = AppSpacingTokens.ExtraSmall,
-                                bottom = AppSpacingTokens.ExtraSmall
-                            )
+                        AppIcon(
+                            imageVector = Icons.Outlined.MoreVert,
+                            contentDescription = null,
+                            tint = adaptiveContentColors.subtitleColor,
+                            modifier = Modifier
+                                .size(18.dp)
+                                .padding(end = AppSpacingTokens.ExtraSmall, bottom = AppSpacingTokens.ExtraSmall)
                         )
                     }
                 }

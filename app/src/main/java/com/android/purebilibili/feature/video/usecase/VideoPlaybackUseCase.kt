@@ -437,6 +437,7 @@ class VideoPlaybackUseCase(
         onProgress: (String) -> Unit = {},
         onVideoInfo: (ViewInfo) -> Unit = {},
         videoInfoLoader: (suspend () -> Result<ViewInfo>)? = null,
+        onPlaybackDataReady: suspend (Long, PlayUrlData) -> Unit = { _, _ -> },
         playbackSpeedOverride: Float? = null
     ): VideoLoadResult {
         try {
@@ -499,7 +500,9 @@ class VideoPlaybackUseCase(
                                 cid = bootstrapCid,
                                 targetQuality = defaultQuality,
                                 audioLang = audioLang
-                            )
+                            ).also { data ->
+                                if (cid > 0L && data != null) onPlaybackDataReady(cid, data)
+                            }
                         }
 
                         infoDeferred.await().fold(
@@ -614,6 +617,7 @@ class VideoPlaybackUseCase(
                             isDolbyAudioSupported = com.android.purebilibili.core.util.MediaUtils.isDolbyAtmosAudioSupported(),
                             isDolbyAudioSoftwareDecoded = com.android.purebilibili.core.util.MediaUtils.isDolbySoftwareAudioDecoderRequired(),
                             allowPremiumApiOnlyQualities = allowPremiumApiOnlyQualities,
+                            lockSelectedQuality = true,
                         )
                     }
 
@@ -1117,6 +1121,7 @@ class VideoPlaybackUseCase(
         isDolbyAudioSoftwareDecoded: Boolean =
             com.android.purebilibili.core.util.MediaUtils.isDolbySoftwareAudioDecoderRequired(),
         allowPremiumApiOnlyQualities: Boolean = !VideoRepository.isAppApiCoolingDown(),
+        lockSelectedQuality: Boolean = false,
     ): PlaybackSelectionResult? {
         val dashVideo = playUrlData.dash?.getBestVideo(
             targetQuality,
@@ -1151,7 +1156,9 @@ class VideoPlaybackUseCase(
             audioQualityPreference = audioSelection?.effectivePreferenceId ?: audioQualityPreference,
             videoCodecPreference = videoCodecPreference,
             videoSecondCodecPreference = videoSecondCodecPreference,
-            playbackQualityMode = playbackQualityMode,
+            playbackQualityMode = if (lockSelectedQuality && dashVideo != null) {
+                PlaybackQualityMode.LOCKED(dashVideo.id)
+            } else playbackQualityMode,
             isHevcSupported = isHevcSupported,
             isAv1Supported = isAv1Supported,
             isDolbyAudioSupported = isDolbyAudioSupported

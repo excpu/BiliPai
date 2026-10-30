@@ -108,6 +108,8 @@ internal fun ImmersiveAppScaffold(
                                 .unifiedBlur(
                                     hazeState = hazeState,
                                     surfaceType = BlurSurfaceType.HEADER,
+                                    // 仅本框架的完整页面源允许采样当前窗口，外部壁纸源保持原语义。
+                                    preferWindowBackdrop = externalHazeState == null && chromeBackdropSource == null,
                                 )
                                 .background(
                                     globalWallpaperAwareChromeColor(topBarSurfaceColor)

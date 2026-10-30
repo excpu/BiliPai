@@ -1,6 +1,7 @@
 // 文件路径: feature/video/screen/TabletVideoLayout.kt
 package com.android.purebilibili.feature.video.screen
 
+import com.android.purebilibili.feature.video.ui.components.commentSectionNotice
 import com.android.purebilibili.navigation.tabSelectedPage
 import com.android.purebilibili.navigation.tabIndicatorPosition
 import com.android.purebilibili.core.util.rememberHapticFeedback
@@ -1149,7 +1150,7 @@ internal fun TabletSecondaryContent(
                         }
                     }
 
-                    if (subReplyState.visible && subReplyState.rootReply != null) {
+                    if (subReplyState.visible) {
                         VideoInlineSubReplyDetailContent(
                             state = subReplyState,
                             commentState = commentState,
@@ -1218,7 +1219,8 @@ internal fun TabletSecondaryContent(
                                     bottom = 104.dp,
                                 )
                             ) {
-                            commentState.voteCard?.let { card ->
+                            commentSectionNotice(commentState.pageControl)
+            commentState.voteCard?.let { card ->
                                 item(key = "tablet_vote_${card.voteId}") {
                                     VideoCommentVoteCard(
                                         card = card,
@@ -1336,7 +1338,7 @@ internal fun TabletSecondaryContent(
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 AppText(
-                                    text = "暂无评论",
+                                    text = commentState.pageControl?.emptyMessage()?.takeIf { it.isNotBlank() } ?: "暂无评论",
                                     style = MaterialTheme.typography.titleMedium,
                                     color = commentAppearance.secondaryTextColor
                                 )
