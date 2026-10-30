@@ -96,6 +96,7 @@ import com.android.purebilibili.data.repository.BlockedUpRepository
 import com.android.purebilibili.feature.home.HomeFeedCardLayout
 import com.android.purebilibili.feature.home.components.cards.HorizontalVideoCardFrame
 import com.android.purebilibili.feature.home.components.cards.HorizontalVideoStatRow
+import com.android.purebilibili.feature.home.components.cards.RELATED_VIDEO_HORIZONTAL_COVER_WIDTH_DP
 import com.android.purebilibili.feature.home.resolveHomeFeedCardLayout
 import com.android.purebilibili.feature.video.ui.FollowBadgeTone
 import com.android.purebilibili.feature.video.ui.resolveVideoFollowVisualPolicy
@@ -206,6 +207,7 @@ fun RelatedVideoItem(
     showUpBadge: Boolean = true,
     coverAspectRatio: Float = com.android.purebilibili.core.ui.videoCardCoverAspectRatio(),
     stacked: Boolean = false,
+    titleMinLines: Int = 1,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
     onMoreClick: (() -> Unit)? = null,
@@ -352,6 +354,8 @@ fun RelatedVideoItem(
         HorizontalVideoCardFrame(
             coverAspectRatio = coverAspectRatio,
             stacked = stacked,
+            coverWidthDp = RELATED_VIDEO_HORIZONTAL_COVER_WIDTH_DP.dp,
+            centerCoverVertically = true,
             fillInfoHeight = true,
             coverModifier = Modifier.onGloballyPositioned { coordinates ->
                 coverCoordinatesRef.value = coordinates
@@ -380,7 +384,7 @@ fun RelatedVideoItem(
                     text = video.title,
                     style = contentTypography.title,
                     maxLines = videoCardTitleMaxLines(),
-                    minLines = 1,
+                    minLines = titleMinLines,
                     overflow = videoCardTitleOverflow(),
                     color = AppContentColors.primaryText(),
                     modifier = Modifier.fillMaxWidth(),
@@ -528,6 +532,7 @@ internal fun RelatedVideoGridRow(
                 isFollowed = video.owner.mid in followingMids,
                 showUpBadge = showUpBadge,
                 coverAspectRatio = cardLayout.coverAspectRatio,
+                titleMinLines = cardLayout.titleMinLines,
                 stacked = cardPresentation == RelatedVideoCardLayout.STACKED,
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { onVideoClick(video) },

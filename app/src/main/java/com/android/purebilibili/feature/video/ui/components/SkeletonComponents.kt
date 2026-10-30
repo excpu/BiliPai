@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.android.purebilibili.feature.home.components.cards.HorizontalVideoCardFrame
+import com.android.purebilibili.feature.home.components.cards.RELATED_VIDEO_HORIZONTAL_COVER_WIDTH_DP
 import com.android.purebilibili.core.ui.AppSurfaceTokens
 import com.android.purebilibili.core.ui.AppShapes
 import com.android.purebilibili.core.ui.ContainerLevel
@@ -342,6 +343,8 @@ private fun RelatedVideoItemSkeleton(
     HorizontalVideoCardFrame(
         coverAspectRatio = coverAspectRatio,
         stacked = stacked,
+        coverWidthDp = RELATED_VIDEO_HORIZONTAL_COVER_WIDTH_DP.dp,
+        centerCoverVertically = true,
         trailingContent = { Spacer(Modifier.size(48.dp)) },
         modifier = modifier
             .clip(AppShapes.container(ContainerLevel.Card))

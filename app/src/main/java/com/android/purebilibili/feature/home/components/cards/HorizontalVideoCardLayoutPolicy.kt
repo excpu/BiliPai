@@ -9,6 +9,8 @@ package com.android.purebilibili.feature.home.components.cards
  */
 internal const val HORIZONTAL_VIDEO_CARD_COVER_ASPECT_RATIO = 16f / 10f
 internal const val HORIZONTAL_VIDEO_CARD_COVER_WIDTH_DP = 140
+/** 更多推荐列表的封面宽度：固定尺寸而非按比例扩张，保证行高与原生一致。 */
+internal const val RELATED_VIDEO_HORIZONTAL_COVER_WIDTH_DP = 128
 internal const val HORIZONTAL_VIDEO_CARD_COVER_INFO_GAP_DP = 10
 internal const val HORIZONTAL_VIDEO_CARD_MIN_HEIGHT_DP = 90f
 internal const val HORIZONTAL_VIDEO_CARD_INFO_PADDING_DP = 8

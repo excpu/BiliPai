@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.dp
 import com.android.purebilibili.core.ui.AppShapes
@@ -42,6 +43,8 @@ internal fun HorizontalVideoCardFrame(
     trailingContent: (@Composable BoxScope.() -> Unit)? = null,
     coverAspectRatio: Float = com.android.purebilibili.core.ui.videoCardCoverAspectRatio(),
     stacked: Boolean = false,
+    coverWidthDp: Dp? = null,
+    centerCoverVertically: Boolean = false,
     compactPartition: Boolean = false,
     allowPortraitCover: Boolean = false,
     fillInfoHeight: Boolean = compactPartition,
@@ -134,6 +137,9 @@ internal fun HorizontalVideoCardFrame(
                         (width * 0.54f).toInt(),
                         (width - gap - minOf(92.dp.roundToPx(), (width - gap).coerceAtLeast(0) / 2)).coerceAtLeast(0),
                     )
+                } else if (coverWidthDp != null) {
+                    // 固定封面宽度入口（例如更多推荐列表）：宽度不随卡片宽度扩张，比例保持不变。
+                    coverWidthDp.roundToPx().coerceAtMost(width - gap).coerceAtLeast(0)
                 } else {
                     (width * widthFraction).toInt().coerceAtMost(width - gap)
                 }
@@ -155,8 +161,14 @@ internal fun HorizontalVideoCardFrame(
                 )
                 val height = constraints.constrainHeight(maxOf(coverHeight, info.height))
                 val cover = measurables[0].measure(Constraints.fixed(coverWidth, minOf(coverHeight, height)))
+                // 信息列高于封面时（例如标题占满两行），封面在行内垂直居中而非贴顶。
+                val coverTop = if (centerCoverVertically) {
+                    ((height - cover.height) / 2).coerceAtLeast(0)
+                } else {
+                    0
+                }
                 layout(width, height) {
-                    cover.placeRelative(0, 0)
+                    cover.placeRelative(0, coverTop)
                     info.placeRelative(coverWidth + gap, 0)
                 }
             }
