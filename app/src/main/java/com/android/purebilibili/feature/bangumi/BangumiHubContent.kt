@@ -43,7 +43,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.PagerState
-import androidx.compose.foundation.pager.HorizontalPager
+import com.android.purebilibili.core.ui.components.AppHorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -223,7 +223,8 @@ internal fun BangumiHubContent(
         BangumiHubPage.HOME -> {
             val channels = BangumiChannel.entries
             val pager = channelPagerState
-            HorizontalPager(
+            // 频道滑动复用主题手势策略；各频道的列表状态仍按频道身份独立保存。
+            AppHorizontalPager(
                 state = pager,
                 modifier = Modifier.fillMaxSize(),
                 key = { channels[it].name },

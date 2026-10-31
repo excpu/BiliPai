@@ -439,6 +439,15 @@ interface BilibiliApi {
         @Query("ps") ps: Int = 20
     ): FavoriteResourceResponse
 
+    @retrofit2.http.FormUrlEncoded
+    @retrofit2.http.POST("x/v3/fav/resource/sort")
+    suspend fun sortFavResources(
+        @retrofit2.http.Field("media_id") mediaId: Long,
+        @retrofit2.http.Field("sort") sort: String,
+        @retrofit2.http.Field("csrf") csrf: String,
+        @retrofit2.http.Tag accountSession: AccountCookieSession,
+    ): SimpleApiResponse
+
     // [新增] 批量删除收藏资源 (取消收藏)
     @retrofit2.http.FormUrlEncoded
     @retrofit2.http.POST("x/v3/fav/resource/batch-del")
@@ -559,18 +568,20 @@ interface BilibiliApi {
     
     //  移动端推荐流 API (需要 access_token + appkey 签名)
     @GET("https://app.bilibili.com/x/v2/feed/index")
-    suspend fun getMobileFeed(@QueryMap params: Map<String, String>): MobileFeedResponse
+    suspend fun getMobileFeed(@QueryMap params: Map<String, String>, @retrofit2.http.Tag accountSession: AccountCookieSession? = null): MobileFeedResponse
 
     //  合并模式 App 半边专用: 参数已按 BiliPai/BiliPai 规范 percent-encode 后签名,
     //  用 encoded=true 原样发送, 避免 Retrofit 二次编码导致签名不一致(-403/-400)
     @GET("https://app.bilibili.com/x/v2/feed/index")
     suspend fun getMobileFeedEncoded(
-        @QueryMap(encoded = true) params: @JvmSuppressWildcards Map<String, String>
+        @QueryMap(encoded = true) params: @JvmSuppressWildcards Map<String, String>,
+        @retrofit2.http.Tag accountSession: AccountCookieSession? = null
     ): MobileFeedResponse
 
     @GET("https://app.bilibili.com/x/feed/dislike")
     suspend fun submitMobileFeedDislike(
-        @QueryMap params: Map<String, String>
+        @QueryMap params: Map<String, String>,
+        @retrofit2.http.Tag accountSession: AccountCookieSession? = null
     ): SimpleApiResponse
     
     @GET("x/web-interface/popular")
@@ -2008,7 +2019,7 @@ interface DynamicApi {
         @Query("x-bili-device-req-json") deviceRequestJson: String = "{\"platform\":\"web\",\"device\":\"pc\"}",
         @Query("x-bili-web-req-json") webRequestJson: String = "{\"spm_id\":\"333.1330\"}",
         @retrofit2.http.Body body: DynamicRepostRequest
-    ): SimpleApiResponse
+    ): DynamicCreateFeedResponse
 
     @retrofit2.http.POST("x/dynamic/feed/create/dyn")
     suspend fun createFeedDynamic(
@@ -3376,9 +3387,10 @@ object NetworkModule {
             // 普通第三方响应 Cookie 使用独立临时 jar；账号 Cookie 在网络入口绑定。
             .cookieJar(appSessionCookieJar)
             .addInterceptor { chain ->
-                val request = chain.request()
-                val session = AccountCookieSession.main().copy(
-                    explicitCookie = request.header("Cookie") != null || request.header(FORCE_COOKIE_HEADER) != null
+                val request = bindRequestAccountPurpose(chain.request())
+                val selectedSession = request.tag(AccountCookieSession::class.java) ?: AccountCookieSession.main()
+                val session = selectedSession.copy(
+                    explicitCookie = selectedSession.explicitCookie || request.header("Cookie") != null || request.header(FORCE_COOKIE_HEADER) != null
                 )
                 chain.proceed(request.newBuilder().tag(AccountCookieSession::class.java, session).build())
             }

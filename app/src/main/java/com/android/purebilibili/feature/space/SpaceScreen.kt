@@ -4348,7 +4348,11 @@ private fun SpaceHomeVideoCard(
             .onGloballyPositioned { coordinates ->
                 cardBounds = coordinates.boundsInRoot()
             }
-            .appActionClickable {
+            .appActionClickable spaceCardClick@{
+                if (CardPositionManager.isVideoNavigationDebounceActive()) {
+                    // 防抖窗口内的点击注定被导航层拒绝；不得覆写在飞转场的全局记录与冻结像素。
+                    return@spaceCardClick
+                }
                 cardBounds?.let { bounds ->
                     CardPositionManager.recordVideoCardPosition(
                         bvid = sharedTransitionKey.orEmpty(),
@@ -4563,7 +4567,11 @@ private fun SpaceAggregateMediaCard(
             .onGloballyPositioned { coordinates ->
                 cardBounds = coordinates.boundsInRoot()
             }
-            .appActionClickable {
+            .appActionClickable spaceCardClick@{
+                if (CardPositionManager.isVideoNavigationDebounceActive()) {
+                    // 防抖窗口内的点击注定被导航层拒绝；不得覆写在飞转场的全局记录与冻结像素。
+                    return@spaceCardClick
+                }
                 cardBounds?.let { bounds ->
                     CardPositionManager.recordVideoCardPosition(
                         bvid = sharedTransitionKey.orEmpty(),
@@ -4927,7 +4935,11 @@ private fun SpaceArchiveListItemRow(
             .onGloballyPositioned { coordinates ->
                 cardBounds = coordinates.boundsInRoot()
             }
-            .appActionClickable {
+            .appActionClickable spaceCardClick@{
+                if (CardPositionManager.isVideoNavigationDebounceActive()) {
+                    // 防抖窗口内的点击注定被导航层拒绝；不得覆写在飞转场的全局记录与冻结像素。
+                    return@spaceCardClick
+                }
                 cardBounds?.let { bounds ->
                     CardPositionManager.recordVideoCardPosition(
                         bvid = sharedTransitionKey.orEmpty(),

@@ -1,5 +1,8 @@
 package com.android.purebilibili.feature.home.components
 
+import com.android.purebilibili.core.player.withAppVideoDecoderDiagnostics
+import com.android.purebilibili.core.player.withAppVideoDecoderPreference
+
 import com.android.purebilibili.core.ui.AppContentColors
 
 import coil3.request.crossfade
@@ -382,8 +385,11 @@ fun DisposableVideoPlayer(
             mapOf("Referer" to "https://www.bilibili.com/", "User-Agent" to "Mozilla/5.0")
         )
         ExoPlayer.Builder(context)
+            .setRenderersFactory(
+                androidx.media3.exoplayer.DefaultRenderersFactory(context).withAppVideoDecoderPreference(context)
+            )
             .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(upstream))
-            .build().apply {
+            .build().withAppVideoDecoderDiagnostics(context).apply {
                 repeatMode = Player.REPEAT_MODE_ONE
                 volume = 0f
             }

@@ -8,10 +8,10 @@ on:
         type: choice
         description: '选择编译类型'
         required: true
-        default: 'dev'
+        default: 'release'
         options:
-          - 'dev'
           - 'release'
+          - 'dev'
 
 permissions:
   contents: write
@@ -68,10 +68,9 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "build_type=${{ github.event.inputs.build_type }}" >> $GITHUB_OUTPUT
-          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            echo "build_type=release" >> $GITHUB_OUTPUT
           else
-            echo "build_type=dev" >> $GITHUB_OUTPUT
+            # push 一律编译正式版：dev 包名的 google-services 客户端不在 FCM 密钥里。
+            echo "build_type=release" >> $GITHUB_OUTPUT
           fi
           echo "构建类型已设置"
   
@@ -126,6 +125,7 @@ jobs:
           BILI_RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
           COMMON_ARGS=(
+            "--max-workers=4"
             "-Pbili.build.commitSha=${BILI_BUILD_COMMIT_SHA}"
             "-Pbili.build.gitRef=${BILI_BUILD_GIT_REF}"
             "-Pbili.build.workflowRunId=${BILI_BUILD_WORKFLOW_RUN_ID}"

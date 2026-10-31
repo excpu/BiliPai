@@ -502,6 +502,7 @@ private fun VideoPlayerOverlayContent(
     state: VideoPlayerOverlayState,
     actions: VideoPlayerOverlayActions,
 ) {
+    val autoHide = com.android.purebilibili.feature.video.ui.overlay.rememberPlayerControlsAutoHide(4_000L)
     val levelGestureActive = LocalPlayerLevelGestureActive.current
     val player = state.player
     val title = state.title
@@ -1328,7 +1329,9 @@ private fun VideoPlayerOverlayContent(
         showCdnDiagnostics,
         danmakuComposerVisible,
         levelGestureActive,
+        autoHide.timeoutMillis,
     ) {
+        val timeout = autoHide.timeoutMillis ?: return@LaunchedEffect
         if (!danmakuComposerVisible && !levelGestureActive && !showCdnDiagnostics &&
             shouldAutoHideInlineControlsAfterDelay(
                 controlsVisible = isVisible,
@@ -1337,8 +1340,8 @@ private fun VideoPlayerOverlayContent(
                 floatingPanelVisible = bottomControlFloatingPanelVisible
             )
         ) {
-            delay(4000)
-            if (!danmakuComposerVisible && !levelGestureActive && !showCdnDiagnostics &&
+            delay(timeout)
+            if (autoHide.canHide() && !danmakuComposerVisible && !levelGestureActive && !showCdnDiagnostics &&
                 shouldAutoHideInlineControlsAfterDelay(
                     controlsVisible = isVisible,
                     isPlaying = effectiveIsPlaying,
@@ -1436,7 +1439,7 @@ private fun VideoPlayerOverlayContent(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize().playerActionBounds { playerBoundsInWindow = it }) {
+    Box(modifier = Modifier.then(autoHide.focusModifier).fillMaxSize().playerActionBounds { playerBoundsInWindow = it }) {
         if (!isFullscreen) {
             ImmersiveStatusBarBackdrop(
                 ambientFrame = statusBarAmbientFrame,
@@ -2315,6 +2318,16 @@ private fun VideoPlayerOverlayContent(
 
         if (showVideoSettings) {
             VideoSettingsPanel(
+                playerDiagnosticsEnabled = insightMode != PlayerSettingsStore.PlayerInsightMode.OFF,
+                onPlayerDiagnosticsChange = { enabled ->
+                    if (!enabled) showInsightDetails = false
+                    scope.launch {
+                        SettingsManager.setPlayerInsightMode(
+                            context,
+                            if (enabled) PlayerSettingsStore.PlayerInsightMode.ALWAYS else PlayerSettingsStore.PlayerInsightMode.OFF,
+                        )
+                    }
+                },
                 chapterDisplayMode = chapterDisplayMode,
                 onChapterDisplayModeChange = { mode ->
                     scope.launch { SettingsManager.setChapterDisplayMode(context, mode) }

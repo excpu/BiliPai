@@ -1,5 +1,8 @@
 package com.android.purebilibili.feature.download
 
+import com.android.purebilibili.core.player.withAppVideoDecoderDiagnostics
+import com.android.purebilibili.core.player.withAppVideoDecoderPreference
+
 import com.android.purebilibili.core.ui.AppContentColors
 
 import com.android.purebilibili.feature.video.ui.overlay.NextWatchOverlay
@@ -247,7 +250,13 @@ fun OfflineVideoPlayerScreen(
 
     // 创建播放器
     val player = remember(context, task.id, file.absolutePath) {
-        ExoPlayer.Builder(context).build()
+        ExoPlayer.Builder(context)
+            .setRenderersFactory(
+                com.android.purebilibili.core.player.HiResCompatibleRenderersFactory(context)
+                    .setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+                    .withAppVideoDecoderPreference(context)
+            )
+            .build().withAppVideoDecoderDiagnostics(context)
     }
     var playerView by remember(player) { mutableStateOf<PlayerView?>(null) }
     val lifecycleOwner = LocalLifecycleOwner.current

@@ -188,6 +188,10 @@ internal fun HomeStyleSingleColumnVideoCard(
             .build()
     }
     val triggerClick by rememberUpdatedState(appActionWithFeedback {
+        if (CardPositionManager.isVideoNavigationDebounceActive()) {
+            // 防抖窗口内的点击注定被导航层拒绝；不得覆写在飞转场的全局记录与冻结像素。
+            return@appActionWithFeedback
+        }
         cardBounds.value?.let { bounds ->
             val sourceCoverBounds = coverBounds.value
             CardPositionManager.recordVideoCardPosition(
@@ -287,7 +291,10 @@ internal fun HomeStyleSingleColumnVideoCard(
         },
         coverOverlayModifier = nativeCardSnapshot.coverOverlayModifier,
         coverContent = {
-            AsyncImage(
+            com.android.purebilibili.core.ui.components.PageAwareAsyncImage(
+                dimInDarkTheme = true,
+                loadingAllowed = com.android.purebilibili.feature.home.LocalHomeCardCoverLoadingAllowed.current
+                    ?: com.android.purebilibili.core.ui.components.LocalPageImageLoadingAllowed.current,
                 model = coverRequest,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,

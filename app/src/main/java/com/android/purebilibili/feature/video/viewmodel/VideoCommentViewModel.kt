@@ -508,7 +508,8 @@ class VideoCommentViewModel : ViewModel() {
                 CommentRepository.getMobileCommentsForSubject(
                     oid = requestSubject.oid, type = requestSubject.type, page = request.page,
                     ps = VIDEO_COMMENT_PAGE_SIZE, mode = currentState.sortMode.apiMode,
-                    continuation = request.continuation, fallbackOnMissingLocation = requestSubject.type == 1
+                    continuation = request.continuation, fallbackOnMissingLocation = requestSubject.type == 1,
+                    expectedCount = currentState.replyCount.takeIf { currentState.replyCountSubject == requestSubject } ?: 0,
                 ).getOrThrow()
             },
             onPage = success@ { request, data ->
@@ -1228,20 +1229,9 @@ class VideoCommentViewModel : ViewModel() {
                 // [新增] 启动评论反诈检测（后台协程，不阻塞 UI）
                 val rpidToCheck = newReply?.rpid ?: 0L
                 if (rpidToCheck > 0L) {
-                    // 💾 发评成功瞬间立即在本地数据库记一笔
-                    viewModelScope.launch {
-                        com.android.purebilibili.data.repository.CommentFraudRepository.saveRecord(
-                            rpid = rpidToCheck,
-                            oid = sendSubject.oid,
-                            type = sendSubject.type,
-                            root = root,
-                            message = message,
-                            status = com.android.purebilibili.data.model.CommentFraudStatus.NORMAL
-                        )
-                    }
-                    
+                    // 成功发布的元数据由宿主回调统一保存，这里只发起可见性检测。
                     val sentAtSeconds = newReply?.ctime?.takeIf { it > 0L } ?: (System.currentTimeMillis() / 1000L)
-                    launchFraudDetection(
+                    if (sendSubject.type == 1) launchFraudDetection(
                         aid = sendCurrentAid,
                         rpid = rpidToCheck,
                         rootId = root,

@@ -1994,6 +1994,9 @@ internal fun VideoDetailScreenStateHolder(
             initialValue = false,
             lifecycle = lifecycleOwner.lifecycle
         )
+    val rotationSensitivity by remember(context) {
+        com.android.purebilibili.core.store.ContentDisplayPreferences.rotationSensitivity(context)
+    }.collectAsStateWithLifecycle(initialValue = com.android.purebilibili.core.util.PlayerRotationSensitivity.STANDARD)
     // 横屏保持：自动进入横屏后不随倾回竖屏退出全屏，仅手动退出。
     val landscapeHoldEnabled by remember(context) {
         com.android.purebilibili.core.store.SettingsManager.getLandscapeHoldEnabled(context)
@@ -2951,6 +2954,7 @@ internal fun VideoDetailScreenStateHolder(
         orientationRequestsAllowed,
         userRequestedFullscreen,
         landscapeHoldEnabled,
+        rotationSensitivity,
     ) {
         val hostActivity = activity
         if (
@@ -2993,6 +2997,11 @@ internal fun VideoDetailScreenStateHolder(
                     orientationDegrees = orientation,
                     isCurrentlyLandscape = isCurrentlyLandscape,
                     landscapeHoldEnabled = landscapeHoldEnabled,
+                    portraitSnapDegrees = rotationSensitivity.thresholds.portraitSnap,
+                    landscapeEnterMinDegrees = rotationSensitivity.thresholds.landscapeEnterMin,
+                    landscapeEnterMaxDegrees = rotationSensitivity.thresholds.landscapeEnterMax,
+                    landscapeKeepMinDegrees = rotationSensitivity.thresholds.landscapeKeepMin,
+                    landscapeKeepMaxDegrees = rotationSensitivity.thresholds.landscapeKeepMax,
                     useExactLandscapeSide = orientationPolicyDevice,
                     // A manual fullscreen press can happen while the device is still upright.
                     // Wait for one physical landscape observation before allowing the sensor

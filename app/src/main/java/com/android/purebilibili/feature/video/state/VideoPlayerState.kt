@@ -3,6 +3,9 @@
 
 package com.android.purebilibili.feature.video.state
 
+import com.android.purebilibili.core.player.withAppVideoDecoderDiagnostics
+import com.android.purebilibili.core.player.withAppVideoDecoderPreference
+
 import com.android.purebilibili.feature.video.player.MiniPlayerManager
 import com.android.purebilibili.feature.video.VideoActivity
 import com.android.purebilibili.feature.video.viewmodel.VideoPlaybackViewModel
@@ -62,6 +65,7 @@ import com.android.purebilibili.feature.video.viewmodel.resolvePlaybackCompletio
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -549,7 +553,16 @@ class VideoPlayerState(
     val apiDimension: StateFlow<Pair<Int, Int>?> = _apiDimension.asStateFlow()
 
     private val _debugInfo = MutableStateFlow(PlaybackDebugInfo())
-    val debugInfo: StateFlow<PlaybackDebugInfo> = _debugInfo.asStateFlow()
+    val debugInfo: StateFlow<PlaybackDebugInfo> = kotlinx.coroutines.flow.combine(
+        _debugInfo, com.android.purebilibili.core.player.VideoDecoderDiagnostics.observe(player)
+    ) { info, decoder ->
+        info.copy(
+            videoDecoder = decoder.decoderName,
+            videoDecoderType = decoder.kind.label,
+            videoDecoderPreference = decoder.preference,
+            videoDecoderFallbackReason = decoder.fallbackReason,
+        )
+    }.stateIn(scope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(0), PlaybackDebugInfo())
     /** 当前解码视频格式，供需要严格旁路 HDR 的输出效果使用。 */
     private val _videoInputFormat = MutableStateFlow<Format?>(null)
     val videoInputFormat: StateFlow<Format?> = _videoInputFormat.asStateFlow()
@@ -1096,7 +1109,6 @@ fun rememberVideoPlayerState(
                 .build()
 
             //  [性能优化] 使用 PlayerSettingsCache 直接从内存读取，避免 I/O
-            val hwDecodeEnabled = com.android.purebilibili.core.store.PlayerSettingsCache.isHwDecodeEnabled(context)
             val seekFastEnabled = com.android.purebilibili.core.store.PlayerSettingsCache.isSeekFastEnabled(context)
             val miniPlayerMode = SettingsManager.getMiniPlayerModeSync(context)
             val stopPlaybackOnExit = SettingsManager.getStopPlaybackOnExitSync(context)
@@ -1112,17 +1124,10 @@ fun rememberVideoPlayerState(
                     "firstQuarterMax=${bufferPolicy.earlyPlaybackMaxBufferMs}"
             )
 
-            //  根据设置选择 RenderersFactory
-            val renderersFactory = if (hwDecodeEnabled) {
-                // 平台解码器优先；平台不支持 E-AC-3 时才使用应用内置 FFmpeg。
-                HiResCompatibleRenderersFactory(context)
-                    .setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
-            } else {
-                // 关闭硬件视频偏好时仍保留 E-AC-3 软件音频兜底。
-                HiResCompatibleRenderersFactory(context)
-                    .setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
-                    .setEnableDecoderFallback(true)
-            }
+            // 视频解码偏好与音频兼容扩展独立配置，所有视频播放入口共用同一策略。
+            val renderersFactory = HiResCompatibleRenderersFactory(context)
+                .setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+                .withAppVideoDecoderPreference(context)
 
             ExoPlayer.Builder(context)
                 .setRenderersFactory(renderersFactory)
@@ -1150,7 +1155,7 @@ fun rememberVideoPlayerState(
                         stopPlaybackOnExit = stopPlaybackOnExit
                     )
                 )
-                .build()
+                .build().withAppVideoDecoderDiagnostics(context)
                 .apply {
                     //  [修复] 确保音量正常，解决第二次播放静音问题
                     //  如果 startPaused 为 true，则静音

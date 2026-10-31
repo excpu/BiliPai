@@ -53,6 +53,28 @@ internal class WholeCardReturnSnapshot(
  */
 object CardPositionManager {
     private val videoCardSourceInstanceSequence = AtomicLong(0L)
+
+    /**
+     * 导航层最近一次真正放行跳转的时间戳（[System.currentTimeMillis]）。
+     *
+     * 卡片点击会先同步覆写“最后点击卡片”记录，之后才进入导航防抖；被防抖拒绝的相邻点击
+     * 同样会清空在飞转场的冻结像素并翻转全局 key，飞行详情被迫退化到重建信息板。
+     * 卡片在记录前必须先用同一时钟、同一窗口判断本次点击是否注定被拒绝，被拒绝时不得
+     * 触碰全局转场记录。窗口值与 [com.android.purebilibili.navigation.AppTopLevelNavigationPolicy]
+     * 的防抖参数保持一致。
+     */
+    @Volatile
+    private var lastNavigationGrantedMillis: Long = 0L
+
+    internal fun recordNavigationDebounceGrant(grantedMillis: Long) {
+        lastNavigationGrantedMillis = grantedMillis
+    }
+
+    fun isVideoNavigationDebounceActive(
+        nowMillis: Long = System.currentTimeMillis(),
+        debounceWindowMillis: Long = 300L,
+    ): Boolean = nowMillis - lastNavigationGrantedMillis <= debounceWindowMillis
+
     
     /**
      * 最后点击的卡片边界（在 Root 坐标系中）

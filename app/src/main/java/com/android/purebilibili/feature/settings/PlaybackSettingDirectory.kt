@@ -34,7 +34,7 @@ internal fun settingItemTitle(settingId: String, context: Context): String = whe
 
 internal val playbackSettingDirectory = listOf(
     PlaybackSettingItem("playback.native_miuix_player_popups", "使用小米风格弹窗", SettingsRootCategory.VIDEO_DECODER, SettingsSearchFocusIds.PLAYBACK_DECODER, { context -> com.android.purebilibili.core.store.player.PlayerSettingsStore .getNativeMiuixPlayerPopups(context).map { if (it) "开启" else "关闭" } }),
-    PlaybackSettingItem("playback.hw_decode", "启用硬件解码", SettingsRootCategory.VIDEO_DECODER, SettingsSearchFocusIds.PLAYBACK_DECODER, null),
+    PlaybackSettingItem("playback.hw_decode", "优先硬件解码", SettingsRootCategory.VIDEO_DECODER, SettingsSearchFocusIds.PLAYBACK_DECODER, null, aliases = listOf("启用硬件解码", "软解", "软件解码", "硬解")),
     PlaybackSettingItem("playback.remember_last_playback_speed", "记住上次倍速", SettingsRootCategory.PLAYBACK_QUALITY, SettingsSearchFocusIds.PLAYBACK_SPEED, { context -> com.android.purebilibili.core.store.SettingsManager .getRememberLastPlaybackSpeed(context).map { if (it) "开启" else "关闭" } }),
     PlaybackSettingItem("playback.long_press_speed_hint_hidden", "隐藏长按倍速提示", SettingsRootCategory.PLAYBACK_QUALITY, SettingsSearchFocusIds.PLAYBACK_SPEED, { context -> com.android.purebilibili.core.store.SettingsManager .getLongPressSpeedHintHidden(context).map { if (it) "开启" else "关闭" } }),
     PlaybackSettingItem("playback.stop_playback_on_exit", "离开播放页后停止", SettingsRootCategory.PLAYBACK_QUALITY, SettingsSearchFocusIds.PLAYBACK_MINI_PLAYER, { context -> com.android.purebilibili.core.store.SettingsManager .getStopPlaybackOnExit(context).map { if (it) "开启" else "关闭" } }),
@@ -135,7 +135,7 @@ internal fun playbackSettingTitle(settingId: String): String =
     playbackSettingDirectory.first { it.settingId == settingId }.title
 
 internal fun playbackSettingStateValue(settingId: String, state: SettingsUiState): String = when (settingId) {
-    "playback.hw_decode" -> if (state.hwDecode) "开启" else "关闭"
+    "playback.hw_decode" -> if (state.hwDecode) "硬件优先" else "软件优先"
     "playback.double_tap_like" -> if (state.doubleTapLike) "开启" else "关闭"
     "playback.auto_skip_op_ed" -> if (state.autoSkipOpEd) "开启" else "关闭"
     else -> ""

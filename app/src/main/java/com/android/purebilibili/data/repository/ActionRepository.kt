@@ -343,13 +343,18 @@ object ActionRepository {
         reason: RecommendationFeedbackReason
     ): Result<Unit> = withContext(Dispatchers.IO) {
         TokenManager.awaitRestore()
-        val accessToken = TokenManager.accessTokenCache
+        val account = try {
+            com.android.purebilibili.core.network.purposeAccount(com.android.purebilibili.core.store.AccountPurpose.RECOMMENDATION)
+        } catch (e: java.io.IOException) { return@withContext Result.failure(e) }
+        val session = account?.let { com.android.purebilibili.core.network.AccountCookieSession.from(it) }
+            ?: com.android.purebilibili.core.network.AccountCookieSession.main()
+        val accessToken = (if (account != null) account.accessToken else TokenManager.accessTokenCache)
             ?.takeIf { it.isNotBlank() }
             ?: return@withContext Result.failure(Exception("缺少移动端登录凭证"))
         val request = buildRecommendationFeedbackRequest(metadata, reason)
             ?: return@withContext Result.failure(Exception("当前推荐不支持服务器同步"))
         try {
-            val tokenPlatform = TokenManager.accessTokenPlatformCache
+            val tokenPlatform = account?.accessTokenPlatform ?: TokenManager.accessTokenPlatformCache
             val params = buildRecommendationFeedbackParams(
                 request = request,
                 accessToken = accessToken,
@@ -361,7 +366,7 @@ object ActionRepository {
                 TokenManager.ACCESS_TOKEN_PLATFORM_ANDROID -> AppSignUtils.signForAndroidApi(params)
                 else -> AppSignUtils.signForTvLogin(params)
             }
-            val response = api.submitMobileFeedDislike(signed)
+            val response = api.submitMobileFeedDislike(signed, session)
             if (response.code != 0) {
                 throw Exception(response.message.ifBlank { "反馈失败: ${response.code}" })
             }

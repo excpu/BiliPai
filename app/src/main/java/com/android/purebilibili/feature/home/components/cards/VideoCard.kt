@@ -1070,6 +1070,10 @@ internal fun ElegantVideoCard(
         }
 
     val triggerCardClick by rememberUpdatedState(appActionWithFeedback {
+        if (CardPositionManager.isVideoNavigationDebounceActive()) {
+            // 防抖窗口内的点击注定被导航层拒绝；不得覆写在飞转场的全局记录与冻结像素。
+            return@appActionWithFeedback
+        }
         cardCoordsRef.value?.takeIf { it.isAttached }?.videoCardSourceBoundsInRoot()?.let { bounds ->
             val sourceCoverBounds = coverCoordsRef.value
                 ?.takeIf { it.isAttached }
@@ -1521,6 +1525,7 @@ internal fun ElegantVideoCard(
             }
             PageAwareAsyncImage(
                 model = coverImageRequest,
+                dimInDarkTheme = true,
                 loadingAllowed = LocalHomeCardCoverLoadingAllowed.current
                     ?: LocalPageImageLoadingAllowed.current,
                 contentDescription = null,

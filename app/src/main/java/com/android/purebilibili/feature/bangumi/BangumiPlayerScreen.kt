@@ -1,6 +1,9 @@
 // 文件路径: feature/bangumi/BangumiPlayerScreen.kt
 package com.android.purebilibili.feature.bangumi
 
+import com.android.purebilibili.core.player.withAppVideoDecoderDiagnostics
+import com.android.purebilibili.core.player.withAppVideoDecoderPreference
+
 import com.android.purebilibili.core.ui.motion.AppMotionEasing
 import com.android.purebilibili.core.ui.AppContentColors
 import com.android.purebilibili.core.ui.components.appElasticPress
@@ -92,6 +95,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.lerp
+import androidx.lifecycle.compose.currentStateAsState
 import com.android.purebilibili.core.store.PortraitPlayerCollapseMode
 import com.android.purebilibili.feature.bangumi.ui.player.BangumiCollapsedPlayerBar
 import com.android.purebilibili.feature.video.policy.reduceVideoDetailPostScroll
@@ -241,6 +245,15 @@ fun BangumiPlayerScreen(
     val autoRotateEnabled by com.android.purebilibili.core.store.SettingsManager
         .getAutoRotateEnabled(context).collectAsStateWithLifecycle(initialValue = false)
     // The app switch explicitly opts into sensor rotation, independently of the system lock.
+    val rotationLifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val rotationLifecycle by rotationLifecycleOwner.lifecycle.currentStateAsState()
+    val rotationWindowInfo = androidx.compose.ui.platform.LocalWindowInfo.current
+    val rotationWindowFocused = rotationWindowInfo.isWindowFocused
+    val rotationSensitivity by remember(context) {
+        com.android.purebilibili.core.store.ContentDisplayPreferences.rotationSensitivity(context)
+    }.collectAsStateWithLifecycle(initialValue = com.android.purebilibili.core.util.PlayerRotationSensitivity.STANDARD)
+    val landscapeHoldEnabled by remember(context) { com.android.purebilibili.core.store.SettingsManager.getLandscapeHoldEnabled(context) }
+        .collectAsStateWithLifecycle(initialValue = false)
     val sensorAutoRotateEnabled = autoRotateEnabled
 
     // 创建 ExoPlayer
@@ -256,8 +269,9 @@ fun BangumiPlayerScreen(
                     .setExtensionRendererMode(
                         androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
                     )
+                    .withAppVideoDecoderPreference(context)
             )
-            .build()
+            .build().withAppVideoDecoderDiagnostics(context)
             .apply {
                 playWhenReady = true
             }
@@ -782,15 +796,65 @@ fun BangumiPlayerScreen(
         isPlayerScreenLocked,
         sensorAutoRotateEnabled,
         isInPipMode,
+        rotationSensitivity,
+        landscapeHoldEnabled,
+        rotationLifecycle,
+        rotationWindowFocused,
     ) {
-        if (isInPipMode || !sensorAutoRotateEnabled || isPlayerScreenLocked) return@DisposableEffect onDispose {}
+        if (isInPipMode || !sensorAutoRotateEnabled || isPlayerScreenLocked ||
+            !rotationLifecycle.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) || !rotationWindowFocused
+        ) return@DisposableEffect onDispose {}
         val activity = context.findActivity()
         var lastPortraitAppliedAtMs = 0L
+        var lastLandscapeAppliedAtMs: Long? = null
         val orientationEventListener = object : android.view.OrientationEventListener(context) {
             private var lastOrientation = -1
 
             override fun onOrientationChanged(orientation: Int) {
-                if (orientation == ORIENTATION_UNKNOWN) return
+                if (!rotationLifecycleOwner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED) ||
+                    !rotationWindowInfo.isWindowFocused || orientation == ORIENTATION_UNKNOWN
+                ) return
+                if (rotationSensitivity != com.android.purebilibili.core.util.PlayerRotationSensitivity.STANDARD) {
+                    val thresholds = rotationSensitivity.thresholds
+                    val candidate = com.android.purebilibili.feature.video.screen.resolvePhoneAutoRotateRequestedOrientation(
+                        orientationDegrees = orientation,
+                        isCurrentlyLandscape = latestIsLandscape,
+                        landscapeHoldEnabled = landscapeHoldEnabled,
+                        allowPortraitTransitions = com.android.purebilibili.feature.video.screen.shouldAllowPhoneSensorPortraitTransition(
+                            autoRotateEnabled = sensorAutoRotateEnabled,
+                            manualFullscreenRequested = userRequestedFullscreen,
+                        ),
+                        portraitSnapDegrees = thresholds.portraitSnap,
+                        landscapeEnterMinDegrees = thresholds.landscapeEnterMin,
+                        landscapeEnterMaxDegrees = thresholds.landscapeEnterMax,
+                        landscapeKeepMinDegrees = thresholds.landscapeKeepMin,
+                        landscapeKeepMaxDegrees = thresholds.landscapeKeepMax,
+                    )
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    val target = com.android.purebilibili.feature.video.screen.resolvePhoneAutoRotateTargetToApply(
+                        candidateOrientation = candidate,
+                        lastLandscapeAppliedAtMs = lastLandscapeAppliedAtMs,
+                        lastPortraitAppliedAtMs = lastPortraitAppliedAtMs.takeIf { it > 0L },
+                        nowMs = now,
+                    ) ?: return
+                    activity?.let { act ->
+                        if (com.android.purebilibili.feature.video.screen.shouldReleaseManualFullscreenRequestAfterSensorTarget(
+                                manualFullscreenRequested = userRequestedFullscreen,
+                                sensorTargetOrientation = target,
+                                autoRotateEnabled = sensorAutoRotateEnabled,
+                            )) userRequestedFullscreen = false
+                        if (act.requestedOrientation != target) {
+                            if (target == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) {
+                                userRequestedFullscreen = false
+                                lastPortraitAppliedAtMs = now
+                            } else {
+                                lastLandscapeAppliedAtMs = now
+                            }
+                            act.applyPlayerRequestedOrientation(target, displayContext = displayContext)
+                        }
+                    }
+                    return
+                }
 
                 val newOrientation = when (orientation) {
                     in 315..360, in 0..45 -> 0   // Portrait
@@ -807,7 +871,7 @@ fun BangumiPlayerScreen(
 
                     activity?.let { act ->
                         val now = android.os.SystemClock.elapsedRealtime()
-                        if (latestIsLandscape && isUprightPortrait) {
+                        if (latestIsLandscape && isUprightPortrait && !landscapeHoldEnabled) {
                             if (now - lastPortraitAppliedAtMs >= 700L) {
                                 lastPortraitAppliedAtMs = now
                                 userRequestedFullscreen = false

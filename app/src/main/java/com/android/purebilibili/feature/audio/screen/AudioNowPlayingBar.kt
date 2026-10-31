@@ -255,17 +255,25 @@ internal fun AudioNowPlayingBar(
             }
         }
 
-        val handleExpand = {
+        val handleExpand = nowPlayingBarExpand@{
             if (onCompactClick != null) {
                 onCompactClick()
             } else if (!captureCardSourceOnExpand && !captureInProgress &&
                 canOpenAudioNowPlayingBarSource(isLayoutStable)
             ) {
+                if (CardPositionManager.isVideoNavigationDebounceActive()) {
+                    // 防抖窗口内的点击注定被导航层拒绝；不得覆写在飞转场的全局记录与冻结像素。
+                    return@nowPlayingBarExpand
+                }
                 // 听视频页使用普通导航，不等待仅供视频详情形变使用的来源快照。
                 onExpand()
             } else if (captureCardSourceOnExpand && !captureInProgress &&
                 canOpenAudioNowPlayingBarSource(isLayoutStable)
             ) {
+                if (CardPositionManager.isVideoNavigationDebounceActive()) {
+                    // 防抖窗口内的点击注定被导航层拒绝；不得覆写在飞转场的全局记录与冻结像素。
+                    return@nowPlayingBarExpand
+                }
                 barCoordsRef[0]?.takeIf { it.isAttached }?.boundsInRoot()?.let { bounds ->
                     val sourceCoverBounds = coverCoordsRef[0]?.takeIf { it.isAttached }?.boundsInRoot()
                     val effectiveSourceLayout = if (iconOnlyProgress() >= 0.99f) {

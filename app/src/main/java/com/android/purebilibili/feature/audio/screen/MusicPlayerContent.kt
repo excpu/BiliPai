@@ -9,7 +9,6 @@ import com.android.purebilibili.core.ui.AppContentColors
 
 import com.android.purebilibili.core.ui.components.appSearchElasticPress
 import top.yukonga.miuix.kmp.window.WindowListPopup
-import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.ListPopupDefaults
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
 
@@ -1633,7 +1632,12 @@ internal fun MusicPlayerContent(
                                 enableWindowDim = false,
                                 maxHeight = 440.dp,
                             ) {
-                                ListPopupColumn { actionsContent() }
+                                Column(
+                                    modifier = Modifier
+                                        .widthIn(max = 288.dp)
+                                        .heightIn(max = 440.dp)
+                                        .verticalScroll(rememberScrollState()),
+                                ) { actionsContent() }
                             }
                         }
                     }

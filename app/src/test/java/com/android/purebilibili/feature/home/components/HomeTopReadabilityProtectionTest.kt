@@ -10,8 +10,11 @@ class HomeTopReadabilityProtectionTest {
     fun searchStaysLightWhileLastTabRowIsProtectedAndTrailingEdgeClears() {
         val stops = homeTopReadabilityStops(152f, 104f, 152f, 196f, 16f, 0.24f, 1f)
         assertEquals(0.24f, stops.first().second, 0.0001f)
-        assertEquals(0.65f, stops.first { it.first == 104f / 196f }.second, 0.0001f)
-        assertEquals(0.65f, stops.first { it.first == 152f / 196f }.second, 0.0001f)
+        val centerAlpha = stops.first { it.first == 128f / 196f }.second
+        assertEquals(0.32f, centerAlpha, 0.0001f)
+        assertTrue(stops.first { it.first == 104f / 196f }.second < centerAlpha)
+        assertTrue(stops.first { it.first == 152f / 196f }.second < centerAlpha)
+        assertTrue(stops.all { it.second in 0f..0.32f })
         assertEquals(0f, stops.last().second, 0.0001f)
         assertTrue(stops.zipWithNext().all { (a, b) -> a.first < b.first })
     }
@@ -19,7 +22,8 @@ class HomeTopReadabilityProtectionTest {
     @Test
     fun tabsBeforeSearchDoNotApplyTheirStrongProtectionAcrossTheSearchRow() {
         val stops = homeTopReadabilityStops(152f, 24f, 64f, 196f, 16f, 0.24f, 1f)
-        assertEquals(0.65f, stops.first { it.first == 64f / 196f }.second, 0.0001f)
+        assertEquals(0.32f, stops.first { it.first == 44f / 196f }.second, 0.0001f)
+        assertTrue(stops.first { it.first == 64f / 196f }.second < 0.32f)
         assertEquals(0.24f, stops.first { it.first == 80f / 196f }.second, 0.0001f)
     }
 

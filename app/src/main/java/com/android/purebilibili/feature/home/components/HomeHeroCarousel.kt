@@ -413,7 +413,11 @@ private fun HomeHeroCarouselCard(
     }
 
     // 记录源卡位置后进入详情。
-    val clickAction: () -> Unit = {
+    val clickAction: () -> Unit = heroCardClick@{
+        if (CardPositionManager.isVideoNavigationDebounceActive()) {
+            // 防抖窗口内的点击注定被导航层拒绝；不得覆写在飞转场的全局记录与冻结像素。
+            return@heroCardClick
+        }
         cardCoordsRef.value?.takeIf { it.isAttached }?.boundsInRoot()?.let { bounds ->
             CardPositionManager.recordVideoCardPosition(
                 bvid = video.bvid,

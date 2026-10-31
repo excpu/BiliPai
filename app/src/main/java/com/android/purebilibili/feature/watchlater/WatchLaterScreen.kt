@@ -1222,6 +1222,13 @@ fun WatchLaterScreen(
                                     groups = listOf(
                                         listOf(
                                             AppWindowAction(
+                                                label = "管理",
+                                                onClick = {
+                                                    selectedBvids = emptySet()
+                                                    isBatchMode = true
+                                                },
+                                            ),
+                                            AppWindowAction(
                                                 label = "全部听",
                                                 enabled = !state.isManaging,
                                                 onClick = {
@@ -1553,7 +1560,6 @@ fun WatchLaterScreen(
                                                         isBatchMode = isBatchMode,
                                                         isSelected = isSelected,
                                                         transitionEnabled = pageActive && homeSettings.cardTransitionEnabled,
-                                                        onDelete = { viewModel.startVideoDissolve(item.bvid) },
                                                         onLongClick = {
                                                             isBatchMode = true
                                                             selectedBvids = selectedBvids + item.bvid
@@ -1760,7 +1766,6 @@ private fun WatchLaterVideoCard(
     isBatchMode: Boolean,
     isSelected: Boolean,
     transitionEnabled: Boolean,
-    onDelete: () -> Unit,
     onLongClick: () -> Unit,
     onClick: () -> Unit
 ) {
@@ -1810,8 +1815,12 @@ private fun WatchLaterVideoCard(
             .build()
     }
     val cardCornerRadiusDp = AppShapes.containerCornerDp(ContainerLevel.Card).value.toInt()
-    val cardClick = {
+    val cardClick = watchLaterCardClick@{
         if (!isBatchMode) {
+            if (CardPositionManager.isVideoNavigationDebounceActive()) {
+                // 防抖窗口内的点击注定被导航层拒绝；不得覆写在飞转场的全局记录与冻结像素。
+                return@watchLaterCardClick
+            }
             cardBoundsRef.value?.let { bounds ->
                 val sourceCoverBounds = coverBoundsRef.value
                 CardPositionManager.recordVideoCardPosition(
@@ -1834,7 +1843,7 @@ private fun WatchLaterVideoCard(
                             .resolveVideoCardSourceInfoPresentation(
                                 publishTimeText = "",
                                 showStatsInInfo = true,
-                                showOverflowMenu = !isBatchMode,
+                                showOverflowMenu = false,
                             ),
                         coverPresentation = VideoCardSourceCoverPresentation(
                             showDurationOnCover = true,
@@ -1921,30 +1930,10 @@ private fun WatchLaterVideoCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                // 多列时仅统计行给删除按钮留位，标题和作者使用完整宽度。
-                // 这是布局修复，玻璃、MD3 与 Miuix 共用；单列保留原有侧边操作。
-                if (stacked) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        HorizontalVideoStatRow(
-                            playText = formatNumber(item.stat.view),
-                            danmakuText = formatNumber(item.stat.danmaku),
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (!isBatchMode) {
-                            AppIconButton(enabled = enabled, onClick = onDelete) {
-                                AppIcon(Icons.Rounded.Close, contentDescription = "删除")
-                            }
-                        }
-                    }
-                } else {
-                    HorizontalVideoStatRow(
-                        playText = formatNumber(item.stat.view),
-                        danmakuText = formatNumber(item.stat.danmaku),
-                    )
-                }
+                HorizontalVideoStatRow(
+                    playText = formatNumber(item.stat.view),
+                    danmakuText = formatNumber(item.stat.danmaku),
+                )
             }
         },
         coverContent = {
@@ -1976,16 +1965,6 @@ private fun WatchLaterVideoCard(
                 )
             }
             com.android.purebilibili.feature.personal.PersonalCardSelectMask(selected = isSelected)
-        },
-        trailingContent = if (stacked || isBatchMode) null else {
-            {
-                AppIconButton(
-                    enabled = enabled,
-                    onClick = onDelete,
-                ) {
-                    AppIcon(Icons.Rounded.Close, contentDescription = "删除")
-                }
-            }
         },
         onClick = cardClick,
         onLongClick = onLongClick,

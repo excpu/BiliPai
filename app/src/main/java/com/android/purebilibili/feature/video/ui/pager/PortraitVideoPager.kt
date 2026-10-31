@@ -5,6 +5,9 @@
 
 package com.android.purebilibili.feature.video.ui.pager
 
+import com.android.purebilibili.core.player.withAppVideoDecoderDiagnostics
+import com.android.purebilibili.core.player.withAppVideoDecoderPreference
+
 import com.android.purebilibili.feature.video.ui.gesture.detectPlayerTapGestures
 import com.android.purebilibili.feature.video.danmaku.resolvePortraitDanmakuUpperRegion
 import com.android.purebilibili.feature.video.danmaku.resolveDanmakuLayerLineHeightPx
@@ -805,6 +808,7 @@ fun PortraitVideoPager(
                     .setExtensionRendererMode(
                         androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
                     )
+                    .withAppVideoDecoderPreference(context)
             )
             .setAudioAttributes(
                 androidx.media3.common.AudioAttributes.Builder()
@@ -813,7 +817,7 @@ fun PortraitVideoPager(
                     .build(),
                 resolveHandleAudioFocusByPolicy(audioFocusEnabled = audioFocusEnabled)
             )
-            .build()
+            .build().withAppVideoDecoderDiagnostics(context)
             .apply {
                 repeatMode = resolvePortraitPagerRepeatMode()
                 volume = com.android.purebilibili.core.player.PlayerVolumeController
@@ -2914,11 +2918,13 @@ private fun VideoPageItem(
     }
     // User activity and blocking overlays restart the countdown; playback-position
     // polling does not. Hidden controls stay hidden until the existing tap gesture.
-    LaunchedEffect(bvid, autoHidePortraitControls, controlsInteractionGeneration) {
+    val autoHide = com.android.purebilibili.feature.video.ui.overlay.rememberPlayerControlsAutoHide(PORTRAIT_CONTROLS_AUTO_HIDE_DELAY_MS)
+    LaunchedEffect(bvid, autoHidePortraitControls, controlsInteractionGeneration, autoHide.timeoutMillis) {
+        val timeout = autoHide.timeoutMillis ?: return@LaunchedEffect
         if (!autoHidePortraitControls) return@LaunchedEffect
-        delay(PORTRAIT_CONTROLS_AUTO_HIDE_DELAY_MS)
+        delay(timeout)
         // A down event can arrive before recomposition cancels this effect.
-        if (!controlsPointerPressed && !isLongPressing && !seekSession.isSliderMoving) {
+        if (autoHide.canHide() && !controlsPointerPressed && !isLongPressing && !seekSession.isSliderMoving) {
             latestOnPortraitOverlayVisibleChange(false)
         }
     }
@@ -2986,6 +2992,7 @@ private fun VideoPageItem(
     val danmakuTapCoordinates = remember { mutableStateOf<LayoutCoordinates?>(null) }
     Box(
         modifier = Modifier
+            .then(autoHide.focusModifier)
             .fillMaxSize()
             .background(Color.Black)
             .onGloballyPositioned { danmakuTapCoordinates.value = it }
