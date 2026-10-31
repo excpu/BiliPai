@@ -24,6 +24,7 @@ import com.android.purebilibili.core.ui.rememberContentCardSurfaceSpec
 
 import com.android.purebilibili.core.ui.OpticalContrastPalette
 import com.android.purebilibili.feature.home.HomeVisualPalette
+import com.android.purebilibili.feature.home.resolveHomeTabsToContentTighteningDp
 import com.android.purebilibili.feature.home.resolveHomeTopSearchRowMetrics
 
 import android.os.Build
@@ -2179,7 +2180,31 @@ fun HomeHeader(
     // 首页顶栏遮罩改为纯色背景：不再透出壁纸，也只延伸到分类行下方一点点，剩余区域交给内容本身。
     // 关闭"顶栏纯色渐变"后仍保留原有的渐进模糊材质。
     val useSolidTopChromeMask = nativeProgressiveLayout && isProgressiveFadeActive
-    val solidTopChromeMaskHeight = protectionContentBottom + AppSpacingTokens.ExtraSmall
+    // 列表内容顶边相对 chrome 底边的留白，与 HomeScreen.listTopPadding 保持同一算法。
+    val solidTopChromeContentGap = (if (hideTopTabs) {
+        AppSpacingTokens.Small
+    } else {
+        (resolveHomeTopTabsToContentSpacing(topChromePolicy) +
+            (if (embedTopTabsInUnifiedPanel) {
+                AppSpacingTokens.None
+            } else {
+                resolveHomeTopTabYOffsetDp(isTabFloating).dp
+            }) -
+            resolveHomeTabsToContentTighteningDp(
+                uiStyle = LocalAppUiStyle.current,
+                liquidGlassEnabled = topChromeLiquidGlassEnabled,
+            )).coerceAtLeast(AppSpacingTokens.None)
+    }) + if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S) {
+        AppSpacingTokens.Medium
+    } else {
+        AppSpacingTokens.None
+    }
+    // MD3 的收紧量会把该留白夹到 0（内容紧贴 chrome），此时遮罩不能再向下延伸，
+    // 否则会压住首张卡片封面的顶端；其余风格留白 >= 4dp，行为与之前完全一致。
+    val solidTopChromeMaskHeight = maxOf(
+        protectionContentBottom + minOf(AppSpacingTokens.ExtraSmall, solidTopChromeContentGap),
+        protectionTabBottom,
+    )
     // 有壁纸取色时跟随壁纸主色，否则等于主题背景；两者都强制不透明。
     val solidTopChromeMaskColor = topFadeSurfaceColor.copy(alpha = 1f)
     val tabProtectionVisibility = if (!hideTopTabs && expandedTabHeight > 0.dp) {

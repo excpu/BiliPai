@@ -135,11 +135,11 @@ class BottomControlBarUiRegressionTest {
                             fullscreen.value = isFullscreen; width.value = widthDp
                             episodes.value = true; glass.value = false
                         }
-                        rule.onNodeWithTag("player_play_pause").assertDoesNotExist()
+                        // 播放/暂停固定在控制栏最左侧，与其它图标共用同一槽位。
                         rule.onNodeWithTag("player_episode_action").assertIsDisplayed()
                         rule.onNodeWithTag("player_more_actions").assertDoesNotExist()
                         rule.onNodeWithTag("player_danmaku_toggle").assertDoesNotExist()
-                        val tags = mutableListOf("player_previous_episode", "player_next_episode", "player_episode_action")
+                        val tags = mutableListOf("player_play_pause", "player_previous_episode", "player_next_episode", "player_episode_action")
                         if (isFullscreen || widthDp >= 500) {
                             rule.onNodeWithTag("player_ratio_action").assertIsDisplayed()
                             rule.onNodeWithTag("player_quality_action").assertIsDisplayed()
@@ -155,7 +155,7 @@ class BottomControlBarUiRegressionTest {
                             assertTrue("Actions must not overlap at $widthDp dp", left.right <= right.left + 1f)
                         }
                         rule.runOnIdle { glass.value = true }
-                        rule.onNodeWithTag("player_play_pause").assertDoesNotExist()
+                        rule.onNodeWithTag("player_play_pause").assertIsDisplayed()
                         val glassBounds = tags.map { rule.onNodeWithTag(it).assertIsDisplayed().fetchSemanticsNode().boundsInRoot }
                         glassBounds.zipWithNext().forEach { (left, right) ->
                             assertTrue("Glass actions must not overlap at $widthDp dp", left.right <= right.left + 1f)

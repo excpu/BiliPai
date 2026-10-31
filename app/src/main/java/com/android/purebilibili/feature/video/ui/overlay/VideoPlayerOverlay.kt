@@ -1669,6 +1669,8 @@ private fun VideoPlayerOverlayContent(
                             viewportIsLandscape = viewportIsLandscape,
                             progressProvider = progressProvider,
                             isFullscreen = isFullscreen,
+                            isPlaying = effectiveIsPlaying,
+                            onPlayPauseClick = { togglePlayPause() },
                             currentSpeed = currentSpeed,
                             currentRatio = currentAspectRatio,
                             onSeek = commitSeek,
@@ -1961,17 +1963,6 @@ private fun VideoPlayerOverlayContent(
                 }
             }
         }
-
-        CenterPlaybackControl(
-            visible = showPlayerChrome &&
-                (pluginPlaybackStatus.first || player.playbackState == Player.STATE_READY || player.playbackState == Player.STATE_ENDED) &&
-                centerLoadingUiState == null && !isSeekScrubbing &&
-                !endDrawerVisible && !landscapeCommentPanelVisible && !showInsightDetails,
-            isPlaying = effectiveIsPlaying,
-            onPlayPause = { togglePlayPause() },
-            diameter = if (isFullscreen) 72.dp else 56.dp,
-            viewportTopInset = if (isFullscreen) 0.dp else statusBarBackdropHeight,
-        )
 
         // --- 5.4  缓冲加载指示器 ---
         AnimatedVisibility(

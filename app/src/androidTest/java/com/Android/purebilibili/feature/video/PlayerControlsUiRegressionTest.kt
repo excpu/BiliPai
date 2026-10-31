@@ -22,7 +22,6 @@ import com.android.purebilibili.core.theme.LocalAppUiStyle
 import com.android.purebilibili.core.ui.AppThemeConfig
 import com.android.purebilibili.core.ui.LocalAppThemeConfig
 import com.android.purebilibili.feature.video.ui.overlay.BottomControlBar
-import com.android.purebilibili.feature.video.ui.overlay.CenterPlaybackControl
 import com.android.purebilibili.feature.video.ui.overlay.PlayerProgress
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
@@ -82,7 +81,7 @@ class PlayerControlsUiRegressionTest {
     }
 
     @Test
-    fun playbackTargetAndGlyphStayAtViewportCenterAcrossAspectRatiosAndMaterials() {
+    fun playPauseStaysAtBottomLeftAcrossAspectRatiosAndMaterials() {
         val viewport = mutableStateOf(320 to 180)
         val fullscreen = mutableStateOf(false)
         val glass = mutableStateOf(false)
@@ -99,18 +98,13 @@ class PlayerControlsUiRegressionTest {
                         Box(Modifier.size(viewport.value.first.dp, viewport.value.second.dp).testTag("player_viewport")) {
                             BottomControlBar(
                                 isFullscreen = fullscreen.value,
+                                isPlaying = true,
                                 viewportIsLandscape = viewport.value.first > viewport.value.second,
                                 viewportWidthDpOverride = viewport.value.first,
                                 progress = PlayerProgress(30_000, 120_000),
+                                hasEpisodeEntry = true,
                                 onSeek = {}, onToggleFullscreen = {},
                                 modifier = Modifier.align(Alignment.BottomCenter),
-                            )
-                            CenterPlaybackControl(
-                                visible = true,
-                                isPlaying = true,
-                                onPlayPause = {},
-                                diameter = if (fullscreen.value) 72.dp else 56.dp,
-                                viewportTopInset = if (fullscreen.value) 0.dp else 24.dp,
                             )
                         }
                     } }
@@ -127,18 +121,22 @@ class PlayerControlsUiRegressionTest {
                             fullscreen.value = isFullscreen
                             viewport.value = dimensions
                         }
+                        val mode = "$uiStyle glass=$useGlass fullscreen=$isFullscreen viewport=$dimensions"
                         rule.onAllNodesWithTag("player_play_pause").assertCountEquals(1)
                         val host = rule.onNodeWithTag("player_viewport").fetchSemanticsNode().boundsInRoot
-                        val target = rule.onNodeWithTag("player_play_pause").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+                        val row = rule.onNodeWithTag("player_control_row").fetchSemanticsNode().boundsInRoot
+                        val target = rule.onNodeWithTag("player_play_pause").assertIsDisplayed()
+                            .fetchSemanticsNode().boundsInRoot
                         val glyph = rule.onNodeWithContentDescription("暂停播放", useUnmergedTree = true)
                             .fetchSemanticsNode().boundsInRoot
-                        val expectedCenterY = host.center.y +
-                            if (isFullscreen) 0f else 12f * host.width / dimensions.first
-                        val mode = "$uiStyle glass=$useGlass fullscreen=$isFullscreen viewport=$dimensions"
-                        assertEquals("$mode target x", host.center.x, target.center.x, 1f)
-                        assertEquals("$mode target y", expectedCenterY, target.center.y, 1f)
-                        assertEquals("$mode glyph x", host.center.x, glyph.center.x, 1f)
-                        assertEquals("$mode glyph y", expectedCenterY, glyph.center.y, 1f)
+                        val time = rule.onNodeWithTag("player_time_viewport").fetchSemanticsNode().boundsInRoot
+                        // 图标居中于自身槽位，槽位固定在底部控制行最左侧。
+                        assertEquals("$mode glyph x", target.center.x, glyph.center.x, 1f)
+                        assertEquals("$mode glyph y", target.center.y, glyph.center.y, 1f)
+                        assertEquals("$mode target y", row.center.y, target.center.y, 1f)
+                        assertTrue("$mode play must sit below the viewport center", target.center.y > host.center.y)
+                        assertTrue("$mode play must stay inside the viewport", target.left >= host.left - 1f)
+                        assertTrue("$mode play must lead the time label", target.right <= time.left + 1f)
                     }
                 }
             }

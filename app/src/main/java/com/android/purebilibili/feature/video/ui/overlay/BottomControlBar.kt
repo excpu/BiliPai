@@ -171,6 +171,8 @@ fun BottomControlBar(
     isFullscreen: Boolean,
     onSeek: (Long) -> Unit,
     onToggleFullscreen: () -> Unit,
+    isPlaying: Boolean = false,
+    onPlayPauseClick: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewportWidthDpOverride: Int? = null,
     viewportIsLandscape: Boolean = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE,
@@ -302,6 +304,13 @@ fun BottomControlBar(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp).height(PILI_PLAYER_BOTTOM_ROW_HEIGHT_DP.dp)
                     .testTag("player_control_row"),
                 left = {
+                    // 播放/暂停固定在控制栏最左侧，占用与其它图标相同的槽位。
+                    PlayerControlIconAction(
+                        icon = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        description = if (isPlaying) "暂停播放" else "开始播放",
+                        width = slotWidth, height = 30.dp, onClick = onPlayPauseClick,
+                        modifier = Modifier.testTag("player_play_pause"),
+                    )
                     PlayerControlGlassDock(enabled = glass, shape = androidx.compose.foundation.shape.RoundedCornerShape(50)) {
                         ProgressTimeText(
                             positionProvider = displayPosition,
