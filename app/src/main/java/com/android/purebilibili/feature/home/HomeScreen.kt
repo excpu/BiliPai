@@ -1799,13 +1799,30 @@ fun HomeScreen(
     )
     val searchBarHeightDp = homeTopSearchMetrics.height
     val searchToTabsSpacingDp = homeTopSearchMetrics.tabsSpacing
+    val homeTopTabIllustratedHeader = !homeUiSkinDecoration?.topAtmosphereImagePath.isNullOrBlank() ||
+        !homeUiSkinDecoration?.topTabBackgroundImagePath.isNullOrBlank()
+    val homeTopTabLinkedSearch = homeSettings.isBottomBarSearchEnabled &&
+        homeSettings.keepHomeTopSearchWithBottomSearch != true
+    val homeTopTabDefaultRowHeight = if (topTabStyle.floating) {
+        homeTopPresetStyle.tabRowHeightFloating
+    } else {
+        homeTopPresetStyle.tabRowHeightDocked
+    }
     val tabRowHeightDp = resolveEffectiveHomeTabRowHeight(
         hideTopTabs = effectiveHomeSettings.hideTopTabs,
-        defaultTabRowHeight = if (topTabStyle.floating) {
-            homeTopPresetStyle.tabRowHeightFloating
-        } else {
-            homeTopPresetStyle.tabRowHeightDocked
-        }
+        defaultTabRowHeight = com.android.purebilibili.feature.home.components.resolveMd3HomeTopTabSlotHeight(
+            uiStyle = appUiStyle,
+            liquidGlassEnabled = isLiquidGlassEnabled,
+            isTabFloating = topTabStyle.floating,
+            labelMode = homeSettings.topTabLabelMode,
+            hasIllustratedHeader = homeTopTabIllustratedHeader,
+            fallback = homeTopTabDefaultRowHeight,
+            minHeight = if (homeTopTabLinkedSearch) {
+                AppSpacingTokens.TripleExtraLarge
+            } else {
+                AppSpacingTokens.None
+            },
+        )
     )
     val searchCollapseDistanceDp = resolveHomeTopSearchScrollDistance(
         searchBarHeight = searchBarHeightDp,

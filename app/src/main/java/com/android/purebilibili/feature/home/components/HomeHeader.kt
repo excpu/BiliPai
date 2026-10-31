@@ -1872,10 +1872,25 @@ fun HomeHeader(
     val tabRowHeightDp = if (hideTopTabs) {
         AppSpacingTokens.None
     } else {
-        resolveHomeTopTabRowHeight(
+        // 底栏搜索行里还放着 48dp 的头像/设置按钮，槽高不能低于它们。
+        val legacyTabRowHeight = resolveHomeTopTabRowHeight(
             isTabFloating = isTabFloating,
             chromePolicy = topChromePolicy,
             labelMode = topTabLabelMode
+        )
+        val md3SlotMinHeight = if (bottomBarSearchEnabled) {
+            AppSpacingTokens.TripleExtraLarge
+        } else {
+            AppSpacingTokens.None
+        }
+        resolveMd3HomeTopTabSlotHeight(
+            uiStyle = LocalAppUiStyle.current,
+            liquidGlassEnabled = topChromeLiquidGlassEnabled,
+            isTabFloating = isTabFloating,
+            labelMode = topTabLabelMode,
+            hasIllustratedHeader = hasIllustratedHeader,
+            fallback = legacyTabRowHeight,
+            minHeight = md3SlotMinHeight,
         )
     }
     val searchCollapseDistanceDp = com.android.purebilibili.feature.home.resolveHomeTopSearchScrollDistance(

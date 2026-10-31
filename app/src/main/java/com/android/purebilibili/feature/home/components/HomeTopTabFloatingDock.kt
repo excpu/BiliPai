@@ -79,6 +79,38 @@ internal fun shouldUseOfficialMiuixHomeTopTabs(
     liquidGlassEnabled: Boolean,
 ): Boolean = uiStyle == AppUiStyle.MIUIX && !liquidGlassEnabled
 
+/**
+ * MD3（非液态玻璃）首页分类行的槽高。
+ *
+ * 预设 dock 壳高是 48dp，但非玻璃 MD3 的实际行内容只有 32/36dp（纯文字/纯图标），
+ * 行内容在槽内居中，于是下划线下方多出 8dp 死区，再叠加统一面板 10dp 内边距与
+ * 纯色遮罩 4dp 延伸，让顶栏黑边明显偏宽。这里直接取 [resolveMd3TopTabVisualSpec]
+ * 的行高，使槽高与可见内容一致。
+ *
+ * 仅在官方 MD3 顶栏且未开启液态玻璃时生效；MIUIX、玻璃、皮肤插画头以及承载头像/
+ * 设置按钮的底栏搜索行（48dp 控件）都保持原有槽高，不会改变其它风格的样式。
+ */
+internal fun resolveMd3HomeTopTabSlotHeight(
+    uiStyle: AppUiStyle,
+    liquidGlassEnabled: Boolean,
+    isTabFloating: Boolean,
+    labelMode: Int,
+    hasIllustratedHeader: Boolean,
+    fallback: Dp,
+    minHeight: Dp = AppSpacingTokens.None,
+): Dp {
+    if (hasIllustratedHeader) return fallback
+    if (!shouldUseOfficialMd3HomeTopToolbar(uiStyle = uiStyle, liquidGlassEnabled = liquidGlassEnabled)) {
+        return fallback
+    }
+    val contentRowHeight = resolveMd3TopTabVisualSpec(
+        isFloatingStyle = isTabFloating,
+        presentation = AppTopTabPresentation.MATERIAL_UNDERLINE,
+        labelMode = labelMode,
+    ).rowHeight
+    return maxOf(contentRowHeight, minHeight).coerceAtMost(fallback)
+}
+
 /** Glass exports the selected glyph in the exact accent, matching the bottom dock.
  * Its translucent shell alone is not the composited backdrop for contrast checks.
  * Native renderers retain the existing readable-foreground policy.
