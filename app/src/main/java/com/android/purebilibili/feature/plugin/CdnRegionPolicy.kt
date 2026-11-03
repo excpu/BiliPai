@@ -76,7 +76,8 @@ enum class PlaybackCdnPreference(
  * 应用全局 CDN 线路偏好，优先级从高到低：
  *  ① 自定义线路（用户手输 host）——最高优先，走 [rewriteCdnUrlHost]，不做任何域名限制，
  *     用户输入什么主机就替换成什么主机，路径与签名参数原样保留；主机非法或未填写时不改写，
- *     保持原始候选顺序回退。
+ *     保持原始候选顺序回退。开启严格模式（[strictCustomHost]）时只保留这条线路，
+ *     其余候选全部丢弃，播放失败也不会回退到内置线路。
  *  ② 设置里选的内置线路——只改写 B 站镜像域名（[rewriteBilivideoHost]），避免把 IP 源改写成无效镜像。
  *  ③ 插件（CDN 智能选线）已开启——尊重插件给出的顺序，不再二次过滤。
  *  ④ 都没指定——排除 PCDN 候选，整批都是 PCDN 时换 host 兜底。
@@ -86,6 +87,7 @@ internal fun applyPlaybackCdnPreference(
     preference: PlaybackCdnPreference,
     customHost: String? = null,
     pluginApplied: Boolean = false,
+    strictCustomHost: Boolean = false,
 ): List<PlaybackCdnCandidate> {
     if (candidates.isEmpty()) return candidates
 
@@ -97,6 +99,8 @@ internal fun applyPlaybackCdnPreference(
             videoUrl = rewriteCdnUrlHost(source.videoUrl, host) ?: return candidates,
             audioUrl = source.audioUrl?.let { rewriteCdnUrlHost(it, host) ?: it },
         )
+        // 严格模式：只保留手输线路，其它候选不再进入播放/回退列表。
+        if (strictCustomHost) return listOf(preferred)
         return (listOf(preferred) + candidates).distinctBy { it.videoUrl to it.audioUrl }
     }
 
@@ -174,6 +178,7 @@ internal fun resolveBangumiCdnUrls(
     pluginRewrite: PlaybackCdnRewriteResult? = null,
     preference: PlaybackCdnPreference = PlaybackCdnPreference.BASE_URL,
     customHost: String? = null,
+    strictCustomHost: Boolean = false,
 ): BangumiCdnUrlSelection {
     val rawVideoUrls = videoUrls.filter { it.isNotBlank() }
     val rawAudioUrls = audioUrls.filter { it.isNotBlank() }
@@ -191,6 +196,7 @@ internal fun resolveBangumiCdnUrls(
         preference = preference,
         customHost = customHost,
         pluginApplied = pluginRewrite != null,
+        strictCustomHost = strictCustomHost,
     ).firstOrNull()
         ?: return BangumiCdnUrlSelection(orderedVideoUrls.first(), orderedAudioUrls.firstOrNull())
     return BangumiCdnUrlSelection(
@@ -239,6 +245,9 @@ internal fun isSameCdnResource(url: String?, other: String?): Boolean {
 
 /** 首帧超时回退的默认时长（秒），与原有硬编码 2.5s 行为一致。 */
 const val PLAYBACK_CDN_FALLBACK_DEFAULT_TIMEOUT_SECONDS = 2.5f
+
+/** 严格自定义线路模式下，同一 host 上允许的最大重试次数（不含首播）。 */
+const val PLAYBACK_CDN_STRICT_MAX_RETRIES = 2
 
 /** 自定义 CDN 主机生效时，设置页允许配置的首帧超时范围（秒）。 */
 const val PLAYBACK_CDN_FALLBACK_CUSTOM_MIN_TIMEOUT_SECONDS = 2.5f

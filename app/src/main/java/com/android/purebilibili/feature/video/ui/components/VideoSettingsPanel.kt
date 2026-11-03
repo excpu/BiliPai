@@ -331,6 +331,8 @@ fun VideoSettingsPanel(
     cdnServiceLabels: List<String> = emptyList(),
     currentCdnServiceIndex: Int = 0,
     onCdnServiceSelected: ((Int) -> Unit)? = null,
+    /** 严格自定义线路：CDN 面板只展示当前线路，不允许切换。 */
+    cdnSelectionLocked: Boolean = false,
     chapterDisplayMode: ChapterDisplayMode = ChapterDisplayMode.WITH_CONTROLS,
     onChapterDisplayModeChange: ((ChapterDisplayMode) -> Unit)? = null,
     // 两种方向与材质共用已有的诊断显示设置；未接入的调用方不显示此入口。
@@ -489,7 +491,12 @@ fun VideoSettingsPanel(
                             } else if (playerVolumeUnavailableReason != null) {
                                 PlayerSettingsRow("播放器音量", playerVolumeUnavailableReason, onClick = null)
                             }
-                            if (cdnCount > 0 || cdnServiceLabels.isNotEmpty()) PlayerSettingsRow("CDN 设置", "当前：${cdnServiceLabels.getOrNull(currentCdnServiceIndex) ?: "线路 ${currentCdnIndex + 1}"}，无法播放请切换") { page = "cdn" }
+                            if (cdnCount > 0 || cdnServiceLabels.isNotEmpty()) PlayerSettingsRow(
+                                "CDN 设置",
+                                if (cdnSelectionLocked) "严格模式：仅使用自定义线路，不回退" else {
+                                    "当前：${cdnServiceLabels.getOrNull(currentCdnServiceIndex) ?: "线路 ${currentCdnIndex + 1}"}，无法播放请切换"
+                                }
+                            ) { page = "cdn" }
                             PlayerSettingsRow(
                                 "画面变换",
                                 buildList {
@@ -605,6 +612,9 @@ fun VideoSettingsPanel(
                                 cdnServiceLabels.forEachIndexed { index, label ->
                                     PlayerSettingsSelectionRow(label, index == currentCdnServiceIndex) { select(index); onDismiss() }
                                 }
+                            }
+                            if (cdnSelectionLocked && page == "cdn") {
+                                PlayerSettingsRow("严格模式", "仅使用手动输入的 CDN，失败只在该线路上重试", onClick = null)
                             }
                             if (cdnServiceLabels.isNotEmpty() && page == "cdn") PlayerSettingsRow("线路诊断") { page = "cdnAdvanced" }
                             if (cdnServiceLabels.isEmpty() || page == "cdnAdvanced") {

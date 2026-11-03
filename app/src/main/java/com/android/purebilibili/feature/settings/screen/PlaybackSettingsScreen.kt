@@ -41,6 +41,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.android.purebilibili.R
 import com.android.purebilibili.core.store.DEFAULT_DASH_SEGMENT_REQUESTS_ENABLED
 import com.android.purebilibili.core.store.DEFAULT_PLAYBACK_CDN_CUSTOM_FALLBACK_TIMEOUT_SECONDS
+import com.android.purebilibili.core.store.DEFAULT_PLAYBACK_CDN_CUSTOM_STRICT
 import com.android.purebilibili.core.store.DEFAULT_PLAYER_DIAGNOSTIC_LOGGING_ENABLED
 import com.android.purebilibili.core.store.DEFAULT_QUALITY_SWITCH_FAILURE_DIALOG_ENABLED
 import com.android.purebilibili.core.store.DEFAULT_QUALITY_SWITCH_FAILURE_DIALOG_ONCE_ENABLED
@@ -232,6 +233,9 @@ fun PlaybackSettingsContent(
     val playbackCdnFallbackTimeoutSeconds by remember(context) {
         SettingsManager.getPlaybackCdnCustomFallbackTimeoutSeconds(context)
     }.collectAsStateWithLifecycle(initialValue = DEFAULT_PLAYBACK_CDN_CUSTOM_FALLBACK_TIMEOUT_SECONDS)
+    val playbackCdnStrictCustomHost by remember(context) {
+        SettingsManager.getPlaybackCdnCustomStrict(context)
+    }.collectAsStateWithLifecycle(initialValue = DEFAULT_PLAYBACK_CDN_CUSTOM_STRICT)
     var showPlaybackCdnCustomHostDialog by rememberSaveable { mutableStateOf(false) }
     var playbackCdnCustomHostDraft by rememberSaveable { mutableStateOf("") }
     var playbackCdnCustomHostError by remember { mutableStateOf<String?>(null) }
@@ -1081,7 +1085,11 @@ SettingsItemAnchor("playback.music_lyrics_ui_style") {
 SettingsSingleChoicePreference(
                             icon = com.android.purebilibili.feature.settings.rememberMaterialSymbol(com.android.purebilibili.R.drawable.ms_router_24),
                             title = settingItemTitle("playback.playback_cdn_preference"),
-                            subtitle = "新视频优先使用此线路；不可用时换备用线路",
+                            subtitle = if (playbackCdnPreference == PlaybackCdnPreference.CUSTOM && playbackCdnStrictCustomHost) {
+                                "新视频只使用手动输入的线路；播放失败也不回退其他线路"
+                            } else {
+                                "新视频优先使用此线路；不可用时换备用线路"
+                            },
                             options = playbackCdnOptions,
                             selectedValue = playbackCdnPreference,
                             onSelectionChange = { preference ->
@@ -1102,6 +1110,23 @@ SettingsSingleChoicePreference(
 }
 
                         if (playbackCdnPreference == PlaybackCdnPreference.CUSTOM) {
+                            AppPreferenceDivider()
+
+                            SettingsItemAnchor("playback.playback_cdn_custom_strict") {
+                                AppSwitchPreference(
+                                    icon = com.android.purebilibili.feature.settings.rememberMaterialSymbol(com.android.purebilibili.R.drawable.ms_shield_24),
+                                    title = "严格使用自定义 CDN",
+                                    subtitle = "仅使用该线路；首帧超时或播放失败只在此线路上重试，不回退其他线路",
+                                    checked = playbackCdnStrictCustomHost,
+                                    onCheckedChange = { enabled ->
+                                        scope.launch {
+                                            SettingsManager.setPlaybackCdnCustomStrict(context, enabled)
+                                        }
+                                    },
+                                    iconTint = AppContentColors.secondaryText(),
+                                )
+                            }
+
                             AppPreferenceDivider()
 
                             SettingsItemAnchor("playback.playback_cdn_custom_host") {
@@ -1125,8 +1150,12 @@ SettingsSingleChoicePreference(
                                 SettingsItemAnchor("playback.playback_cdn_custom_fallback_timeout") {
                                     AppSliderDialogPreference(
                                         icon = com.android.purebilibili.feature.settings.rememberMaterialSymbol(com.android.purebilibili.R.drawable.ms_timer_24),
-                                        title = "首帧超时回退",
-                                        subtitle = "自定义线路首帧超过此时长仍未就绪时，自动回退原始线路",
+                                        title = if (playbackCdnStrictCustomHost) "首帧超时重试" else "首帧超时回退",
+                                        subtitle = if (playbackCdnStrictCustomHost) {
+                                            "自定义线路首帧超过此时长仍未就绪时，在该线路上重试"
+                                        } else {
+                                            "自定义线路首帧超过此时长仍未就绪时，自动回退原始线路"
+                                        },
                                         value = playbackCdnFallbackTimeoutSeconds,
                                         onValueChange = { seconds ->
                                             scope.launch {
@@ -1144,7 +1173,7 @@ SettingsSingleChoicePreference(
                                             if (seconds % 1f == 0f) "${seconds.toInt()} 秒"
                                             else "${seconds} 秒"
                                         },
-                                        dialogTitle = "首帧超时回退",
+                                        dialogTitle = if (playbackCdnStrictCustomHost) "首帧超时重试" else "首帧超时回退",
                                         iconTint = AppContentColors.secondaryText(),
                                     )
                                 }

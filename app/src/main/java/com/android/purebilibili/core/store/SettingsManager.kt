@@ -112,6 +112,7 @@ internal const val DEFAULT_ANALYTICS_ENABLED = true
 internal const val DEFAULT_QUALITY_SWITCH_FAILURE_DIALOG_ENABLED = true
 internal const val DEFAULT_QUALITY_SWITCH_FAILURE_DIALOG_ONCE_ENABLED = false
 internal const val DEFAULT_DASH_SEGMENT_REQUESTS_ENABLED = false
+internal const val DEFAULT_PLAYBACK_CDN_CUSTOM_STRICT = false
 internal val DEFAULT_PLAYBACK_CDN_CUSTOM_FALLBACK_TIMEOUT_SECONDS: Float =
     PLAYBACK_CDN_FALLBACK_DEFAULT_TIMEOUT_SECONDS
 
@@ -7672,6 +7673,8 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
         booleanPreferencesKey("dash_segment_requests_enabled")
     private val KEY_PLAYBACK_CDN_PREFERENCE = stringPreferencesKey("playback_cdn_preference")
     private val KEY_PLAYBACK_CDN_CUSTOM_HOST = stringPreferencesKey("playback_cdn_custom_host")
+    private val KEY_PLAYBACK_CDN_CUSTOM_STRICT =
+        booleanPreferencesKey("playback_cdn_custom_strict")
     private val KEY_PLAYBACK_CDN_CUSTOM_FALLBACK_TIMEOUT =
         floatPreferencesKey("playback_cdn_custom_fallback_timeout")
     private val KEY_QUALITY_SWITCH_FAILURE_DIALOG_ENABLED =
@@ -8195,6 +8198,25 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
             val normalized = host?.trim()
             if (normalized.isNullOrEmpty()) preferences.remove(KEY_PLAYBACK_CDN_CUSTOM_HOST)
             else preferences[KEY_PLAYBACK_CDN_CUSTOM_HOST] = normalized
+        }
+    }
+
+    /**
+     * 严格使用自定义 CDN：开启后只用 [getPlaybackCdnCustomHost] 指定的线路，
+     * 首帧超时或播放失败时只在该线路上重试，不回退任何内置线路。
+     */
+    fun getPlaybackCdnCustomStrict(context: Context): Flow<Boolean> =
+        context.settingsDataStore.data.map { preferences ->
+            preferences[KEY_PLAYBACK_CDN_CUSTOM_STRICT] ?: DEFAULT_PLAYBACK_CDN_CUSTOM_STRICT
+        }
+
+    suspend fun setPlaybackCdnCustomStrict(context: Context, enabled: Boolean) {
+        context.settingsDataStore.edit { preferences ->
+            if (enabled == DEFAULT_PLAYBACK_CDN_CUSTOM_STRICT) {
+                preferences.remove(KEY_PLAYBACK_CDN_CUSTOM_STRICT)
+            } else {
+                preferences[KEY_PLAYBACK_CDN_CUSTOM_STRICT] = enabled
+            }
         }
     }
 

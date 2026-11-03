@@ -416,14 +416,29 @@ internal data class PlaybackCdnFallbackState(
     val fallbackCandidates: List<com.android.purebilibili.plugin.sdk.PlaybackCdnCandidate> = emptyList(),
     val regionLabel: String? = null,
     val usesCustomRule: Boolean = false,
-    val fallbackConsumed: Boolean = false
+    val fallbackConsumed: Boolean = false,
+    /** 严格自定义线路：只在该 host 上重试，绝不回退到其他线路。 */
+    val strictCustomHost: Boolean = false,
+    val strictRetriesLeft: Int = 0,
+    val strictRetryExhausted: Boolean = false
 ) {
     val usesCdnRewrite: Boolean
-        get() = !fallbackConsumed &&
+        get() = !strictCustomHost &&
+            !fallbackConsumed &&
             !fallbackVideoUrl.isNullOrBlank() &&
             (selectedVideoUrl != fallbackVideoUrl || selectedAudioUrl != fallbackAudioUrl)
 
+    /** 严格模式仍有重试额度时，失败只在同一条自定义线路上重播。 */
+    val usesStrictRetry: Boolean
+        get() = strictCustomHost && strictRetriesLeft > 0 && selectedVideoUrl.isNotBlank()
+
     fun markFallbackConsumed(): PlaybackCdnFallbackState = copy(fallbackConsumed = true)
+
+    fun consumeStrictRetry(): PlaybackCdnFallbackState =
+        copy(strictRetriesLeft = (strictRetriesLeft - 1).coerceAtLeast(0))
+
+    fun markStrictRetryExhausted(): PlaybackCdnFallbackState =
+        copy(strictRetriesLeft = 0, strictRetryExhausted = true)
 
     fun advanceFallback(
         currentFallbackVideoUrl: String,
@@ -458,8 +473,22 @@ internal fun buildPlaybackCdnFallbackState(
     regionLabel: String?,
     audioFallbackUrl: String? = null,
     fallbackCandidates: List<com.android.purebilibili.plugin.sdk.PlaybackCdnCandidate> = emptyList(),
-    usesCustomRule: Boolean = false
+    usesCustomRule: Boolean = false,
+    strictCustomHost: Boolean = false
 ): PlaybackCdnFallbackState {
+    // 严格模式：只用改写后的自定义线路，不准备任何回退候选，失败时在同一 host 上重试。
+    if (strictCustomHost &&
+        (selectedVideoUrl != originalVideoUrl || selectedAudioUrl != originalAudioUrl)
+    ) {
+        return PlaybackCdnFallbackState(
+            selectedVideoUrl = selectedVideoUrl,
+            selectedAudioUrl = selectedAudioUrl,
+            regionLabel = regionLabel,
+            usesCustomRule = usesCustomRule,
+            strictCustomHost = true,
+            strictRetriesLeft = com.android.purebilibili.feature.plugin.PLAYBACK_CDN_STRICT_MAX_RETRIES
+        )
+    }
     val fallbackAudioUrl = when {
         selectedAudioUrl != originalAudioUrl -> originalAudioUrl
         !audioFallbackUrl.isNullOrBlank() -> audioFallbackUrl
@@ -1420,6 +1449,13 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
         .getPlaybackCdnCustomHost(application.applicationContext)
         .map { normalizePlaybackCdnHost(it) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    private val playbackCdnStrictCustomHost = SettingsManager
+        .getPlaybackCdnCustomStrict(application.applicationContext)
+        .stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            com.android.purebilibili.core.store.DEFAULT_PLAYBACK_CDN_CUSTOM_STRICT
+        )
     private val playbackCdnFallbackTimeoutMs = SettingsManager
         .getPlaybackCdnCustomHost(application.applicationContext)
         .map { normalizePlaybackCdnHost(it) }
@@ -2707,6 +2743,13 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
             if (ticket != playbackRecoveryGeneration || latestPlayer !== scheduledPlayer ||
                 "${latest.info.bvid}:${latest.info.cid}" != mediaKey
             ) {
+                return@launch
+            }
+
+            // 严格自定义线路：卡顿也只在该线路上重试，绝不切换线路。
+            if (playbackCdnFallbackState.strictCustomHost) {
+                playbackStallRecoveryJob = null
+                fallbackFromCdnRewrite(reason = "playback_stall")
                 return@launch
             }
 
@@ -9569,11 +9612,16 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
             .firstOrNull()
         val cdnRewrite = cdnPlugin?.rewritePlaybackCandidates(rawVideoUrls, rawAudioUrls)
 
+        // 严格模式只对「自定义线路」生效：内置线路仍保留回退候选。
+        val strictCustomHost = playbackCdnStrictCustomHost.value &&
+            playbackCdnPreference.value == PlaybackCdnPreference.CUSTOM
+
         val preferredCandidates = applyPlaybackCdnPreference(
             candidates = cdnRewrite?.candidates ?: originalCandidates,
             preference = playbackCdnPreference.value,
             customHost = playbackCdnCustomHost.value,
             pluginApplied = cdnRewrite != null,
+            strictCustomHost = strictCustomHost,
         )
         val allVideoUrls = preferredCandidates.map { it.videoUrl }
         val allAudioUrls = preferredCandidates.map { it.audioUrl.orEmpty() }
@@ -9615,7 +9663,8 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
                 // 用已应用「设置线路 > 排除 PCDN」的候选，回退时才不会又捡回 PCDN
                 fallbackCandidates = preferredCandidates,
                 usesCustomRule = cdnRewrite?.sources?.firstOrNull() ==
-                    com.android.purebilibili.plugin.sdk.PlaybackCdnCandidateSource.CUSTOM
+                    com.android.purebilibili.plugin.sdk.PlaybackCdnCandidateSource.CUSTOM,
+                strictCustomHost = strictCustomHost
             )
         )
     }
@@ -9652,7 +9701,7 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
     ) {
         playbackCdnFallbackJob?.cancel()
         playbackCdnFallbackState = state
-        if (!playWhenReady || !state.usesCdnRewrite) return
+        if (!playWhenReady || (!state.usesCdnRewrite && !state.usesStrictRetry)) return
         val ticket = playbackRecoveryGeneration
         val scheduledPlayer = exoPlayer
 
@@ -9662,7 +9711,10 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
             val playbackReady = exoPlayer?.playbackState == Player.STATE_READY
             val expectedAudioTrack = playbackCdnFallbackState.selectedAudioUrl != null
             val hasSelectedAudioTrack = hasSelectedAudioTrack(exoPlayer)
-            if (shouldFallbackFromCdnRewrite(
+            // 严格模式没有回退线路：超时/首帧失败只在同一条自定义线路上重试。
+            val strictTimeout = playbackCdnFallbackState.usesStrictRetry &&
+                (!playbackReady || (expectedAudioTrack && !hasSelectedAudioTrack))
+            if (strictTimeout || shouldFallbackFromCdnRewrite(
                     state = playbackCdnFallbackState,
                     playbackReady = playbackReady,
                     expectedAudioTrack = expectedAudioTrack,
@@ -9682,7 +9734,8 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
 
     private fun markPlaybackCdnReadyIfMediaReady() {
         val state = playbackCdnFallbackState
-        if (state.usesCdnRewrite && state.selectedAudioUrl != null && !hasSelectedAudioTrack(exoPlayer)) {
+        val missingAudioTrack = state.selectedAudioUrl != null && !hasSelectedAudioTrack(exoPlayer)
+        if ((state.usesCdnRewrite || state.usesStrictRetry) && missingAudioTrack) {
             recordCurrentCdnHealthEvent(CdnHealthEvent.AUDIO_TRACK_MISSING)
             Logger.d(
                 "PlayerVM",
@@ -9732,6 +9785,20 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
 
     private fun fallbackFromCdnRewrite(reason: String) {
         val state = playbackCdnFallbackState
+        // 严格自定义线路：只允许在同一 host 上重试，不切换到任何其它线路。
+        if (state.strictCustomHost) {
+            if (retryStrictCdnOnSameHost(reason = reason)) return
+            if (!state.strictRetryExhausted) {
+                playbackCdnFallbackState = state.markStrictRetryExhausted()
+                Logger.w(
+                    "PlayerVM",
+                    "Strict custom CDN gave up: reason=$reason, host=${hostForPlaybackLog(state.selectedVideoUrl)}, " +
+                        "audio=${hostForPlaybackLog(state.selectedAudioUrl)}"
+                )
+                viewModelScope.launch { toast("自定义 CDN 不可用，已停止重试（严格模式不回退其他线路）") }
+            }
+            return
+        }
         if (!shouldFallbackFromCdnRewrite(state, playbackReady = false)) return
         val event = if (reason == "first_frame_timeout") {
             CdnHealthEvent.FIRST_FRAME_TIMEOUT
@@ -9790,6 +9857,50 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
         if (state.usesCustomRule) {
             viewModelScope.launch { toast("自定义线路不可用，已切换至原始线路") }
         }
+    }
+
+    /**
+     * 严格自定义线路的重试：源地址、音轨与 CDN host 全部保持不变，
+     * 只是以当前进度重新 prepare，确保不会换到任何其他线路。
+     */
+    private fun retryStrictCdnOnSameHost(reason: String): Boolean {
+        val state = playbackCdnFallbackState
+        if (!state.usesStrictRetry) return false
+        val videoUrl = state.selectedVideoUrl.takeIf { it.isNotBlank() } ?: return false
+        val player = exoPlayer ?: return false
+        val nextState = state.consumeStrictRetry()
+        playbackCdnFallbackState = nextState
+        playbackCdnFallbackJob?.cancel()
+        playbackCdnFallbackJob = null
+
+        val position = player.currentPosition.coerceAtLeast(0L)
+        val playWhenReadyAfterRetry = resolvePlaybackIntentForSourceReplacement(
+            playWhenReady = player.playWhenReady,
+            isPlaying = player.isPlaying
+        )
+        Logger.w(
+            "PlayerVM",
+            "Strict custom CDN retry: reason=$reason, host=${hostForPlaybackLog(videoUrl)}, " +
+                "audio=${hostForPlaybackLog(state.selectedAudioUrl)}, retriesLeft=${nextState.strictRetriesLeft}"
+        )
+        playResolvedPlayback(
+            videoUrl = videoUrl,
+            audioUrl = state.selectedAudioUrl,
+            adaptiveDashSource = null,
+            startPositionMs = position,
+            playWhenReady = playWhenReadyAfterRetry,
+            cdnFallbackState = nextState,
+            cdnCacheKeysByUrl = com.android.purebilibili.feature.plugin.buildPlaybackCdnCacheKeys(
+                listOf(
+                    com.android.purebilibili.plugin.sdk.PlaybackCdnCandidate(
+                        videoUrl = videoUrl,
+                        audioUrl = state.selectedAudioUrl,
+                        source = com.android.purebilibili.plugin.sdk.PlaybackCdnCandidateSource.ORIGINAL
+                    )
+                )
+            )
+        )
+        return true
     }
 
     private fun hasSelectedAudioTrack(player: Player?): Boolean {

@@ -231,6 +231,14 @@ class BangumiPlayerViewModel : BasePlayerViewModel() {
         }.getOrNull()
     }
 
+    /** 严格模式开关：只在「自定义线路」下生效，作用于剧集起播的线路解析。 */
+    private suspend fun playbackCdnStrictCustomHost(): Boolean {
+        val context = NetworkModule.appContext ?: return false
+        return runCatching {
+            SettingsManager.getPlaybackCdnCustomStrict(context).first()
+        }.getOrDefault(false) && playbackCdnPreference() == PlaybackCdnPreference.CUSTOM
+    }
+
     /**
      * 剧集起播的统一选线入口：插件重排 + 用户偏好（内置镜像或自定义主机）。
      *
@@ -266,6 +274,7 @@ class BangumiPlayerViewModel : BasePlayerViewModel() {
             pluginRewrite = pluginRewrite,
             preference = playbackCdnPreference(),
             customHost = playbackCdnCustomHost(),
+            strictCustomHost = playbackCdnStrictCustomHost(),
         )
     }
 

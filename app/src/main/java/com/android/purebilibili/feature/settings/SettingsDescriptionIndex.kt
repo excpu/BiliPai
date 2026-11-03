@@ -142,6 +142,7 @@ internal val settingsStaticDescriptionIndex: Map<String, String> = mapOf(
     "playback.pause_on_player_collapse_enabled" to "浏览推荐并缩小画面时暂停，展开后恢复；关闭后缩小播放器时仍继续播放",
     "playback.pip_no_danmaku_enabled" to "开启后台播放后，小窗和画中画相关设置才会生效；小窗和画中画中不显示弹幕；小窗和画中画中也显示弹幕；选择小窗或画中画模式后生效",
     "playback.playback_cdn_custom_host" to "任意 host[:port]，保留播放路径与鉴权参数；留空则回退原始线路",
+    "playback.playback_cdn_custom_strict" to "仅使用手动输入的线路；播放失败时只在该线路上重试，不回退其他线路",
     "playback.playback_cdn_custom_fallback_timeout" to "自定义线路首帧超时后自动回退原始线路的等待时长",
     "playback.playback_cdn_preference" to "新视频优先使用此线路；不可用时换备用线路",
     "playback.playback_completion_behavior" to "分 P 与视频合集分别处理；外部列表内先续播当前视频分 P，再按列表切视频。“自动”受下方两个连播开关控制",

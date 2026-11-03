@@ -28,6 +28,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.MergingMediaSource
 import com.android.purebilibili.core.store.SettingsManager
 import com.android.purebilibili.core.store.player.PiliPlayerMenuStore
+import com.android.purebilibili.feature.plugin.PlaybackCdnPreference
 import com.android.purebilibili.feature.video.ui.pager.buildPortraitCachedMediaSourceFactory
 import com.android.purebilibili.feature.web.WebViewScreen
 import kotlinx.coroutines.launch
@@ -93,6 +94,8 @@ data class PiliPlayerMenuSession(
     val cdnServiceLabels: List<String>,
     val currentCdnServiceIndex: Int,
     val onCdnServiceSelected: ((Int) -> Unit)?,
+    /** 严格自定义线路：运行期不允许切换 CDN 线路。 */
+    val cdnSelectionLocked: Boolean = false,
     val playingVideoCodec: String?,
 )
 
@@ -154,6 +157,13 @@ fun rememberPiliPlayerMenuSession(
     val cdnService = remember(storedCdnService) {
         PiliCdnService.entries.firstOrNull { it.name == storedCdnService } ?: PiliCdnService.BASE
     }
+    val storedCdnPreference by remember(context) { SettingsManager.getPlaybackCdnPreference(context) }
+        .collectAsStateWithLifecycle(initialValue = "base_url")
+    val storedStrictCustomHost by remember(context) { SettingsManager.getPlaybackCdnCustomStrict(context) }
+        .collectAsStateWithLifecycle(initialValue = false)
+    // 严格自定义线路下禁止运行期切换 CDN 服务，否则会覆盖手动输入的线路。
+    val strictCustomCdn = storedStrictCustomHost &&
+        PlaybackCdnPreference.fromStorageValue(storedCdnPreference) == PlaybackCdnPreference.CUSTOM
     val cdnLabels = remember { PiliCdnService.entries.map { it.label } }
     val sourceKey = remember(videoUrl) { runCatching { java.net.URI(videoUrl).rawPath }.getOrNull().orEmpty() }
     val audioSourceKey = remember(audioUrl) { runCatching { java.net.URI(audioUrl).rawPath }.getOrNull().orEmpty() }
@@ -172,8 +182,8 @@ fun rememberPiliPlayerMenuSession(
         if (replacement != null) replacement(bvid, cid, video, audio)
         else if (player != null) replacePiliPlayerSources(context, player, video, audio)
     }
-    LaunchedEffect(player, bvid, cid, sourceKey, audioSourceKey, cdnService) {
-        if (cdnService != PiliCdnService.BASE) {
+    LaunchedEffect(player, bvid, cid, sourceKey, audioSourceKey, cdnService, strictCustomCdn) {
+        if (!strictCustomCdn && cdnService != PiliCdnService.BASE) {
             runCatching { applyCdn(cdnService) }.onFailure {
                 Toast.makeText(context, it.message ?: "CDN 地址替换失败", Toast.LENGTH_LONG).show()
             }
@@ -320,9 +330,9 @@ fun rememberPiliPlayerMenuSession(
         onSleepWaitForVideoEndChange = { value -> scope.launch { PiliPlayerMenuStore.setSleepWaitForEnd(context, value) } },
         sleepExitApp = exitApp ?: sleepTimer?.exitApp ?: false,
         onSleepExitAppChange = { value -> scope.launch { PiliPlayerMenuStore.setSleepExitApp(context, value) } },
-        cdnServiceLabels = cdnLabels,
+        cdnServiceLabels = if (strictCustomCdn) emptyList() else cdnLabels,
         currentCdnServiceIndex = cdnService.ordinal,
-        onCdnServiceSelected = if (player != null || actions.onReplacePlaybackSources != null) ({ index ->
+        onCdnServiceSelected = if (!strictCustomCdn && (player != null || actions.onReplacePlaybackSources != null)) ({ index ->
             PiliCdnService.entries.getOrNull(index)?.let { selected ->
                 runCatching { applyCdn(selected) }.onSuccess {
                     scope.launch { PiliPlayerMenuStore.setCdnService(context, selected.name) }
@@ -331,6 +341,7 @@ fun rememberPiliPlayerMenuSession(
                 }
             }
         }) else null,
+        cdnSelectionLocked = strictCustomCdn,
         playingVideoCodec = playingVideoCodec,
     )
 }

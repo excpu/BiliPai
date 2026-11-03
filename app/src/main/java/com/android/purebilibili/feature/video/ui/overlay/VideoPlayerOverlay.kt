@@ -2310,6 +2310,7 @@ private fun VideoPlayerOverlayContent(
                     cdnServiceLabels = menuSession.cdnServiceLabels,
                     currentCdnServiceIndex = menuSession.currentCdnServiceIndex,
                     onCdnServiceSelected = menuSession.onCdnServiceSelected,
+                    cdnSelectionLocked = menuSession.cdnSelectionLocked,
                     // [New] Codec & Audio
                     currentCodec = currentCodec,
                     playingVideoCodec = menuSession.playingVideoCodec,

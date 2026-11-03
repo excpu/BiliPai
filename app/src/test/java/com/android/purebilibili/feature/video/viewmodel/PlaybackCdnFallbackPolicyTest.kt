@@ -6,10 +6,12 @@ import com.android.purebilibili.feature.plugin.CdnCandidateHealth
 import com.android.purebilibili.plugin.sdk.CdnHealthEvent
 import com.android.purebilibili.plugin.sdk.PlaybackCdnCandidate
 import com.android.purebilibili.plugin.sdk.PlaybackCdnCandidateSource
+import com.android.purebilibili.feature.plugin.PLAYBACK_CDN_STRICT_MAX_RETRIES
 import com.android.purebilibili.feature.plugin.recordCdnHealthEvent
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PlaybackCdnFallbackPolicyTest {
@@ -131,6 +133,51 @@ class PlaybackCdnFallbackPolicyTest {
 
         assertFalse(state.usesCdnRewrite)
         assertFalse(shouldFallbackFromCdnRewrite(state, playbackReady = false))
+    }
+
+    @Test
+    fun `strict custom host retries on the same line and never prepares a fallback`() {
+        val state = buildPlaybackCdnFallbackState(
+            selectedVideoUrl = "https://my-cdn.example.net/video.m4s",
+            selectedAudioUrl = "https://my-cdn.example.net/audio.m4s",
+            originalVideoUrl = "https://upos-sz-mirrorali.bilivideo.com/video.m4s",
+            originalAudioUrl = "https://upos-sz-mirrorali.bilivideo.com/audio.m4s",
+            regionLabel = null,
+            strictCustomHost = true
+        )
+
+        assertTrue(state.strictCustomHost)
+        assertEquals(PLAYBACK_CDN_STRICT_MAX_RETRIES, state.strictRetriesLeft)
+        assertNull(state.fallbackVideoUrl)
+        assertNull(state.fallbackAudioUrl)
+        assertFalse(state.usesCdnRewrite)
+        assertTrue(state.usesStrictRetry)
+        assertFalse(shouldFallbackFromCdnRewrite(state, playbackReady = false))
+
+        val afterFirstRetry = state.consumeStrictRetry()
+        assertEquals(PLAYBACK_CDN_STRICT_MAX_RETRIES - 1, afterFirstRetry.strictRetriesLeft)
+        assertTrue(afterFirstRetry.usesStrictRetry)
+
+        var exhausted = state
+        repeat(PLAYBACK_CDN_STRICT_MAX_RETRIES) { exhausted = exhausted.consumeStrictRetry() }
+        assertFalse(exhausted.usesStrictRetry)
+        assertTrue(exhausted.strictCustomHost)
+        assertFalse(shouldFallbackFromCdnRewrite(exhausted, playbackReady = false))
+    }
+
+    @Test
+    fun `strict custom host without a rewrite does not arm retries`() {
+        val state = buildPlaybackCdnFallbackState(
+            selectedVideoUrl = "https://upos-sz-mirrorali.bilivideo.com/video.m4s",
+            selectedAudioUrl = "https://upos-sz-mirrorali.bilivideo.com/audio.m4s",
+            originalVideoUrl = "https://upos-sz-mirrorali.bilivideo.com/video.m4s",
+            originalAudioUrl = "https://upos-sz-mirrorali.bilivideo.com/audio.m4s",
+            regionLabel = null,
+            strictCustomHost = true
+        )
+
+        assertFalse(state.strictCustomHost)
+        assertFalse(state.usesStrictRetry)
     }
 
     @Test

@@ -528,6 +528,28 @@ class CdnRegionPolicyTest {
     }
 
     @Test
+    fun `strict custom host keeps only the manual line without fallback candidates`() {
+        val original = buildPlaybackCdnCandidates(
+            videoUrls = listOf(
+                "https://upos-sz-mirrorali.bilivideo.com/upgcxcode/1/2/video.m4s?sign=abc",
+                "https://upos-sz-mirrorcos.bilivideo.com/upgcxcode/1/2/video.m4s?sign=abc",
+            ),
+            audioUrls = listOf("https://upos-sz-mirrorali.bilivideo.com/upgcxcode/1/2/audio.m4s?sign=abc"),
+        )
+
+        val preferred = applyPlaybackCdnPreference(
+            candidates = original,
+            preference = PlaybackCdnPreference.CUSTOM,
+            customHost = "my-cdn.example.net",
+            strictCustomHost = true,
+        )
+
+        assertEquals(1, preferred.size)
+        assertEquals("my-cdn.example.net", hostFromCdnUrl(preferred.first().videoUrl))
+        assertEquals("my-cdn.example.net", hostFromCdnUrl(preferred.first().audioUrl.orEmpty()))
+    }
+
+    @Test
     fun `plugin ordering outranks built-in mirror rewrite only when no custom host set`() {
         val original = buildPlaybackCdnCandidates(
             videoUrls = listOf(
