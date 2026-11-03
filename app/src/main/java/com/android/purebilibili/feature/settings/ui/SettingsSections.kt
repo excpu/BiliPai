@@ -65,8 +65,6 @@ import com.android.purebilibili.core.ui.components.rememberAdaptiveListVisualCap
 import com.android.purebilibili.core.ui.AppAlertDialog
 import com.android.purebilibili.core.ui.AppDialogAction
 import com.android.purebilibili.core.ui.components.AppTextField
-import com.android.purebilibili.core.store.MAX_HOME_REFRESH_COUNT
-import com.android.purebilibili.core.store.MIN_HOME_REFRESH_COUNT
 import com.android.purebilibili.core.store.NetworkProxyStore
 import com.android.purebilibili.core.store.SettingsManager
 import com.android.purebilibili.core.network.policy.AppHttpProxySettings
@@ -188,7 +186,6 @@ internal data class SettingsRootCategoryActions(
     val onDynamicFeedLayoutModeChange: (com.android.purebilibili.core.store.SettingsManager.DynamicFeedLayoutMode) -> Unit,
     val onDynamicTabVisibilityChange: (String) -> Unit,
     val onDynamicTabOrderChange: (List<String>) -> Unit,
-    val onHomeRefreshCountChange: (Int) -> Unit
 )
 
 internal data class SettingsRootCategoryState(
@@ -229,7 +226,6 @@ internal data class SettingsRootCategoryState(
     val dynamicFeedLayoutMode: com.android.purebilibili.core.store.SettingsManager.DynamicFeedLayoutMode,
     val dynamicVisibleTabIds: Set<String>,
     val dynamicTabOrder: List<String>,
-    val homeRefreshCount: Int
 )
 
 @Composable
@@ -511,6 +507,8 @@ internal fun SettingsRootCategoryContent(
                 }
             }
             SettingsRootCategory.HOME_RECOMMENDATION -> {
+                // 推荐流与动态条目统一在「首页与推荐」页的「推荐与动态」分组渲染,
+                // 分类页不再内联第二份 FeedApiSection;分类直跳首页设置页。
                 SettingsRootCategoryEntranceSection {
                     SettingsDetailGroup(title = "首页展示") {
                         SettingsDetailEntrySection(
@@ -526,33 +524,6 @@ internal fun SettingsRootCategoryContent(
                                     onClick = actions.onHomeClick,
                                 ),
                             ),
-                        )
-                    }
-                }
-                SettingsRootCategoryEntranceSection {
-                    SettingsDetailGroup(title = "推荐流与动态") {
-                        FeedApiSection(
-                            feedApiType = state.feedApiType,
-                            onFeedApiTypeChange = actions.onFeedApiTypeChange,
-                            incrementalTimelineRefreshEnabled = state.incrementalTimelineRefreshEnabled,
-                            onIncrementalTimelineRefreshChange = actions.onIncrementalTimelineRefreshChange,
-                            dynamicImagePreviewTextVisible = state.dynamicImagePreviewTextVisible,
-                            onDynamicImagePreviewTextVisibleChange = actions.onDynamicImagePreviewTextVisibleChange,
-                            dynamicCommentPreviewVisible = state.dynamicCommentPreviewVisible,
-                            onDynamicCommentPreviewVisibleChange = actions.onDynamicCommentPreviewVisibleChange,
-                            dynamicDetailImageLayout = state.dynamicDetailImageLayout,
-                            onDynamicDetailImageLayoutChange = actions.onDynamicDetailImageLayoutChange,
-                            dynamicTopBarCollapseOnScroll = state.dynamicTopBarCollapseOnScroll,
-                            onDynamicTopBarCollapseOnScrollChange =
-                                actions.onDynamicTopBarCollapseOnScrollChange,
-                            dynamicFeedLayoutMode = state.dynamicFeedLayoutMode,
-                            onDynamicFeedLayoutModeChange = actions.onDynamicFeedLayoutModeChange,
-                            dynamicVisibleTabIds = state.dynamicVisibleTabIds,
-                            onDynamicTabVisibilityChange = actions.onDynamicTabVisibilityChange,
-                            dynamicTabOrder = state.dynamicTabOrder,
-                            onDynamicTabOrderChange = actions.onDynamicTabOrderChange,
-                            homeRefreshCount = state.homeRefreshCount,
-                            onHomeRefreshCountChange = actions.onHomeRefreshCountChange,
                         )
                     }
                 }
@@ -597,7 +568,8 @@ internal fun SettingsRootCategoryContent(
             }
             SettingsRootCategory.PRIVACY_PERMISSION -> {
                 SettingsRootCategoryEntranceSection {
-                    SettingsDetailGroup(title = "隐私与权限") {
+                    // 分组名描述内容范围,不复读分类名,避免"隐私与权限里还有隐私与权限"。
+                    SettingsDetailGroup(title = "历史记录与权限") {
                         PrivacySection(
                             privacyModeEnabled = state.privacyModeEnabled,
                             searchSuggestionsEnabled = state.searchSuggestionsEnabled,
@@ -617,7 +589,7 @@ internal fun SettingsRootCategoryContent(
             }
             SettingsRootCategory.STORAGE_BACKUP -> {
                 SettingsRootCategoryEntranceSection {
-                    SettingsDetailGroup(title = "存储与备份") {
+                    SettingsDetailGroup(title = "备份与缓存") {
                         DataStorageSection(
                             customDownloadPath = state.customDownloadPath,
                             customImageSavePath = state.customImageSavePath,
@@ -760,8 +732,6 @@ internal fun SettingsRootCategoryContent(
                             onDynamicTabVisibilityChange = actions.onDynamicTabVisibilityChange,
                             dynamicTabOrder = state.dynamicTabOrder,
                             onDynamicTabOrderChange = actions.onDynamicTabOrderChange,
-                            homeRefreshCount = state.homeRefreshCount,
-                            onHomeRefreshCountChange = actions.onHomeRefreshCountChange
                         )
                     }
                 }
@@ -1092,8 +1062,6 @@ fun FeedApiSection(
     onDynamicTabVisibilityChange: (String) -> Unit,
     dynamicTabOrder: List<String>,
     onDynamicTabOrderChange: (List<String>) -> Unit,
-    homeRefreshCount: Int,
-    onHomeRefreshCountChange: (Int) -> Unit
 ) {
     ContentDisplayPreferences()
     val siblingTints = rememberSettingsSiblingIconTints(10, paletteOffset = 1)
@@ -1202,18 +1170,6 @@ fun FeedApiSection(
             tabOrder = dynamicTabOrder,
             onTabOrderChange = onDynamicTabOrderChange,
             iconTint = siblingTints[7]
-        )
-        SettingsAdaptiveDivider()
-        SettingSliderItem(
-            icon = refreshIcon,
-            title = "首页刷新数量",
-            subtitle = resolveHomeRefreshCountSummary(homeRefreshCount),
-            value = homeRefreshCount.toFloat(),
-            onValueChange = { value -> onHomeRefreshCountChange(value.roundToInt()) },
-            valueRange = resolveHomeRefreshSliderRange(),
-            steps = resolveHomeRefreshSliderSteps(),
-            valueFormatter = { value -> value.roundToInt().toString() },
-            iconTint = siblingTints[8]
         )
     }
 }
@@ -1340,17 +1296,8 @@ private fun FeedDynamicTabVisibilityItem(
     }
 }
 
-internal fun resolveHomeRefreshCountSummary(count: Int): String {
-    return "单次最多请求 $count 条推荐内容，实际显示可能更少"
-}
 
-internal fun resolveHomeRefreshSliderRange(): ClosedFloatingPointRange<Float> {
-    return MIN_HOME_REFRESH_COUNT.toFloat()..MAX_HOME_REFRESH_COUNT.toFloat()
-}
 
-internal fun resolveHomeRefreshSliderSteps(): Int {
-    return (MAX_HOME_REFRESH_COUNT - MIN_HOME_REFRESH_COUNT - 1).coerceAtLeast(0)
-}
 
 @Composable
 fun PrivacySection(
@@ -1403,7 +1350,11 @@ fun PrivacySection(
                 SettingSwitchItem(
                     icon = rememberSettingsSemanticIcon(iconRole),
                     title = settingItemTitle(id),
-                    subtitle = if (index == 1) "关闭后隐藏搜索历史，记录设置和已有历史不变" else "关闭后隐藏搜索页对应分区",
+                    subtitle = when (index) {
+                        0 -> "关闭后隐藏搜索页的「大家都在搜」分区"
+                        1 -> "关闭后隐藏搜索历史，记录设置和已有历史不变"
+                        else -> "关闭后隐藏搜索页的「搜索发现」分区"
+                    },
                     checked = visible,
                     onCheckedChange = { enabled ->
                         scope.launch { SettingsManager.setSearchLandingSectionVisible(context, index, enabled) }

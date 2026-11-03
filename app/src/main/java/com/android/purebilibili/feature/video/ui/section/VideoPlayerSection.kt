@@ -1033,10 +1033,6 @@ private fun VideoPlayerSectionContent(
     val pipNoDanmakuEnabled = playerInteractionSettings.pipNoDanmakuEnabled
     val seekForwardSeconds = playerInteractionSettings.seekForwardSeconds
     val seekBackwardSeconds = playerInteractionSettings.seekBackwardSeconds
-    val inlineSwipeSeekSeconds = playerInteractionSettings.inlineSwipeSeekSeconds
-    val fullscreenSwipeSeekSeconds = playerInteractionSettings.fullscreenSwipeSeekSeconds
-    val swipeSeekUseRelativeDuration = playerInteractionSettings.swipeSeekUseRelativeDuration
-    val swipeSeekRelativePercent = playerInteractionSettings.swipeSeekRelativePercent
     val fullscreenSwipeSeekEnabled = playerInteractionSettings.fullscreenSwipeSeekEnabled
     val fullscreenGestureReverse = playerInteractionSettings.fullscreenGestureReverse
     val autoEnterFullscreenEnabled = playerInteractionSettings.autoEnterFullscreenEnabled
@@ -1793,6 +1789,15 @@ private fun VideoPlayerSectionContent(
             showEndDrawer = false
         }
     }
+    // 两种材质共用：横屏侧栏打开时收起控件，保留之后手动唤出控件的能力。
+    LaunchedEffect(isFullscreen, configuration.orientation, showEndDrawer, landscapeCommentPanelVisible) {
+        if (isFullscreen &&
+            configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE &&
+            (showEndDrawer || landscapeCommentPanelVisible)
+        ) {
+            showControls = false
+        }
+    }
     val endDrawerReservedWidthDp = resolveLandscapeEndDrawerReservedWidthDp(
         drawerVisible = showEndDrawer,
         isFullscreen = isFullscreen,
@@ -1844,7 +1849,7 @@ private fun VideoPlayerSectionContent(
     }
 
     fun applyLongPressPlaybackParameters(parameters: PlaybackParameters) {
-        // 长按倍速是临时手势；不要走手动改倍速的音轨兼容刷新通路，避免按下/松开时重建播放源。
+        // 长按只临时更新播放参数；保留当前播放源，松手时还原原始参数。
         playerState.player.playbackParameters = parameters
     }
 
@@ -2436,10 +2441,6 @@ private fun VideoPlayerSectionContent(
                 slideVolumeBrightnessEnabled,
                 fullscreenSwipeSeekEnabled,
                 gestureSensitivity,
-                inlineSwipeSeekSeconds,
-                fullscreenSwipeSeekSeconds,
-                swipeSeekUseRelativeDuration,
-                swipeSeekRelativePercent,
                 fullscreenGestureReverse,
                 bottomGestureExclusionHeightDp,
                 gestureSeekFallbackDurationMs,
@@ -2834,16 +2835,10 @@ private fun VideoPlayerSectionContent(
                                         fallbackDurationMs = gestureSeekFallbackDurationMs
                                     )
                                     val seekDelta = resolveHorizontalSeekDeltaMs(
-                                        isFullscreen = isFullscreen,
-                                        fullscreenSwipeSeekEnabled = fullscreenSwipeSeekEnabled,
                                         totalDragDistanceX = totalDragDistanceX,
                                         containerWidthPx = size.width.toFloat(),
-                                        fullscreenSwipeSeekSeconds = fullscreenSwipeSeekSeconds,
-                                        inlineSwipeSeekSeconds = inlineSwipeSeekSeconds,
                                         gestureSensitivity = gestureSensitivity,
                                         durationMs = duration,
-                                        useRelativeDuration = swipeSeekUseRelativeDuration,
-                                        relativeSeekPercent = swipeSeekRelativePercent
                                     )
                                     if (seekDelta != null) {
                                         seekTargetTime = (startPosition + seekDelta).coerceIn(0L, duration)
@@ -4395,6 +4390,8 @@ private fun VideoPlayerSectionContent(
         hasSurfaceRevealSettled = true
     }
     val isSurfaceRevealSettling = hasStartedSmoothReveal && !hasSurfaceRevealSettled
+    // 装载媒体和 videoSize 不能证明当前输出面已经出画。玻璃与原生路径共用首帧揭开
+    // 时序：淡入期间保留不透明封面垫底，直到视频层不透明后才移除，避免中途露出黑底。
     val holdEntryCoverUnderlay = !isPlayerSurfaceReady || shouldHoldEntryCoverUnderlay(
         isFirstFrameRendered = isFirstFrameRendered,
         forceCoverDuringReturnAnimation = forceCoverDuringReturnAnimation,

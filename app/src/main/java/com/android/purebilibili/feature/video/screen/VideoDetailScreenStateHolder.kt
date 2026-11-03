@@ -845,6 +845,12 @@ internal fun VideoDetailScreenStateHolder(
         composerViewModel = composerViewModel,
         supplementViewModel = supplementViewModel,
     )
+    VideoOnlineCountVisibilityEffect(
+        viewModel = viewModel,
+        bvid = currentBvid,
+        cid = playbackTargetCid,
+        pageActive = isVisible && !keepLoadedContentForBackPreview && !isPipMode && !isPortraitFullscreen,
+    )
     val commentListState = rememberSaveable(currentBvid, saver = LazyListState.Saver) {
         LazyListState()
     }
@@ -4026,6 +4032,8 @@ internal fun VideoDetailScreenStateHolder(
                                 isCommittedReturn = isCommittedCardReturn,
                                 coverSource = residentCoverSource,
                                 hasRenderedFirstFrame = hasRenderedFirstFrameForReturn,
+                                hasVideoFrame = playerState.player.videoSize.width > 0 &&
+                                    playerState.player.videoSize.height > 0,
                                 entryCoverAlphaProvider = { 1f - entryFirstFrameReveal.value },
                                 detailContentLoading = uiState is VideoPlaybackUiState.Loading,
                                 followProgressEnabledProvider = videoCardDepthBackgroundState
@@ -4957,18 +4965,14 @@ internal fun VideoDetailScreenStateHolder(
                         }
                         val residentCoverContentScale = VideoDetailCoverContentScale
                         val nowPlayingMediaAlphaProvider: () -> Float = {
-                            if (!entryOwnsMiuixCardTransition || !miuixLandingState.enabled ||
-                                miuixLandingState.sourceChromeSnapshot?.isNowPlayingBar != true
-                            ) {
-                                1f
-                            } else if (isCommittedCardReturn &&
-                                videoCardDepthBackgroundState.phaseProvider() ==
-                                    VideoCardTransitionBackgroundPhase.IDLE
-                            ) {
-                                0f
-                            } else {
-                                1f - flyingSourceChromeAlphaProvider()
-                            }
+                            resolveVideoDetailNowPlayingMediaAlpha(
+                                ownsNowPlayingTransition = entryOwnsMiuixCardTransition &&
+                                    miuixLandingState.enabled &&
+                                    miuixLandingState.sourceChromeSnapshot?.isNowPlayingBar == true,
+                                isCommittedCardReturn = isCommittedCardReturn,
+                                phase = videoCardDepthBackgroundState.phaseProvider(),
+                                sourceChromeAlpha = flyingSourceChromeAlphaProvider(),
+                            )
                         }
                         val returnMediaFrameProvider: () -> VideoDetailReturnMediaFrame = {
                             val returnGestureInProgress =
@@ -5130,9 +5134,19 @@ internal fun VideoDetailScreenStateHolder(
                                         position.y.toInt() + size.height
                                     )
                                     val nextRootBottomPx = (rootPosition.y + size.height).roundToInt()
+                                    // 只在「稳定的竖屏内联布局」下记录播放器底边。
+                                    // 横屏/全屏期间播放器铺满窗口，这个值没有意义；从横屏回竖屏的头几百毫秒
+                                    // 播放器会先报一个横屏残留高度（如 1439）再缩到正确值（1079），
+                                    // 中途记录下来会让楼中楼宿主按错误的高度算预留，出现空隙和高度跳变。
+                                    val shouldTrackPlayerBottom = !isFullscreenMode &&
+                                        !isLandscape &&
+                                        continuousPlayerPhase == ContinuousPlayerTransitionPhase.Inline
                                     if (
-                                        videoPlayerRootBottomPx == 0 ||
-                                        abs(videoPlayerRootBottomPx - nextRootBottomPx) > 3
+                                        shouldTrackPlayerBottom &&
+                                        (
+                                            videoPlayerRootBottomPx == 0 ||
+                                                abs(videoPlayerRootBottomPx - nextRootBottomPx) > 3
+                                            )
                                     ) {
                                         videoPlayerRootBottomPx = nextRootBottomPx
                                     }
@@ -5157,7 +5171,9 @@ internal fun VideoDetailScreenStateHolder(
                                     inverseScaleYProvider = { returnMediaInverseScaleProvider().scaleY },
                                     clipCornerDp = returnMediaClipCornerDp,
                                     alphaProvider = {
-                                        returnMediaFrameProvider().coverAlpha * nowPlayingMediaAlphaProvider()
+                                        val frameAlpha = returnMediaFrameProvider().coverAlpha
+                                        val mediaAlpha = nowPlayingMediaAlphaProvider()
+                                        frameAlpha * mediaAlpha
                                     },
                                     backingColor = Color.Black,
                                     modifier = Modifier.fillMaxSize().zIndex(1f),
@@ -5902,8 +5918,14 @@ internal fun VideoDetailScreenStateHolder(
             threadListModifier = commentThreadPlayerScrollConnection?.let {
                 Modifier.nestedScroll(it)
             } ?: Modifier,
+            // 横屏全屏时宿主退出，只保留 ViewModel 里的 subReplyState。
+            // 早先试过让它留在 composition 里（移到屏幕外），但横屏时父容器高度为 0，
+            // 转回竖屏要重新测量好几次（1761→2200→2274），楼中楼会突然变高，
+            // 背景模糊也跟着渐入，割裂感比卡顿更明显。
             visible = shouldShowDetachedVideoCommentThreadHost(useTabletLayout = useTabletLayout) &&
-                !(canShowLandscapeComments && landscapeCommentPanelVisible),
+                !canShowLandscapeComments,
+            // 从横屏恢复时跳过进场动画，直接显示成原来的样子。
+            instantRestore = canShowLandscapeComments,
             successState = successState,
             commentState = commentState,
             commentViewModel = commentViewModel,

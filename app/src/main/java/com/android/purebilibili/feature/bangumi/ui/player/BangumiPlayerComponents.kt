@@ -10,6 +10,7 @@ import com.android.purebilibili.core.ui.MediaContrastPalette
 import com.android.purebilibili.core.ui.AppContentColors
 
 import com.android.purebilibili.feature.video.ui.overlay.NextWatchOverlay
+import com.android.purebilibili.feature.video.usecase.togglePlayerPlaybackFromUserAction
 import com.android.purebilibili.core.ui.components.AppIcon
 import com.android.purebilibili.core.ui.components.AppText
 import com.android.purebilibili.core.ui.components.AppHorizontalDivider
@@ -440,7 +441,7 @@ fun BangumiPlayerView(
     }
     val capturePlayerPage = pageGlassSupported && glassCaptureVisible
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .background(Color.Black)
             .pointerInput(isScreenLocked, longPressSpeed, requestedAudioQuality, exoPlayer) {
@@ -469,7 +470,7 @@ fun BangumiPlayerView(
                     },
                     onDoubleTap = {
                         if (isScreenLocked) return@detectTapGestures
-                        if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+                        togglePlayerPlaybackFromUserAction(exoPlayer)
                     }
                 )
             }
@@ -589,16 +590,10 @@ fun BangumiPlayerView(
                                     // null，拖动不再产生越界目标。
                                     val seekDelta = com.android.purebilibili.feature.video.ui.section
                                         .resolveHorizontalSeekDeltaMs(
-                                            isFullscreen = isFullscreen,
-                                            fullscreenSwipeSeekEnabled = playerInteractionSettings.fullscreenSwipeSeekEnabled,
                                             totalDragDistanceX = dragDelta,
                                             containerWidthPx = screenWidth,
-                                            fullscreenSwipeSeekSeconds = playerInteractionSettings.fullscreenSwipeSeekSeconds,
-                                            inlineSwipeSeekSeconds = playerInteractionSettings.inlineSwipeSeekSeconds,
                                             gestureSensitivity = playerInteractionSettings.gestureSensitivity,
                                             durationMs = duration,
-                                            useRelativeDuration = playerInteractionSettings.swipeSeekUseRelativeDuration,
-                                            relativeSeekPercent = playerInteractionSettings.swipeSeekRelativePercent,
                                         )
                                     if (seekDelta != null) {
                                         seekPreviewPosition = (seekGestureStartPosition + seekDelta).coerceIn(0L, duration)
@@ -853,6 +848,7 @@ fun BangumiPlayerView(
         ) {
         val captureAndShareScreenshot = com.android.purebilibili.feature.video.ui.components.rememberVideoScreenshotAction()
         BangumiPlayerOverlayHost(
+            viewportWidthDp = maxWidth.value.toInt(),
             player = exoPlayer,
             danmakuManager = danmakuManager,
             features = features.copy(

@@ -83,7 +83,6 @@ import com.android.purebilibili.feature.video.ui.section.VideoNoteListSheet
 import com.android.purebilibili.feature.video.ui.section.VideoSupplementStatsActions
 import com.android.purebilibili.feature.video.ui.section.VideoNoteDeleteConfirmDialog
 import com.android.purebilibili.feature.video.ui.section.VideoNoteEditorSheet
-import com.android.purebilibili.feature.video.ui.section.resolveDisplayBgmList
 import com.android.purebilibili.feature.video.ui.section.UpInfoSection
 import com.android.purebilibili.feature.video.ui.section.VideoPlayerSection
 import com.android.purebilibili.feature.video.ui.section.VideoPlayerSectionActions
@@ -766,8 +765,6 @@ internal fun TabletVideoInfoPane(
         videoTags = success.videoTags,
         ownerFollowerCount = success.ownerFollowerCount,
         ownerVideoCount = success.ownerVideoCount,
-        bgmInfo = success.bgmInfo,
-        bgmInfoList = success.bgmInfoList,
         onBgmClick = onBgmClick,
         relatedVideos = if (showRelatedVideos) success.related else emptyList(),
         relatedLoadState = success.relatedLoadState,
@@ -1115,6 +1112,10 @@ internal fun TabletSecondaryContent(
                 TabletSecondaryTab.COMMENTS -> {
                     val listState = rememberLazyListState()
                     val repliesError = commentState.repliesError
+                    // 首包尚未完成或正在刷新时保留骨架；真实空页不依赖控制文案或数量判断。
+                    val pendingFirstLoad = commentState.replies.isEmpty() &&
+                        repliesError == null &&
+                        (commentState.isRepliesRefreshing || (commentState.nextPage <= 1 && !commentState.isRepliesEnd))
                     val shouldLoadMore by remember(
                         listState,
                         commentState.isRepliesLoading,
@@ -1296,9 +1297,9 @@ internal fun TabletSecondaryContent(
                                     )
                                 }
                             }
+                            // 有评论数但列表空、无错误：加载中或请求还没发起，都显示骨架。
                             if (
-                                commentState.isRepliesLoading &&
-                                !commentState.isRepliesRefreshing &&
+                                (commentState.isRepliesLoading || pendingFirstLoad) &&
                                 commentState.replies.isEmpty()
                             ) {
                                 // 骨架拆成多个独立 lazy item（而不是 1 个 item 里塞 5 行）：
@@ -1307,10 +1308,7 @@ internal fun TabletSecondaryContent(
                                     slotCount = commentSkeletonSlotCount,
                                     keyPrefix = "tablet_comment_skeleton_",
                                 )
-                            } else if (
-                                commentState.isRepliesLoading &&
-                                !commentState.isRepliesRefreshing
-                            ) {
+                            } else if (commentState.isRepliesLoading) {
                                 item {
                                     Box(
                                         modifier = Modifier
@@ -1329,6 +1327,7 @@ internal fun TabletSecondaryContent(
                             commentState.replies.isEmpty() &&
                             !commentState.isRepliesLoading &&
                             !commentState.isRepliesRefreshing &&
+                            !pendingFirstLoad &&
                             repliesError == null
                         ) {
                             Column(
@@ -1631,8 +1630,6 @@ private fun ScrollableVideoInfoSection(
     videoTags: List<com.android.purebilibili.data.model.response.VideoTag>,
     ownerFollowerCount: Int?,
     ownerVideoCount: Int?,
-    bgmInfo: BgmInfo? = null,
-    bgmInfoList: List<BgmInfo> = emptyList(),
     onBgmClick: (BgmInfo) -> Unit = {},
     onFollowClick: () -> Unit,
     onFavoriteClick: () -> Unit,
@@ -1730,12 +1727,7 @@ private fun ScrollableVideoInfoSection(
                             onNoteClick = { showNoteListSheet = true },
                         )
                     },
-                    bgmList = resolveDisplayBgmList(
-                        bgmInfo = bgmInfo,
-                        bgmInfoList = bgmInfoList
-                    ),
                     onBgmClick = onBgmClick,
-                    onRelatedVideoClick = onRelatedVideoClick,
                     onDescriptionUrlClick = onOpenBilibiliLink,
                     onTagClick = onSearchKeywordClick
                 )

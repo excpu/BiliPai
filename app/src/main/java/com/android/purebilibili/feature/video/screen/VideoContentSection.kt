@@ -92,7 +92,6 @@ import com.android.purebilibili.feature.common.resolveIndexedVideoLazyKey
 import com.android.purebilibili.feature.video.ui.section.VideoTitleWithDesc
 import com.android.purebilibili.feature.video.ui.section.UpInfoSection
 import com.android.purebilibili.feature.video.ui.section.ActionButtonsRow
-import com.android.purebilibili.feature.video.ui.section.resolveDisplayBgmList
 import com.android.purebilibili.feature.video.ui.section.resolveVideoDetailMotionBudget
 import com.android.purebilibili.feature.video.ui.section.shouldAnimateVideoDetailLayout
 import com.android.purebilibili.feature.video.ui.components.NativeDanmakuToggleButton
@@ -444,8 +443,6 @@ internal class VideoContentData(
     val emoteMap: Map<String, String>,
     val followingMids: Set<Long>,
     val videoTags: List<VideoTag>,
-    val bgmInfo: BgmInfo?,
-    val bgmInfoList: List<BgmInfo>,
     val relatedLoadState: VideoPlaybackUiState.RelatedLoadState = VideoPlaybackUiState.RelatedLoadState.READY,
 )
 
@@ -591,8 +588,6 @@ internal fun VideoContentSection(
     val emoteMap = data.emoteMap
     val followingMids = data.followingMids
     val videoTags = data.videoTags
-    val bgmInfo = data.bgmInfo
-    val bgmInfoList = data.bgmInfoList
     val isLoggedIn = engagementState.isLoggedIn
     val isFollowing = engagementState.isFollowing
     val followStatusKnown = engagementState.followStatusKnown
@@ -1050,8 +1045,6 @@ internal fun VideoContentSection(
                         aiSummaryPrompt = aiSummaryPrompt,
                         onShowAiSummarySheet = { showAiSummarySheet = true },
                         onShowNoteListSheet = { showNoteListSheet = true },
-                        bgmInfo = bgmInfo,
-                        bgmInfoList = bgmInfoList,
                         onlineCount = onlineCount,
                         showOnlineCount = showOnlineCount,
                         onTimestampClick = onTimestampClick,
@@ -1467,8 +1460,6 @@ private fun VideoIntroTab(
     aiSummaryPrompt: com.android.purebilibili.feature.video.viewmodel.AiSummaryPromptState? = null,
     onShowAiSummarySheet: () -> Unit = {},
     onShowNoteListSheet: () -> Unit = {},
-    bgmInfo: BgmInfo? = null,
-    bgmInfoList: List<BgmInfo> = emptyList(),
     onTimestampClick: ((Long) -> Unit)? = null,
     onBgmClick: (BgmInfo) -> Unit = {},
     sponsorVideoLabel: String = "",
@@ -1532,8 +1523,6 @@ private fun VideoIntroTab(
                 aiSummaryPrompt = aiSummaryPrompt,
                 onShowAiSummarySheet = onShowAiSummarySheet,
                 onShowNoteListSheet = onShowNoteListSheet,
-                bgmInfo = bgmInfo,
-                bgmInfoList = bgmInfoList,
                 relatedVideos = relatedVideos,
                 onlineCount = onlineCount,
                 showOnlineCount = showOnlineCount,
@@ -1764,7 +1753,9 @@ internal fun VideoCommentTab(
                     )
                 }
             }
-            if (isRepliesLoading && !isRepliesRefreshing && replies.isEmpty()) {
+            if (replies.isEmpty() && repliesError == null &&
+                (isRepliesLoading || isRepliesRefreshing || (paginationPage <= 1 && !isRepliesEnd))
+            ) {
                 // 骨架拆成多个独立 lazy item（而不是 1 个 item 里塞 5 行）：数据到达时是
                 // 一个槽位换一个槽位，列表锚点不失效，不会整体跳一下。
                 videoCommentSkeletonItems(
@@ -1774,19 +1765,12 @@ internal fun VideoCommentTab(
             } else if (replies.isEmpty() && voteCard == null && repliesError == null) {
                 item(key = "video_comment_empty", contentType = "video_comment_empty") {
                     val emptyMessage = pageControl?.emptyMessage()?.takeIf { it.isNotBlank() }
-                    if (replyCount > 0 && emptyMessage == null) {
-                        com.android.purebilibili.feature.video.ui.components.VideoCommentLoadError(
-                            message = "评论暂时无法加载，请重试或切换「最新」",
-                            onRetry = onRefreshReplies,
-                            modifier = Modifier.fillMaxWidth().fillParentMaxHeight(0.7f),
+                    // 数量种子不能证明加载失败；错误只消费请求链明确返回的 repliesError。
+                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        AppText(
+                            text = emptyMessage ?: "暂无评论",
+                            color = commentAppearance.secondaryTextColor
                         )
-                    } else {
-                        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                            AppText(
-                                text = emptyMessage ?: "暂无评论",
-                                color = commentAppearance.secondaryTextColor
-                            )
-                        }
                     }
                 }
             } else {
@@ -2134,8 +2118,6 @@ private fun VideoHeaderContent(
     aiSummaryPrompt: com.android.purebilibili.feature.video.viewmodel.AiSummaryPromptState? = null,
     onShowAiSummarySheet: () -> Unit = {},
     onShowNoteListSheet: () -> Unit = {},
-    bgmInfo: BgmInfo? = null,
-    bgmInfoList: List<BgmInfo> = emptyList(),
     relatedVideos: List<RelatedVideo> = emptyList(),
     onTimestampClick: ((Long) -> Unit)? = null,
     onBgmClick: (BgmInfo) -> Unit = {},
@@ -2200,15 +2182,10 @@ private fun VideoHeaderContent(
                     onNoteClick = onShowNoteListSheet,
                 )
             },
-            bgmList = resolveDisplayBgmList(
-                bgmInfo = bgmInfo,
-                bgmInfoList = bgmInfoList
-            ),
             onlineCount = onlineCount,
             showOnlineCount = showOnlineCount,
             onBgmClick = onBgmClick,
             onDescriptionUrlClick = onDescriptionUrlClick,
-            onRelatedVideoClick = onRelatedVideoClick,
             animateLayout = animateVideoDetailLayout,
             onTagClick = onSearchKeywordClick
         )
