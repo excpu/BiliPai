@@ -611,7 +611,8 @@ class CdnRegionPolicyTest {
     }
 
     @Test
-    fun `all pcdn candidates fall back to a regular mirror instead of an empty list`() {        val original = buildPlaybackCdnCandidates(
+    fun `all pcdn candidates fall back to a regular mirror instead of an empty list`() {
+        val original = buildPlaybackCdnCandidates(
             videoUrls = listOf("https://mcdn.bilivideo.cn/upgcxcode/1/2/video.m4s?sign=abc"),
             audioUrls = listOf("https://mcdn.bilivideo.cn/upgcxcode/1/2/audio.m4s?sign=abc"),
         )
@@ -624,6 +625,44 @@ class CdnRegionPolicyTest {
         assertEquals(1, preferred.size)
         assertEquals("upos-sz-mirrorali.bilivideo.com", hostFromCdnUrl(preferred.first().videoUrl))
         assertEquals("upos-sz-mirrorali.bilivideo.com", hostFromCdnUrl(preferred.first().audioUrl.orEmpty()))
+    }
+
+    @Test
+    fun `audio only pcdn candidate is rewritten to a regular mirror too`() {
+        // B 站会把视频分到常规 CDN、音频分到 PCDN，以前只看 videoUrl 会把整条候选当安全项留下，
+        // 音频就带着解析不了的 mcdn 域名进了播放器。
+        val original = buildPlaybackCdnCandidates(
+            videoUrls = listOf("https://upos-sz-mirrorali.bilivideo.com/upgcxcode/1/2/video.m4s?sign=abc"),
+            audioUrls = listOf("https://mcdn.bilivideo.cn/upgcxcode/1/2/audio.m4s?sign=abc"),
+        )
+
+        val preferred = applyPlaybackCdnPreference(
+            candidates = original,
+            preference = PlaybackCdnPreference.BASE_URL,
+        )
+
+        assertEquals(1, preferred.size)
+        assertEquals("upos-sz-mirrorali.bilivideo.com", hostFromCdnUrl(preferred.first().videoUrl))
+        assertEquals("upos-sz-mirrorali.bilivideo.com", hostFromCdnUrl(preferred.first().audioUrl.orEmpty()))
+    }
+
+    @Test
+    fun `custom host still outranks pcdn cleanup and keeps its own host`() {
+        val original = buildPlaybackCdnCandidates(
+            videoUrls = listOf("https://upos-sz-mirrorali.bilivideo.com/upgcxcode/1/2/video.m4s?sign=abc"),
+            audioUrls = listOf("https://mcdn.bilivideo.cn/upgcxcode/1/2/audio.m4s?sign=abc"),
+        )
+
+        val preferred = applyPlaybackCdnPreference(
+            candidates = original,
+            preference = PlaybackCdnPreference.CUSTOM,
+            customHost = "cdn.example.net",
+            strictCustomHost = true,
+        )
+
+        assertEquals(1, preferred.size)
+        assertEquals("https://cdn.example.net/upgcxcode/1/2/video.m4s?sign=abc", preferred.first().videoUrl)
+        assertEquals("https://cdn.example.net/upgcxcode/1/2/audio.m4s?sign=abc", preferred.first().audioUrl)
     }
 
     @Test

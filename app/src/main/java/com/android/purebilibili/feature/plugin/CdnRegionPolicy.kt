@@ -327,20 +327,31 @@ internal fun normalizePlaybackCdnHost(input: String?): String? {
 /**
  * 排除 PCDN 候选。
  *
- * 整批都是 PCDN 时不直接返回空，而是把 host 换成常规线路——upgcxcode 路径与签名
- * 在不同 host 之间通用，这样屏蔽 PCDN 之后仍然能播放/下载。
+ * 视频和音频的 host 是独立下发的，B 站会只把其中一条分到 PCDN，所以任一条落在
+ * PCDN 上整个候选就不能当常规线路用——以前只看 videoUrl，视频走常规 CDN、音频走
+ * PCDN 时该候选被当作安全项留下，音频就带着解析不了的 mcdn 域名进了播放器。
+ *
+ * 整批都不安全时不直接返回空，而是把有问题的 host 换成常规线路——upgcxcode 路径
+ * 与签名在不同 host 之间通用，这样屏蔽 PCDN 之后仍然能播放/下载。手输自定义线路
+ * 与严格模式在 [applyPlaybackCdnPreference] 里先于本函数返回，不受这里影响。
  */
 private fun excludePcdnCandidates(
     candidates: List<PlaybackCdnCandidate>
 ): List<PlaybackCdnCandidate> {
-    val safe = candidates.filter { !isRiskyCdnHost(hostOf(it.videoUrl)) }
+    val safe = candidates.filterNot { isPcdnCandidate(it) }
     if (safe.isNotEmpty()) return safe
     return candidates.map { candidate ->
+        val videoRisky = isRiskyCdnHost(hostOf(candidate.videoUrl))
+        val audioRisky = candidate.audioUrl?.let { isRiskyCdnHost(hostOf(it)) } == true
+        if (!videoRisky && !audioRisky) return@map candidate
         candidate.copy(
-            videoUrl = rewriteBilivideoHost(candidate.videoUrl, FALLBACK_CDN_HOST)
-                ?: candidate.videoUrl,
+            videoUrl = if (videoRisky) {
+                rewriteBilivideoHost(candidate.videoUrl, FALLBACK_CDN_HOST) ?: candidate.videoUrl
+            } else {
+                candidate.videoUrl
+            },
             audioUrl = candidate.audioUrl?.let {
-                rewriteBilivideoHost(it, FALLBACK_CDN_HOST) ?: it
+                if (audioRisky) rewriteBilivideoHost(it, FALLBACK_CDN_HOST) ?: it else it
             },
         )
     }
@@ -348,6 +359,11 @@ private fun excludePcdnCandidates(
 
 private fun hostOf(url: String): String =
     runCatching { java.net.URI(url).host.orEmpty() }.getOrDefault("")
+
+/** 视频或音频任一条落在 PCDN 上，整个候选就不能当常规线路用。 */
+private fun isPcdnCandidate(candidate: PlaybackCdnCandidate): Boolean =
+    isRiskyCdnHost(hostOf(candidate.videoUrl)) ||
+        candidate.audioUrl?.let { isRiskyCdnHost(hostOf(it)) } == true
 
 /** 整批候选都是 PCDN 时改写的目标线路。 */
 private const val FALLBACK_CDN_HOST = "upos-sz-mirrorali.bilivideo.com"

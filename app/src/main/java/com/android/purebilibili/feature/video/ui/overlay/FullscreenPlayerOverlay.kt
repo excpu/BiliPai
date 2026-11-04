@@ -577,7 +577,8 @@ fun FullscreenPlayerOverlay(
             showRatioMenu -> showRatioMenu = false
             showSpeedMenu -> showSpeedMenu = false
             showDanmakuSettings -> showDanmakuSettings = false
-            else -> onNavigateToDetail()
+            // 这个全屏是从小窗展开的，退出回到小窗；「返回详情页」走三个点菜单里的入口。
+            else -> onDismiss()
         }
     }
     val backEventState = rememberNavigationEventState(NavigationEventInfo.None)
@@ -987,6 +988,13 @@ fun FullscreenPlayerOverlay(
                 text = { AppText("退出全屏") },
                 onClick = {
                     showContextMenu = false
+                    onDismiss()
+                },
+            )
+            AppDropdownMenuItem(
+                text = { AppText("返回视频详情页") },
+                onClick = {
+                    showContextMenu = false
                     onNavigateToDetail()
                 },
             )
@@ -1123,7 +1131,7 @@ fun FullscreenPlayerOverlay(
                         AndroidView(
                             factory = { ctx ->
                                 DanmakuRenderView(ctx).apply {
-                                    danmakuManager.isFullscreenSurface = true
+                                    danmakuManager.useFullscreenTextSize = true
                                     setBackgroundColor(android.graphics.Color.TRANSPARENT)
                                     configureAsPassiveDanmakuOverlay()
                                     danmakuManager.attachView(this)
@@ -1131,7 +1139,7 @@ fun FullscreenPlayerOverlay(
                                 }
                             },
                             update = { view ->
-                                danmakuManager.isFullscreenSurface = true
+                                danmakuManager.useFullscreenTextSize = true
                                 if (view.width > 0 && view.height > 0) {
                                     val sizeTag = "${view.width}x${view.height}"
                                     if (view.tag != sizeTag) {
@@ -1218,8 +1226,8 @@ fun FullscreenPlayerOverlay(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(16.dp)
                     ) {
-                        AppIconButton(onClick = onNavigateToDetail) {
-                            AppIcon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, "返回详情页", tint = Color.White)
+                        AppIconButton(onClick = onDismiss) {
+                            AppIcon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, "回到小窗", tint = Color.White)
                         }
                         Spacer(Modifier.width(8.dp))
                         AppText(

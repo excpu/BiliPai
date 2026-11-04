@@ -2646,7 +2646,13 @@ private fun MaterialBottomBar(
             AppNavigationBar(
                 containerColor = Color.Transparent,
                 tonalElevation = AppSpacingTokens.None,
-                modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars)
+                // 贴底原生栏只由组件消费系统导航区；常规字阶收紧内容行，大字体保留原生行高。
+                // 悬浮玻璃、Miuix 与皮肤导航在各自入口处理，不借此改变它们的几何。
+                windowInsets = WindowInsets.navigationBars,
+                modifier = if (uiSkinDecoration == null) {
+                    val rowHeight = (64f + 16f * (LocalDensity.current.fontScale - 1f).coerceIn(0f, 1f)).dp
+                    Modifier.height(rowHeight + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
+                } else Modifier,
             ) {
                 bottomBarVisibleItems.forEach { item ->
                     val itemLabel = resolveBottomNavItemLabel(item, itemLabels)
@@ -4218,9 +4224,33 @@ private fun BiliPaiFloatingBottomBarChrome(
                             }
                         }
                         if (useNativeMiuixNavigation) {
+                            val nativeShape = resolveSharedBottomBarCapsuleShape()
+                            val nativeSurfaceColor = top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme.surfaceContainer
+                            val useNativeBlur = blurEnabled && (miuixBackdrop != null || hazeState != null)
                             AppPlatformNavigationBar(
-                                modifier = dockModifier.clip(resolveSharedBottomBarCapsuleShape()),
-                                color = top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme.surfaceContainer,
+                                modifier = dockModifier
+                                    .clip(nativeShape)
+                                    .then(
+                                        if (useNativeBlur) {
+                                            // 原生悬浮导航保留自身布局，磨砂由壳层绘制；内部底色必须透明。
+                                            // 此分支仅用于关闭液态玻璃后的 Miuix，不改变 MD3 或玻璃材质。
+                                            Modifier.biliPaiMiuixFloatingDockSurface(
+                                                shape = nativeShape,
+                                                backdrop = miuixBackdrop,
+                                                containerColor = nativeSurfaceColor,
+                                                blurEnabled = true,
+                                                glassEnabled = false,
+                                                blurRadius = tuning.shellBlurRadiusDp.dp,
+                                                hazeState = hazeState,
+                                                motionTier = motionTier,
+                                                isTransitionRunning = isTransitionRunning,
+                                                forceLowBlurBudget = forceLowBlurBudget,
+                                            )
+                                        } else {
+                                            Modifier
+                                        }
+                                    ),
+                                color = if (useNativeBlur) Color.Transparent else nativeSurfaceColor,
                                 showDivider = false,
                                 defaultWindowInsetsPadding = false,
                                 mode = resolveMd3BottomBarDisplayMode(labelMode).toAppPlatformNavigationDisplayMode(),

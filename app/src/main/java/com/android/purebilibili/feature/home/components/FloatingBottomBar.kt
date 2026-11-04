@@ -48,7 +48,6 @@ import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.systemGestures
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
@@ -573,7 +572,6 @@ fun FloatingBottomBar(
     val gravityGate = if (isLiquidGlassMode) {
         com.android.purebilibili.core.ui.rememberDecorativeAnimationGate()
     } else null
-    val linkedShellAlpha = LocalLinkedDockGlassShellAlpha.current.takeIf { isLiquidGlassMode }
     val parentGlass = com.android.purebilibili.core.ui.blur.LocalAppGlassContainer.current
         .takeIf { isLiquidGlassMode && com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled }
     val materialBackdrop = if (parentGlass != null) parentGlass.backdrop else backdrop
@@ -589,6 +587,7 @@ fun FloatingBottomBar(
         liquidGlassTuning.readabilityMode == LiquidGlassReadabilityMode.ADAPTIVE
     val adaptiveReadabilityState = rememberLiquidGlassAdaptiveReadabilityState(
         enabled = adaptiveReadabilityEnabled,
+        samplingAllowed = enabled,
     )
     val resolvedContentColor = rememberLiquidGlassAdaptiveContentColor(
         stableColor = colors.contentColor,
@@ -977,7 +976,10 @@ fun FloatingBottomBar(
         // field keeps press bloom in sync without recreating the pointerInput owner.
         dampedDragAnimation.pressedScale = pressedScale
     }
-    LaunchedEffect(dampedDragAnimation, dragScrollState, density) {
+    // 玻璃拖拽的逐帧任务跟随可见性；原生菜单仍保留原有边缘滚动行为。
+    val dragEdgeScrollActive = !isLiquidGlassMode || (enabled && gravityGate?.active == true)
+    LaunchedEffect(dampedDragAnimation, dragScrollState, density, dragEdgeScrollActive) {
+        if (!dragEdgeScrollActive) return@LaunchedEffect
         val scroll = dragScrollState ?: return@LaunchedEffect
         snapshotFlow { dampedDragAnimation.isDragging }.collectLatest { dragging ->
             if (!dragging) return@collectLatest
@@ -1325,31 +1327,6 @@ fun FloatingBottomBar(
                 heightPx * kotlin.math.tanh(0.05f * (interactiveHighlight?.offset?.y ?: 0f) / heightPx) * DOCK_SHELL_ELASTIC_GAIN
         }
     }
-    val linkedContact = LocalLinkedDockContact.current.takeIf { isLiquidGlassMode }
-    val shellScale = rememberUpdatedState<(androidx.compose.ui.geometry.Size) -> Offset> { size ->
-        val width = size.width.coerceAtLeast(1f)
-        val scale = if (inheritDeformation) 1f else lerp(1f, 1f + pressBloomPx / width, dampedDragAnimation.pressProgress)
-        val dragY = abs(interactiveHighlight?.offset?.y ?: 0f)
-        val stretch = if (inheritDeformation) 0f else (with(density) { 4.dp.toPx() } / size.height.coerceAtLeast(1f)) *
-            (dragY / width) * (size.height / width).coerceAtMost(1f) * DOCK_SHELL_ELASTIC_GAIN
-        Offset(scale, scale + stretch.coerceAtMost(DOCK_SHELL_MAX_EXTRA_STRETCH))
-    }
-    DisposableEffect(linkedContact, dockDragTranslationY) {
-        val boundsProvider: (androidx.compose.ui.geometry.Rect) -> androidx.compose.ui.geometry.Rect = { bounds ->
-            val scale = shellScale.value(bounds.size)
-            val center = bounds.center + Offset(0f, dockDragTranslationY())
-            val halfWidth = bounds.width * scale.x / 2f
-            val halfHeight = bounds.height * scale.y / 2f
-            androidx.compose.ui.geometry.Rect(center.x - halfWidth, center.y - halfHeight,
-                center.x + halfWidth, center.y + halfHeight)
-        }
-        linkedContact?.navigationBounds = boundsProvider
-        onDispose {
-            if (linkedContact != null && linkedContact.navigationBounds === boundsProvider) {
-                linkedContact.navigationBounds = null
-            }
-        }
-    }
     SideEffect { onDockTranslationProviderChanged?.invoke(dockDragTranslationY) }
 
     val indicatorHighlightVisible = if (isLiquidGlassMode) {
@@ -1408,7 +1385,6 @@ fun FloatingBottomBar(
         ) {
             val shellModifier = if (drawShell) {
                 Modifier
-                    .linkedDockGlassShellVisibility(linkedShellAlpha)
                     .dropShadow(
                         shape = pillShape,
                         shadow = Shadow(
@@ -1449,9 +1425,20 @@ fun FloatingBottomBar(
                                     },
                                     highlight = { if (parentGlass == null) baseHighlight?.value?.copy(alpha = 0.75f) else null },
                                     layerBlock = {
-                                        val scale = shellScale.value(size)
-                                        scaleX = scale.x
-                                        scaleY = scale.y
+                                        if (!inheritDeformation) {
+                                            val width = size.width.coerceAtLeast(1f)
+                                            val s = lerp(
+                                                1f,
+                                                1f + pressBloomPx / width,
+                                                dampedDragAnimation.pressProgress
+                                            )
+                                            scaleX = s
+                                            val dragY = kotlin.math.abs(interactiveHighlight?.offset?.y ?: 0f)
+                                            val extraStretch = (4.dp.toPx() / size.height.coerceAtLeast(1f)) *
+                                                (dragY / width) * (size.height / width).coerceAtMost(1f) *
+                                                DOCK_SHELL_ELASTIC_GAIN
+                                            scaleY = s + extraStretch.coerceAtMost(DOCK_SHELL_MAX_EXTRA_STRETCH)
+                                        }
                                     },
                                     onDrawSurface = {
                                         drawRect(containerColor)

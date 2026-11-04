@@ -11,6 +11,7 @@ internal enum class SettingsIconRole {
     INTERFACE_THEME,
     HOME_FEED,
     NAVIGATION,
+    PARTITION_RAIL_POSITION,
     PLAYBACK_QUALITY,
     FULLSCREEN_GESTURE,
     COPY_TEXT,
@@ -63,6 +64,7 @@ internal enum class SettingsIconRole {
     REFRESH_COUNT,
     DYNAMIC_PREVIEW_TEXT,
     DYNAMIC_TAB_VISIBILITY,
+    DYNAMIC_UP_LIST,
     EASTER_EGG,
     AUTO_CHECK_UPDATE,
     BUILD_SOURCE,
@@ -93,6 +95,7 @@ internal enum class SettingsIconRole {
     NOW_PLAYING_BAR,
     AUDIO_MODE_ENTRY,
     AUDIO_TITLE_AUTO_HIDE,
+    AUDIO_BAR_DELETE_BUTTON,
     LOUDNESS_NORMALIZATION,
     AUDIO_SPECTRUM,
     STARTUP_RESUME,
@@ -109,6 +112,7 @@ internal enum class SettingsIconRole {
     VIDEO_AMBIENT_LIGHT,
     DRAG_FEEDBACK,
     LIQUID_INDICATOR_WOBBLE,
+    LIQUID_INDICATOR_DYNAMIC_LENGTH,
     RETURN_CONTENT_FOLLOW,
     RETURN_GESTURE_TRANSLATION,
     SKELETON_BREATHING,
@@ -264,6 +268,7 @@ internal fun rememberSettingsSemanticIcon(
  * 外层容器、着色和控件形态，避免用无关 glyph 填补其图标库缺项。
  */
 internal fun resolveSettingsMaterialSymbolResource(role: SettingsIconRole): Int = when (role) {
+    SettingsIconRole.PARTITION_RAIL_POSITION -> R.drawable.ic_settings_partition_rail_position_24
     SettingsIconRole.INTERFACE_THEME -> R.drawable.ms_color_lens_24
     SettingsIconRole.HOME_FEED -> R.drawable.ms_home_24
     SettingsIconRole.NAVIGATION -> R.drawable.ms_dashboard_24
@@ -318,6 +323,7 @@ internal fun resolveSettingsMaterialSymbolResource(role: SettingsIconRole): Int 
     SettingsIconRole.FEED_API -> R.drawable.ms_rss_feed_24
     SettingsIconRole.REFRESH_COUNT -> R.drawable.ms_refresh_24
     SettingsIconRole.DYNAMIC_PREVIEW_TEXT -> R.drawable.ms_text_snippet_24
+    SettingsIconRole.DYNAMIC_UP_LIST -> R.drawable.ic_settings_dynamic_up_list_24
     SettingsIconRole.DYNAMIC_TAB_VISIBILITY -> R.drawable.ms_visibility_24
     SettingsIconRole.EASTER_EGG -> R.drawable.ms_auto_awesome_24
     SettingsIconRole.AUTO_CHECK_UPDATE -> R.drawable.ms_update_24
@@ -349,6 +355,7 @@ internal fun resolveSettingsMaterialSymbolResource(role: SettingsIconRole): Int 
     SettingsIconRole.NOW_PLAYING_BAR -> R.drawable.ms_bottom_panel_open_24
     SettingsIconRole.AUDIO_MODE_ENTRY -> R.drawable.ms_library_music_24
     SettingsIconRole.AUDIO_TITLE_AUTO_HIDE -> R.drawable.ms_bottom_panel_close_24
+    SettingsIconRole.AUDIO_BAR_DELETE_BUTTON -> R.drawable.ms_delete_outline_24
     SettingsIconRole.LOUDNESS_NORMALIZATION -> R.drawable.ms_instant_mix_24
     SettingsIconRole.AUDIO_SPECTRUM -> R.drawable.ic_settings_cover_pulse_24
     SettingsIconRole.STARTUP_RESUME -> R.drawable.ms_resume_24
@@ -364,6 +371,7 @@ internal fun resolveSettingsMaterialSymbolResource(role: SettingsIconRole): Int 
     SettingsIconRole.COMPACT_PLAYER_CONTROLS -> R.drawable.ms_collapse_content_24
     SettingsIconRole.VIDEO_AMBIENT_LIGHT -> R.drawable.ms_lightbulb_circle_24
     SettingsIconRole.DRAG_FEEDBACK -> R.drawable.ms_drag_pan_24
+    SettingsIconRole.LIQUID_INDICATOR_DYNAMIC_LENGTH -> R.drawable.ic_settings_indicator_dynamic_length_24
     SettingsIconRole.LIQUID_INDICATOR_WOBBLE -> R.drawable.ic_settings_indicator_wobble_24
     SettingsIconRole.RETURN_CONTENT_FOLLOW -> R.drawable.ms_move_down_24
     SettingsIconRole.RETURN_GESTURE_TRANSLATION -> R.drawable.ms_drag_indicator_24

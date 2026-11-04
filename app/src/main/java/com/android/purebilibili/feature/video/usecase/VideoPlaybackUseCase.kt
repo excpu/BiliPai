@@ -382,7 +382,12 @@ internal fun togglePlayerPlaybackFromUserAction(player: Player) {
 
 class VideoPlaybackUseCase(
     private var progressManager: PlaybackProgressManager = PlaybackProgressManager(),
-    private val qualityManager: QualityManager = QualityManager()
+    private val qualityManager: QualityManager = QualityManager(),
+    private val videoTrackFilter: (List<DashVideo>) -> List<DashVideo> = { tracks ->
+        com.android.purebilibili.core.util.VideoTrackCapabilities.filterForPlayback(
+            checkNotNull(NetworkModule.appContext), tracks,
+        )
+    },
 ) {
 
     companion object {
@@ -594,9 +599,9 @@ class VideoPlaybackUseCase(
                     // 自动最高从实际可播放流中选择，避免声明画质或本地会员缓存影响结果。
                     val targetQn = if (defaultQuality >= 127) {
                         val isHdrSupported = isHdrSupportedOverride
-                            ?: com.android.purebilibili.core.util.MediaUtils.isHdrSupported()
+                            ?: com.android.purebilibili.core.util.MediaUtils.isHdrSupported(appContext ?: NetworkModule.appContext)
                         val isDolbyVisionSupported = isDolbyVisionSupportedOverride
-                            ?: com.android.purebilibili.core.util.MediaUtils.isDolbyVisionSupported()
+                            ?: com.android.purebilibili.core.util.MediaUtils.isDolbyVisionSupported(appContext ?: NetworkModule.appContext)
                         val maxAccept = resolveAutoHighestTargetQuality(
                             playableQualities = playData.playableVideoQualityIds()
                                 .ifEmpty { listOf(playData.quality) },
@@ -733,14 +738,14 @@ class VideoPlaybackUseCase(
                     )
                 },
                 onFailure = { e ->
-                    //  [风控冷却] 加载失败，记录失败
-                    PlaybackCooldownManager.recordFailure(bvid, e.message ?: "unknown")
-                    // Check if rate limited
                     val error = VideoLoadError.fromException(e)
-
+                    // 内容跳转及已确认的观看限制不属于请求风控失败。
+                    if (error.isRetryable()) {
+                        PlaybackCooldownManager.recordFailure(bvid, e.message ?: "unknown")
+                    }
                     VideoLoadResult.Error(
-                        error = VideoLoadError.fromException(e),
-                        canRetry = VideoLoadError.fromException(e).isRetryable()
+                        error = error,
+                        canRetry = error.isRetryable()
                     )
                 }
             )
@@ -749,11 +754,13 @@ class VideoPlaybackUseCase(
             Logger.d("VideoPlaybackUseCase", "🚫 加载已取消: $bvid")
             throw e
         } catch (e: Exception) {
-            //  [风控冷却] 异常失败，记录
-            PlaybackCooldownManager.recordFailure(bvid, e.message ?: "exception")
+            val error = VideoLoadError.fromException(e)
+            if (error.isRetryable()) {
+                PlaybackCooldownManager.recordFailure(bvid, e.message ?: "exception")
+            }
             return VideoLoadResult.Error(
-                error = VideoLoadError.fromException(e),
-                canRetry = true
+                error = error,
+                canRetry = error.isRetryable()
             )
         }
     }
@@ -904,10 +911,11 @@ class VideoPlaybackUseCase(
         Logger.d("VideoPlaybackUseCase", " changeQualityFromCache: target=$qualityId, available=$availableIds")
 
         val requestedQuality = qualityId.takeIf { it > 0 } ?: availableIds.firstOrNull() ?: return null
+        val playableVideos = videoTrackFilter(cachedVideos)
         val exactQualityVideos = if (effectivePlaybackQualityMode is PlaybackQualityMode.AUTO) {
-            cachedVideos
+            playableVideos
         } else {
-            cachedVideos.filter { it.id == requestedQuality }
+            playableVideos.filter { it.id == requestedQuality }
         }
         if (exactQualityVideos.isEmpty()) {
             Logger.d("VideoPlaybackUseCase", " Cache exact match missing for $qualityId, fallback to API")
@@ -945,7 +953,7 @@ class VideoPlaybackUseCase(
         val adaptiveDashSource = buildAdaptiveDashPlaybackSource(
             durationMs = durationMs,
             minBufferTimeMs = 1500L,
-            dash = dashCatalog,
+            dash = dashCatalog.copy(video = playableVideos),
             targetQuality = requestedQuality,
             audioQualityPreference = audioSelection.effectivePreferenceId,
             videoCodecPreference = videoCodecPreference,
@@ -1136,7 +1144,12 @@ class VideoPlaybackUseCase(
         allowPremiumApiOnlyQualities: Boolean = !VideoRepository.isAppApiCoolingDown(),
         lockSelectedQuality: Boolean = false,
     ): PlaybackSelectionResult? {
-        val dashVideo = playUrlData.dash?.getBestVideo(
+        val playableDash = playUrlData.dash?.let { dash ->
+            val tracks = videoTrackFilter(dash.video)
+            if (dash.video.isNotEmpty() && tracks.isEmpty()) return null
+            dash.copy(video = tracks)
+        }
+        val dashVideo = playableDash?.getBestVideo(
             targetQuality,
             preferCodec = videoCodecPreference,
             secondPreferCodec = videoSecondCodecPreference,
@@ -1164,7 +1177,7 @@ class VideoPlaybackUseCase(
         val adaptiveDashSource = buildAdaptiveDashPlaybackSource(
             durationMs = playUrlData.timelength,
             minBufferTimeMs = playUrlData.dash?.minBufferTime?.times(1000f)?.toLong() ?: 1500L,
-            dash = playUrlData.dash,
+            dash = playableDash,
             targetQuality = targetQuality,
             audioQualityPreference = audioSelection?.effectivePreferenceId ?: audioQualityPreference,
             videoCodecPreference = videoCodecPreference,

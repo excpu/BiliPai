@@ -103,7 +103,6 @@ fun VideoDetailSkeleton(animated: Boolean = true) {
                 VideoDetailTitleInfoSkeleton()
                 VideoDetailActionButtonsSkeleton()
             }
-            VideoDetailRelatedHeaderSkeleton()
             repeat(RELATED_VIDEO_SKELETON_ROW_COUNT) {
                 RelatedVideoGridRowSkeleton()
             }
@@ -272,19 +271,6 @@ private fun VideoDetailActionButtonsSkeleton() {
 }
 
 @Composable
-private fun VideoDetailRelatedHeaderSkeleton() {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        SkeletonBox(modifier = Modifier.width(84.dp), height = 20.dp, cornerRadius = 10.dp)
-    }
-}
-
-@Composable
 private fun RelatedVideoGridRowSkeleton() {
     val cardLayout = rememberRelatedVideoCardLayout()
     RelatedVideoGridRowSkeleton(cardLayout = cardLayout)
@@ -340,6 +326,7 @@ private fun RelatedVideoItemSkeleton(
     coverAspectRatio: Float = com.android.purebilibili.core.ui.videoCardCoverAspectRatio(),
     stacked: Boolean = false,
 ) {
+    val typography = com.android.purebilibili.feature.home.components.cards.horizontalVideoCardTypography()
     HorizontalVideoCardFrame(
         plainHorizontal = true,
         fillInfoHeight = true,
@@ -347,7 +334,7 @@ private fun RelatedVideoItemSkeleton(
         stacked = stacked,
         coverWidthDp = RELATED_VIDEO_HORIZONTAL_COVER_WIDTH_DP.dp,
         centerCoverVertically = true,
-        trailingContent = { Spacer(Modifier.size(48.dp)) },
+        trailingContent = { Spacer(Modifier.size(29.dp)) },
         modifier = modifier,
         coverContent = {
             SkeletonBlock(
@@ -356,13 +343,14 @@ private fun RelatedVideoItemSkeleton(
             )
         },
         infoContent = {
-            val typography = com.android.purebilibili.feature.home.components.cards.horizontalVideoCardTypography()
             RelatedSkeletonText(
                 text = "推荐视频标题占位\n第二行标题占位",
                 style = typography.title,
                 maxLines = videoCardTitleMaxLines(),
                 modifier = Modifier.fillMaxWidth(),
             )
+        },
+        supportingContent = {
             Column(verticalArrangement = Arrangement.spacedBy(com.android.purebilibili.core.ui.AppSpacingTokens.ExtraSmall)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,

@@ -3,13 +3,13 @@ package com.android.purebilibili.feature.video.screen
 
 import com.android.purebilibili.core.ui.AppContentColors
 import com.android.purebilibili.core.ui.motion.AppMotionEasing
+import com.android.purebilibili.core.ui.motion.continuityTween
 import com.android.purebilibili.core.ui.components.appElasticPress
 
 
 import com.android.purebilibili.feature.video.ambient.PlayerAmbientLayout
 import coil3.request.crossfade
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import com.android.purebilibili.core.ui.resolveFilledButtonContainerColor
 import com.android.purebilibili.core.ui.resolveFilledButtonContentColor
@@ -83,6 +83,7 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
@@ -295,7 +296,7 @@ private const val VIDEO_DETAIL_COLLAPSE_SIGNAL_IDLE_TIMEOUT_MS = 120L
 
 @Composable
 private fun CollapsedPlayerNavigationBar(
-    scrollRatio: Float,
+    collapseProgress: State<Float>,
     topInset: Dp,
     onBack: () -> Unit,
     onHomeClick: () -> Unit,
@@ -303,130 +304,134 @@ private fun CollapsedPlayerNavigationBar(
     onMoreClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (scrollRatio > 0f) {
-        val useMiuixNonGlassChrome = isMiuixNonGlassEnabled()
-        val mediaScrimAlpha = resolveCollapsedPlayerMediaScrimAlpha(scrollRatio)
-        val toolbarAlpha = resolveCollapsedPlayerToolbarAlpha(scrollRatio)
-        val toolbarSurface = MaterialTheme.colorScheme.surface
-        Box(
-            modifier = modifier.drawBehind {
-                drawRect(
-                    color = Color.Black,
-                    alpha = mediaScrimAlpha,
-                )
-            },
+    val useMiuixNonGlassChrome = isMiuixNonGlassEnabled()
+    val toolbarInteractive by remember(collapseProgress) {
+        derivedStateOf { canInteractWithCollapsedPlayerPlayToolbar(collapseProgress.value) }
+    }
+    val toolbarSurface = MaterialTheme.colorScheme.surface
+    Box(
+        modifier = modifier.drawBehind {
+            drawRect(
+                color = Color.Black,
+                alpha = resolveCollapsedPlayerMediaScrimAlpha(collapseProgress.value),
+            )
+        },
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer { alpha = resolveCollapsedPlayerToolbarAlpha(collapseProgress.value) }
+                .then(if (toolbarInteractive) Modifier else Modifier.clearAndSetSemantics { }),
         ) {
-            Column(
+            // 状态栏避让与 56dp 播放工具栏分开占位。
+            Spacer(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .graphicsLayer { alpha = toolbarAlpha },
+                    .height(topInset)
+                    .background(toolbarSurface)
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .background(toolbarSurface)
+                    .clickable(enabled = toolbarInteractive, onClick = onPlayClick),
             ) {
-                // 状态栏避让与 56dp 播放工具栏分开占位。
-                Spacer(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(topInset)
-                        .background(toolbarSurface)
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .background(toolbarSurface)
-                        .clickable(onClick = onPlayClick),
+                Row(
+                    modifier = Modifier.align(Alignment.CenterStart),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Row(
-                        modifier = Modifier.align(Alignment.CenterStart),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (useMiuixNonGlassChrome) {
-                            AppIconButton(
-                                onClick = onBack,
-                                modifier = Modifier.size(AppChromeSizeTokens.MinimumTouchTarget),
-                            ) {
-                                AppIcon(
-                                    Icons.Filled.ArrowBack,
-                                    contentDescription = "返回",
-                                    tint = AppContentColors.primaryText(),
-                                )
-                            }
-                        } else {
-                            IconButton(onClick = onBack, modifier = Modifier.size(width = 42.dp, height = 34.dp).appElasticPress()) {
-                                Icon(
-                                    Icons.Filled.ArrowBack,
-                                    contentDescription = "返回",
-                                    tint = AppContentColors.primaryText(),
-                                )
-                            }
-                        }
-                        if (useMiuixNonGlassChrome) {
-                            AppIconButton(
-                                onClick = onHomeClick,
-                                modifier = Modifier.size(AppChromeSizeTokens.MinimumTouchTarget),
-                            ) {
-                                AppIcon(
-                                    Icons.Filled.Home,
-                                    contentDescription = "首页",
-                                    tint = AppContentColors.primaryText(),
-                                )
-                            }
-                        } else {
-                            IconButton(onClick = onHomeClick, modifier = Modifier.size(width = 42.dp, height = 34.dp).appElasticPress()) {
-                                Icon(
-                                    Icons.Filled.Home,
-                                    contentDescription = "首页",
-                                    tint = AppContentColors.primaryText(),
-                                )
-                            }
-                        }
-                    }
-                    Row(
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (useMiuixNonGlassChrome) {
-                            AppIcon(
-                                imageVector = Icons.Filled.PlayArrow,
-                                contentDescription = null,
-                                tint = AppContentColors.accent(),
-                            )
-                            AppText("立即播放", color = AppContentColors.accent())
-                        } else {
-                            Icon(
-                                imageVector = Icons.Filled.PlayArrow,
-                                contentDescription = null,
-                                tint = AppContentColors.accent(),
-                            )
-                            Text("立即播放", color = AppContentColors.accent())
-                        }
-                    }
                     if (useMiuixNonGlassChrome) {
                         AppIconButton(
-                            onClick = onMoreClick,
-                            modifier = Modifier
-                                .align(Alignment.CenterEnd)
-                                .size(AppChromeSizeTokens.MinimumTouchTarget),
+                            onClick = onBack,
+                            enabled = toolbarInteractive,
+                            modifier = Modifier.size(AppChromeSizeTokens.MinimumTouchTarget),
                         ) {
                             AppIcon(
-                                Icons.Filled.MoreVert,
-                                contentDescription = "更多设置",
+                                Icons.Filled.ArrowBack,
+                                contentDescription = "返回",
                                 tint = AppContentColors.primaryText(),
                             )
                         }
                     } else {
-                        IconButton(
-                            onClick = onMoreClick,
-                            modifier = Modifier
-                                .align(Alignment.CenterEnd)
-                                .size(width = 42.dp, height = 34.dp).appElasticPress(),
-                        ) {
+                        IconButton(onClick = onBack, enabled = toolbarInteractive, modifier = Modifier.size(width = 42.dp, height = 34.dp).appElasticPress()) {
                             Icon(
-                                Icons.Filled.MoreVert,
-                                contentDescription = "更多设置",
+                                Icons.Filled.ArrowBack,
+                                contentDescription = "返回",
                                 tint = AppContentColors.primaryText(),
                             )
                         }
+                    }
+                    if (useMiuixNonGlassChrome) {
+                        AppIconButton(
+                            onClick = onHomeClick,
+                            enabled = toolbarInteractive,
+                            modifier = Modifier.size(AppChromeSizeTokens.MinimumTouchTarget),
+                        ) {
+                            AppIcon(
+                                Icons.Filled.Home,
+                                contentDescription = "首页",
+                                tint = AppContentColors.primaryText(),
+                            )
+                        }
+                    } else {
+                        IconButton(onClick = onHomeClick, enabled = toolbarInteractive, modifier = Modifier.size(width = 42.dp, height = 34.dp).appElasticPress()) {
+                            Icon(
+                                Icons.Filled.Home,
+                                contentDescription = "首页",
+                                tint = AppContentColors.primaryText(),
+                            )
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (useMiuixNonGlassChrome) {
+                        AppIcon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            tint = AppContentColors.accent(),
+                        )
+                        AppText("立即播放", color = AppContentColors.accent())
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            tint = AppContentColors.accent(),
+                        )
+                        Text("立即播放", color = AppContentColors.accent())
+                    }
+                }
+                if (useMiuixNonGlassChrome) {
+                    AppIconButton(
+                        onClick = onMoreClick,
+                        enabled = toolbarInteractive,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .size(AppChromeSizeTokens.MinimumTouchTarget),
+                    ) {
+                        AppIcon(
+                            Icons.Filled.MoreVert,
+                            contentDescription = "更多设置",
+                            tint = AppContentColors.primaryText(),
+                        )
+                    }
+                } else {
+                    IconButton(
+                        onClick = onMoreClick,
+                        enabled = toolbarInteractive,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .size(width = 42.dp, height = 34.dp).appElasticPress(),
+                    ) {
+                        Icon(
+                            Icons.Filled.MoreVert,
+                            contentDescription = "更多设置",
+                            tint = AppContentColors.primaryText(),
+                        )
                     }
                 }
             }
@@ -470,6 +475,7 @@ internal fun VideoDetailScreenStateHolder(
     onNavigateToSearch: () -> Unit = {},
     onSearchKeywordClick: (String) -> Unit = {},
     onOpenBilibiliLink: ((String) -> Unit)? = null,
+    onRedirectToBangumi: ((String) -> Unit)? = onOpenBilibiliLink,
     onVideoClick: (String, android.os.Bundle?) -> Unit,
     onReplaceVideoDetail: (String, Long, String, Long) -> Boolean = { _, _, _, _ -> false },
     onUpClick: (Long) -> Unit = {},
@@ -609,6 +615,14 @@ internal fun VideoDetailScreenStateHolder(
         initialPipMode = isInPipMode,
     )
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val bangumiRedirect = ((uiState as? VideoPlaybackUiState.Error)?.error
+        as? com.android.purebilibili.data.model.VideoLoadError.BangumiRedirect)?.url
+    val latestOnRedirectToBangumi by rememberUpdatedState(onRedirectToBangumi)
+    LaunchedEffect(bvid, bangumiRedirect, isVisible) {
+        if (isVisible && bangumiRedirect != null) {
+            latestOnRedirectToBangumi?.invoke(bangumiRedirect)
+        }
+    }
     val shareInfo = (uiState as? VideoPlaybackUiState.Success)?.info
     // 跳转锁比播放器离开态保留更久；返回落位后才允许相关推荐再次记录来源像素。
     var hasCommittedRelatedVideoNavigation by remember(bvid) { mutableStateOf(false) }
@@ -838,6 +852,9 @@ internal fun VideoDetailScreenStateHolder(
         context = context,
         isVisible = isVisible,
         uiState = detailContentState ?: uiState,
+        watchLaterSourceBvid = bvid.takeIf {
+            sourceRouteForSharedElement == com.android.purebilibili.navigation.ScreenRoutes.WatchLater.route
+        },
         subjectSnapshotState = subjectSnapshotState,
         favoriteFolderSaveEventState = favoriteFolderSaveEventState,
         playbackViewModel = viewModel,
@@ -2075,6 +2092,16 @@ internal fun VideoDetailScreenStateHolder(
             val deferredActivity = activity
             val deferredContext = context
             val deferredShouldHandleAsNavExit = shouldHandleAsNavigationExit
+            // Playback can survive in the in-app mini player, but its fullscreen orientation
+            // must not survive on Home. Audio/new-detail handoffs own their own orientation.
+            val deferredShouldRestoreOrientation = shouldRestoreVideoDetailOrientationOnDispose(
+                isNavigatingToAudioMode = isNavigatingToAudioMode,
+                isChangingConfigurations = activity?.isChangingConfigurations == true,
+                isNavigatingToVideo = resolveIsNavigatingToVideoDuringDispose(
+                    localNavigatingToVideo = isNavigatingToVideo,
+                    managerNavigatingToVideo = miniPlayerManager?.isNavigatingToVideo == true,
+                ),
+            )
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 // 🔕 通知清理 + Service 停止
                 if (deferredShouldHandleAsNavExit && miniPlayerManager?.isActive != true) {
@@ -2091,8 +2118,8 @@ internal fun VideoDetailScreenStateHolder(
                     } catch (_: Exception) {}
                 }
 
-                // 仅真正退出详情时恢复；相关推荐接管后，旧页不得延迟覆盖新页的方向。
-                if (deferredShouldHandleAsNavExit) {
+                // 恢复方向与是否结束播放无关；相关推荐接管时仍不得覆盖新详情的方向。
+                if (deferredShouldRestoreOrientation) {
                     deferredActivity?.applyPlayerRequestedOrientation(
                         resolveVideoDetailExitRequestedOrientation(
                             originalRequestedOrientation = entryRequestedOrientation
@@ -2279,14 +2306,8 @@ internal fun VideoDetailScreenStateHolder(
             hasStartedCurrentVideoPlayback = true
         }
     }
-    // 返回动效只需要首帧信号；带宽、丢帧等诊断更新不应重组整个详情页。
-    val renderedFirstFrameFlow = remember(playerState) {
-        playerState.debugInfo
-            .map { it.firstFrame.equals("rendered", ignoreCase = true) }
-            .distinctUntilChanged()
-    }
-    val hasRenderedFirstFrameForReturn by renderedFirstFrameFlow.collectAsStateWithLifecycle(
-        initialValue = playerState.debugInfo.value.firstFrame.equals("rendered", ignoreCase = true),
+    // Real first-frame state survives detail disposal while the mini player owns this media.
+    val hasRenderedFirstFrameForReturn by playerState.hasRenderedFirstFrame.collectAsStateWithLifecycle(
         lifecycle = lifecycleOwner.lifecycle,
     )
     val entryFirstFrameReveal = rememberVideoDetailFirstFrameReveal(
@@ -2791,12 +2812,11 @@ internal fun VideoDetailScreenStateHolder(
                 val remaining = continuousPlayerProgress.value.coerceIn(0f, 1f)
                 continuousPlayerProgress.animateTo(
                     targetValue = 0f,
-                    animationSpec = tween(
-                        durationMillis = (CONTINUOUS_PLAYER_MORPH_DURATION_MILLIS * remaining)
+                    // 系统旋转后立即承接收起，避免慢起步造成第二次停顿。
+                    animationSpec = continuityTween(
+                        (CONTINUOUS_PLAYER_MORPH_DURATION_MILLIS * remaining)
                             .roundToInt()
                             .coerceAtLeast(1),
-                        // 系统旋转后立即承接收起，避免慢起步造成第二次停顿。
-                        easing = AppMotionEasing.Continuity,
                     ),
                 )
                 applyContinuousPlayerDecision(
@@ -3364,9 +3384,10 @@ internal fun VideoDetailScreenStateHolder(
             // 2. 进入小窗模式（强制，不管当前模式设置）
             manager.enterMiniMode(forced = true)
 
-            // 3. 返回上一页（首页）
+            // 3. 回首页。用 onBack 只会退到上一页（可能是列表、搜索、空间页），
+            //    用户点小窗的预期是回到首页继续看小窗。
             presentationState.markNavigatingToMiniMode()
-            onBack()
+            onHomeClick()
         } ?: run {
             // 如果 miniPlayerManager 不存在，直接返回
             com.android.purebilibili.core.util.Logger.w("VideoDetailScreen", "⚠️ miniPlayerManager 为 null，无法进入小窗")
@@ -4032,8 +4053,6 @@ internal fun VideoDetailScreenStateHolder(
                                 isCommittedReturn = isCommittedCardReturn,
                                 coverSource = residentCoverSource,
                                 hasRenderedFirstFrame = hasRenderedFirstFrameForReturn,
-                                hasVideoFrame = playerState.player.videoSize.width > 0 &&
-                                    playerState.player.videoSize.height > 0,
                                 entryCoverAlphaProvider = { 1f - entryFirstFrameReveal.value },
                                 detailContentLoading = uiState is VideoPlaybackUiState.Loading,
                                 followProgressEnabledProvider = videoCardDepthBackgroundState
@@ -5273,15 +5292,17 @@ internal fun VideoDetailScreenStateHolder(
                                         },
                                 )
                             }
+                            // 按最终折叠高度判定适用范围，不能等当前高度到终点才挂载渐显层。
+                            val toolbarCollapseProgress = rememberUpdatedState(layoutCollapseProgress)
                             if (shouldShowCollapsedPlayerPlayToolbar(
                                     isPlaybackPaused = isPlaybackPaused,
                                     collapseProgress = layoutCollapseProgress,
-                                    viewportHeightDp = inlineViewportHeight.value,
+                                    collapsedViewportHeightDp = collapsedViewportHeight.value,
                                     isFullscreen = isPortraitFullscreen || isFullscreenMode,
                                 )
                             ) {
                                 CollapsedPlayerNavigationBar(
-                                    scrollRatio = layoutCollapseProgress,
+                                    collapseProgress = toolbarCollapseProgress,
                                     topInset = collapsedSystemBarInset,
                                     onBack = handlePlayerBack,
                                     onHomeClick = {
@@ -5992,6 +6013,7 @@ internal fun VideoDetailScreenStateHolder(
     androidx.compose.runtime.CompositionLocalProvider(
         LocalPlaybackResumeFeedback provides playbackEventState,
         com.android.purebilibili.feature.video.ui.components.LocalRelatedVideoCardLayout provides relatedVideoCardLayout,
+        com.android.purebilibili.feature.video.ui.section.LocalUseTabletDanmakuStyle provides useTabletLayout,
     ) {
     VideoDetailScreenContent(
         transitionState = transitionState,

@@ -273,11 +273,12 @@ class DanmakuManager private constructor(
             applyConfigToController("opacity")
         }
     
-    var isFullscreenSurface: Boolean = false
+    /** Chooses only the 18dp text baseline; never changes host geometry or visibility. */
+    var useFullscreenTextSize: Boolean = false
         set(value) {
             if (field == value) return
             field = value
-            applyConfigToController("fullscreen")
+            applyConfigToController("textSizeBaseline")
         }
 
     var fontScale: Float
@@ -974,7 +975,8 @@ class DanmakuManager private constructor(
                 textSizeScale = (textSizeScale * style.scale).coerceIn(0.3f, 4f)
             }
         }
-        typeface = if (style?.bold == true) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        // 未要求加粗时继承渲染配置的字重，不能用默认字体覆盖用户的粗细设置。
+        typeface = if (style?.bold == true) Typeface.DEFAULT_BOLD else null
     }
 
     private fun runDanmakuFilters(
@@ -1255,7 +1257,7 @@ class DanmakuManager private constructor(
     private fun applyConfigToController(reason: String) {
         controller?.let { ctrl ->
             val currentViewport = viewport ?: danmakuView?.let(::resolveEffectiveViewport) ?: return
-            baseRenderConfig = config.resolveRenderConfig(currentViewport, isFullscreenSurface)
+            baseRenderConfig = config.resolveRenderConfig(currentViewport, useFullscreenTextSize)
 
             // 记录设置后的基准时间，供倍速同步使用
             originalMoveTime = baseRenderConfig.scrollDurationMs

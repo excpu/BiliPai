@@ -3,6 +3,8 @@
 
 package com.android.purebilibili.feature.video.player
 
+import androidx.datastore.preferences.core.edit
+
 import com.android.purebilibili.core.player.withAppVideoDecoderDiagnostics
 import com.android.purebilibili.core.player.withAppVideoDecoderPreference
 
@@ -79,6 +81,8 @@ import com.android.purebilibili.core.lifecycle.BackgroundManager
 import com.android.purebilibili.feature.video.danmaku.DanmakuManager
 import com.android.purebilibili.feature.video.playback.policy.resolvePlaybackWakeMode
 import com.android.purebilibili.feature.video.playback.session.resolveShouldContinuePlaybackDuringPause
+import com.android.purebilibili.feature.video.playback.session.PlaybackFirstFrameTracker
+import com.android.purebilibili.feature.video.playback.session.PlayerHistorySessions
 import com.android.purebilibili.feature.video.state.isPlaybackActiveForLifecycle
 import com.android.purebilibili.feature.video.usecase.VideoLoadResult
 import com.android.purebilibili.feature.video.usecase.VideoPlaybackUseCase
@@ -98,10 +102,13 @@ internal fun shouldShowInAppMiniPlayerByPolicy(
     mode: SettingsManager.MiniPlayerMode,
     isActive: Boolean,
     isNavigatingToVideo: Boolean,
-    stopPlaybackOnExit: Boolean
+    stopPlaybackOnExit: Boolean,
+    forcedByUser: Boolean = false,
 ): Boolean {
     if (stopPlaybackOnExit) return false
-    return mode.supportsInAppMiniPlayer && isActive && !isNavigatingToVideo
+    // forcedByUser：用户点了播放器上的小窗按钮。那是显式意图，不该被
+    // 「小窗播放模式 = 关闭」的设置挡住，否则按钮点下去什么都不发生。
+    return (mode.supportsInAppMiniPlayer || forcedByUser) && isActive && !isNavigatingToVideo
 }
 
 internal fun shouldEnterPipByPolicy(
@@ -1469,6 +1476,9 @@ class MiniPlayerManager private constructor(private val context: Context) :
         private set
 
     var isMiniMode by mutableStateOf(false)
+
+    /** 用户点了播放器上的小窗按钮。显式意图，不受「小窗播放模式」设置限制。 */
+    var forcedMiniMode by mutableStateOf(false)
         private set
 
     /**
@@ -1891,7 +1901,8 @@ class MiniPlayerManager private constructor(private val context: Context) :
             mode = mode,
             isActive = isActive,
             isNavigatingToVideo = isNavigatingToVideo,
-            stopPlaybackOnExit = stopPlaybackOnExit
+            stopPlaybackOnExit = stopPlaybackOnExit,
+            forcedByUser = forcedMiniMode,
         )
         Logger.d(TAG, "📲 shouldShowInAppMiniPlayer: mode=$mode, isActive=$isActive, navigating=$isNavigatingToVideo, result=$result")
         return result
@@ -2101,6 +2112,11 @@ class MiniPlayerManager private constructor(private val context: Context) :
             )
             return
         }
+        // 小窗接管后仍是活跃播放会话，不能留下阻断后台播放与前台恢复的离开标记。
+        if (isMiniMode && !forceStop) {
+            isLeavingByNavigation = false
+            return
+        }
         if (!forceStop) prepareAudioNowPlayingForNavigationExit(expectedBvid)
         isLeavingByNavigation = true
         Logger.d(
@@ -2136,6 +2152,7 @@ class MiniPlayerManager private constructor(private val context: Context) :
             if (forceStop || !keepForAudioNowPlaying) AudioNowPlayingSession.dismiss()
             isPlaying = false
             isMiniMode = false
+            forcedMiniMode = false
             Logger.d(TAG, "🔇 ${mode.label}：通过导航离开，立即停止播放")
             // 停止所有播放器（外部和内部）
             _externalPlayer?.let { player ->
@@ -2226,6 +2243,7 @@ class MiniPlayerManager private constructor(private val context: Context) :
                 .build().withAppVideoDecoderDiagnostics(context)
                 .apply {
                     addListener(playerListener)
+                    PlaybackFirstFrameTracker.observe(this)
                     //  [修复] 确保音量正常
                     volume = com.android.purebilibili.core.player.PlayerVolumeController
                         .preferredVolumeSync()
@@ -2277,6 +2295,7 @@ class MiniPlayerManager private constructor(private val context: Context) :
         currentOwner = owner
         isActive = true
         isMiniMode = false
+        forcedMiniMode = false
 
         // 构建媒体源
         val headers = mapOf(
@@ -2343,6 +2362,7 @@ class MiniPlayerManager private constructor(private val context: Context) :
         currentLiveUname = ""
         isActive = true
         isMiniMode = false
+        forcedMiniMode = false
         isLeavingByNavigation = false
         requestForegroundServiceIfNeeded()
 
@@ -2420,6 +2440,7 @@ class MiniPlayerManager private constructor(private val context: Context) :
         isLeavingByNavigation = false
         if (!isMiniMode) miniPlayerSessionId++
         isMiniMode = true
+        if (forced) forcedMiniMode = true
         // Detail-session handoff may have muted the shared player; always restore for mini window.
         currentPlayer?.let(PlayerVolumeController::applyPreferredVolume)
         if (shouldResumePlayback && currentPlayer != null) {
@@ -2446,6 +2467,7 @@ class MiniPlayerManager private constructor(private val context: Context) :
         Logger.d(TAG) { "Exiting mini mode, animate=$animate" }
         shouldAnimateExit = animate
         isMiniMode = false
+        forcedMiniMode = false
     }
 
     /**
@@ -2535,6 +2557,7 @@ class MiniPlayerManager private constructor(private val context: Context) :
         }
         
         isMiniMode = false
+        forcedMiniMode = false
         isActive = false
         playbackServiceRequested = false
         lastForegroundStartAtMs = 0L
@@ -2557,6 +2580,7 @@ class MiniPlayerManager private constructor(private val context: Context) :
         mediaSession?.release()
         mediaSession = null
         mediaSessionNavigationAvailability = null
+        com.android.purebilibili.feature.widget.PlaybackWidgetProvider.requestUpdate(context)
     }
 
     private fun clearPlaybackNotificationArtifacts(stopServiceDirectly: Boolean = false) {
@@ -2582,6 +2606,7 @@ class MiniPlayerManager private constructor(private val context: Context) :
 
 
     private fun replaceExternalPlayer(incomingPlayer: ExoPlayer) {
+        PlaybackFirstFrameTracker.observe(incomingPlayer)
         if (remoteAudio.active) {
             remotePreferencesJob?.cancel()
             remoteAudio.close()
@@ -2636,6 +2661,7 @@ class MiniPlayerManager private constructor(private val context: Context) :
         pendingBackgroundOverride = null
         isActive = true
         isMiniMode = false
+        forcedMiniMode = false
         // A visible detail reclaim ends the previous navigation handoff.
         isLeavingByNavigation = false
 
@@ -2886,6 +2912,12 @@ class MiniPlayerManager private constructor(private val context: Context) :
                 )
             ) {
                 is VideoLoadResult.Success -> {
+                    // Queue navigation can outlive every detail ViewModel. Bind before preparing
+                    // the next source so its real playback is recorded under its own identity.
+                    PlayerHistorySessions.forPlayer(currentPlayer).bindMedia(
+                        loadResult.info.bvid,
+                        loadResult.info.cid,
+                    )
                     if (loadResult.audioUrl != null) {
                         backgroundPlaybackUseCase.playDashVideo(
                             videoUrl = loadResult.playUrl,
@@ -3112,7 +3144,53 @@ class MiniPlayerManager private constructor(private val context: Context) :
     }
 
     // --- 播放器监听器 ---
+    private var libraryCheckpointJob: Job? = null
+
+    private fun publishSystemMediaState() {
+        if (remoteAudio.active) return
+        val local = player ?: return
+        val bvid = currentBvid ?: return
+        if (isLiveMode || currentCid <= 0L || local.currentMediaItem == null) return
+        com.android.purebilibili.feature.widget.PlaybackWidgetProvider.publish(context,
+            mediaSession?.player ?: local, currentTitle, bvid)
+        if (NetworkModule.playbackAccount() != null) return
+        val all = PlaylistManager.playlist.value
+        val selected = all.indexOfFirst { it.bvid == bvid && (it.cid == currentCid || it.cid == 0L) }
+        val queue = if (selected >= 0) {
+            val start = (selected - 64).coerceAtLeast(0)
+            all.drop(start).take(128).filterNot { it.isBangumi }
+        } else listOf(PlaylistItem(bvid, currentCid, currentTitle, currentCover, currentOwner))
+        val index = queue.indexOfFirst { it.bvid == bvid && (it.cid == currentCid || it.cid == 0L) }
+        if (index < 0) return
+        val request = com.android.purebilibili.feature.audio.player.BackgroundAudioSnapshot(
+            queue = queue.toMutableList().also { it[index] = it[index].copy(cid = currentCid) },
+            index = index, positionMs = local.currentPosition.coerceAtLeast(0L), playing = false,
+            speed = local.playbackParameters.speed, accountMid = TokenManager.midCache,
+            playMode = PlaylistManager.savedTransport.value.playMode,
+            shuffle = PlaylistManager.savedTransport.value.shuffleEnabled,
+            audioQuality = cachedUiState?.selectedAudioQuality ?: -1,
+            audioLanguage = cachedUiState?.currentAudioLang,
+            reportHistory = !SettingsManager.isPrivacyModeEnabledSync(context),
+        )
+        libraryCheckpointJob?.cancel()
+        libraryCheckpointJob = scope.launch {
+            try {
+                com.android.purebilibili.core.store.MultiProcessPreferences.get(context, "background_audio").edit {
+                    it[androidx.datastore.preferences.core.stringPreferencesKey("library_snapshot")] =
+                        com.android.purebilibili.feature.audio.player.backgroundAudioJson.encodeToString(
+                            com.android.purebilibili.feature.audio.player.BackgroundAudioSnapshot.serializer(), request)
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (error: Exception) { Logger.w(TAG, "System playback checkpoint failed", error) }
+        }
+    }
+
     private val playerListener = object : Player.Listener {
+        override fun onEvents(player: Player, events: Player.Events) {
+            if (events.containsAny(Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_MEDIA_METADATA_CHANGED,
+                    Player.EVENT_PLAY_WHEN_READY_CHANGED, Player.EVENT_AVAILABLE_COMMANDS_CHANGED,
+                    Player.EVENT_POSITION_DISCONTINUITY)) publishSystemMediaState()
+        }
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
             if (remoteAudio.active) return
             if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST) {
