@@ -14,17 +14,35 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.android.purebilibili.core.store.player.PlayerSettingsStore
 import com.android.purebilibili.core.ui.LocalAppThemeConfig
 import com.android.purebilibili.core.ui.components.AppIcon
 import com.android.purebilibili.core.ui.components.AppIconButton
 import com.android.purebilibili.core.ui.components.AppSurface
 import com.android.purebilibili.core.ui.motion.continuityTween
+
+/**
+ * 用户是否要求隐藏画面中央的播放/暂停按钮。
+ *
+ * 存储键沿用早期的 `hide_glass_center_playback`，因此设置对玻璃与原生两套材质同时生效，
+ * 老用户的既有偏好也不会丢失。
+ */
+@Composable
+internal fun hideCenterPlayback(): Boolean {
+    val context = LocalContext.current
+    val hidden by PlayerSettingsStore.getHideGlassCenterPlayback(context)
+        .collectAsStateWithLifecycle(initialValue = false)
+    return hidden
+}
 
 /** The central play/pause target follows the visibility of the rest of the player controls. */
 @Composable

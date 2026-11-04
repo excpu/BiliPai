@@ -2145,6 +2145,8 @@ private fun PlaybackFullscreenGestureSettingsSection(
         .collectAsStateWithLifecycle(initialValue = PortraitPlayerCollapseMode.INTRO_ONLY)
     val videoDetailChromeScrollHideEnabled by remember(context) { SettingsManager.getVideoDetailChromeScrollHideEnabled(context) }
         .collectAsStateWithLifecycle(initialValue = false)
+    val hideCenterPlayback by remember(context) { PlayerSettingsStore.getHideGlassCenterPlayback(context) }
+        .collectAsStateWithLifecycle(initialValue = false)
     val portraitSwipeToFullscreenEnabled = playerConfiguration.portraitSwipeToFullscreenEnabled
     val directPortraitStoryEntry = playerConfiguration.directPortraitStoryEntry
     val portraitOnlyVerticalRecommendations by remember(context) { com.android.purebilibili.core.store.SettingsManager.getPortraitOnlyVerticalRecommendations(context) }
@@ -2742,6 +2744,21 @@ SettingsItemAnchor("playback.portrait_player_collapse_mode") {
                 onCheckedChange = {
                     scope.launch {
                         SettingsManager.setCompactPlayerChrome(context, it)
+                    }
+                },
+                iconTint = AppContentColors.secondaryText()
+            )
+        }
+        AppPreferenceDivider()
+        SettingsItemAnchor("playback.player_control_visibility.hide_center_playback") {
+            AppSwitchPreference(
+                icon = rememberSettingsSemanticIcon(SettingsIconRole.PLAYBACK),
+                title = playbackSettingTitle("playback.player_control_visibility.hide_center_playback"),
+                subtitle = "隐藏画面正中的播放/暂停大按钮；底栏左下的播放/暂停不受影响，关闭后加载提示回到画面中央",
+                checked = hideCenterPlayback,
+                onCheckedChange = {
+                    scope.launch {
+                        PlayerSettingsStore.setHideGlassCenterPlayback(context, it)
                     }
                 },
                 iconTint = AppContentColors.secondaryText()

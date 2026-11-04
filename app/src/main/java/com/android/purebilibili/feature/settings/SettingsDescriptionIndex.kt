@@ -147,6 +147,7 @@ internal val settingsStaticDescriptionIndex: Map<String, String> = mapOf(
     "playback.player_control_visibility.compact_player_chrome" to "减少按钮间距和遮罩；分享移至“更多”",
     "playback.player_control_visibility.show_cast_button" to "同时控制半屏、横屏全屏和竖屏全屏的投屏入口",
     "playback.player_control_visibility.show_follow_button" to "关闭后保留 UP 主头像、名称和主页入口",
+    "playback.player_control_visibility.hide_center_playback" to "隐藏画面正中的播放/暂停大按钮；底栏左下的播放/暂停不受影响，关闭后加载提示回到画面中央",
     "playback.player_diagnostic_logging_enabled" to "遇到黑屏、卡顿或无响应时记录排查信息；反馈问题后可关闭",
     "playback.player_insight_mode" to "不显示播放状态信息；打开控制栏时显示；发生掉帧或软件解码时保持可见；始终显示编码、码率、掉帧等播放信息",
     "playback.portrait_letterbox_ambient_haze" to "竖屏全屏的上下留白显示柔和光晕，共用动态环境光的开关、强度和省电设置；关闭后保持纯黑",

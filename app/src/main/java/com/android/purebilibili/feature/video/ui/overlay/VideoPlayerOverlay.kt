@@ -1987,7 +1987,10 @@ private fun VideoPlayerOverlayContent(
             }
         }
 
-        val showCenterPlaybackControl = showPlayerChrome &&
+        // 中央播放按钮可被用户关闭（设置 → 播放 → 全屏与手势 → 「隐藏中央播放按钮」）。
+        // 关闭后下方加载卡片的 !showCenterPlaybackControl 自然成立，加载表达不会因此丢失。
+        val centerPlaybackHidden = hideCenterPlayback()
+        val showCenterPlaybackControl = centerPlaybackHidden.not() && showPlayerChrome &&
             (pluginPlaybackStatus.first || player.playbackState == Player.STATE_READY ||
                 player.playbackState == Player.STATE_BUFFERING || player.playbackState == Player.STATE_ENDED) &&
             !isSeekScrubbing && !endDrawerVisible && !landscapeCommentPanelVisible && !showInsightDetails
