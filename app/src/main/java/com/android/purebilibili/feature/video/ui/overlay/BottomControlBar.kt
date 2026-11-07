@@ -185,8 +185,6 @@ fun BottomControlBar(
     onQualityClick: () -> Unit = {},
     hasEpisodeEntry: Boolean = false,
     onEpisodeClick: () -> Unit = {},
-    onPreviousEpisodeClick: () -> Unit = {},
-    onNextEpisodeClick: () -> Unit = {},
     onActionBoundsChanged: (PlayerControlAnchor, IntRect) -> Unit = { _, _ -> },
     onActionSourceChanged: (PlayerControlAnchor, com.android.purebilibili.core.ui.components.AppGlassMenuSource) -> Unit = { _, _ -> },
     subtitleControlState: SubtitleControlUiState = SubtitleControlUiState(),
@@ -303,7 +301,6 @@ fun BottomControlBar(
             }
             PiliPlayerBar(
                 groupGlassControls = false,
-                distributeActions = !isFullscreen,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp).height(PILI_PLAYER_BOTTOM_ROW_HEIGHT_DP.dp)
                     .testTag("player_control_row"),
                 left = {
@@ -319,18 +316,6 @@ fun BottomControlBar(
                             positionProvider = displayPosition,
                             durationProvider = { progressProvider().duration },
                             modifier = Modifier.padding(horizontal = 8.dp).testTag("player_time_viewport"),
-                        )
-                    }
-                    if (hasEpisodeEntry) {
-                        PlayerControlIconAction(
-                            icon = Icons.Filled.SkipPrevious, description = "上一集",
-                            width = slotWidth, height = 30.dp, onClick = onPreviousEpisodeClick,
-                            modifier = Modifier.testTag("player_previous_episode"),
-                        )
-                        PlayerControlIconAction(
-                            icon = Icons.Filled.SkipNext, description = "下一集",
-                            width = slotWidth, height = 30.dp, onClick = onNextEpisodeClick,
-                            modifier = Modifier.testTag("player_next_episode"),
                         )
                     }
                 },
@@ -368,7 +353,8 @@ fun BottomControlBar(
                             modifier = anchor(PlayerControlAnchor.CHAPTERS, "player_chapter_action"),
                         )
                     }
-                    if (hasEpisodeEntry) {
+                    // 非全屏内嵌控制栏不提供合集（选集）入口，合集列表仍可在详情页查看。
+                    if (hasEpisodeEntry && isFullscreen) {
                         PlayerControlIconAction(
                             icon = Icons.AutoMirrored.Filled.PlaylistPlay, description = "选集",
                             width = slotWidth, height = 30.dp, onClick = onEpisodeClick,

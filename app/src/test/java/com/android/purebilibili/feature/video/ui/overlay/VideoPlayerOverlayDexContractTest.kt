@@ -17,7 +17,7 @@ class VideoPlayerOverlayDexContractTest {
         val source = File(
             projectRoot,
             "app/src/main/java/com/android/purebilibili/feature/video/ui/overlay/VideoPlayerOverlay.kt",
-        ).readText()
+        ).readText().replace("\r\n", "\n")
         val entry = source.substringAfter("fun VideoPlayerOverlay(")
             .substringBefore("private fun VideoPlayerOverlayContent(")
         assertTrue(entry.contains("enabled = true,"))

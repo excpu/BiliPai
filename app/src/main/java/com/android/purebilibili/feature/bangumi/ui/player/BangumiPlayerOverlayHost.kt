@@ -124,6 +124,7 @@ internal fun BangumiPlayerOverlayHost(
     onFsrSharpnessChange: (Float) -> Unit,
     onShowMessage: (String) -> Unit,
     gestureSeekPositionProvider: () -> Long? = { null },
+    isGestureSeeking: Boolean = false,
 ) {
     var pendingContentShare by androidx.compose.runtime.remember(epId) {
         androidx.compose.runtime.mutableStateOf<com.android.purebilibili.feature.share.ContentSharePayload?>(null)
@@ -177,6 +178,7 @@ internal fun BangumiPlayerOverlayHost(
             cid = cid,
             videoshotData = videoshotData,
             isSeekScrubbing = seekSession.isSliderMoving,
+            isGestureSeeking = isGestureSeeking,
             videoOwnerName = title,
             videoSharePlayCountText = "",
             videoDuration = player.duration.coerceAtLeast(0L),

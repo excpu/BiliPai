@@ -402,9 +402,13 @@ internal fun FullscreenLockButton(
 internal fun shouldShowPersistentBottomProgressBar(
     controlsVisible: Boolean,
     isFullscreen: Boolean,
-    behavior: BottomProgressBehavior
+    behavior: BottomProgressBehavior,
+    isGestureSeeking: Boolean = false,
 ): Boolean {
     if (controlsVisible) return false
+    // 手势拖动快进快退时控制栏已收起，此时强制展示底部进度条（加粗样式），
+    // 不受"始终隐藏"设置影响，否则用户无法分辨拖动进度。
+    if (isGestureSeeking) return true
     return when (behavior) {
         BottomProgressBehavior.ALWAYS_SHOW -> true
         BottomProgressBehavior.ALWAYS_HIDE -> false
@@ -628,6 +632,7 @@ private fun VideoPlayerOverlayContent(
     val onSeekDragUpdate = actions.onSeekDragUpdate
     val onSeekDragCancel = actions.onSeekDragCancel
     val isSeekScrubbing = state.isSeekScrubbing
+    val isGestureSeeking = state.isGestureSeeking
     val onSeekTo = actions.onSeekTo
     val progressDisplayOverridePositionMs = state.progressDisplayOverridePositionMs
     val progressDisplayOverridePositionProvider = actions.progressDisplayOverridePositionProvider
@@ -807,37 +812,8 @@ private fun VideoPlayerOverlayContent(
     var showEnableSponsorPlugin by remember(bvid, cid) { mutableStateOf(false) }
     var enablingSponsorPlugin by remember { mutableStateOf(false) }
 
-    val navigationPages = remember(pages, bvid) {
-        if (pages.size > 1) pages.mapIndexed { index, page ->
-            PiliEpisodeNavigationEntry(bvid, page.cid, index)
-        } else emptyList()
-    }
-    val navigationPlaylist = if (hasExternalPlaylist) {
-        com.android.purebilibili.feature.video.player.PlaylistManager.playlist.collectAsStateWithLifecycle().value
-    } else emptyList()
     val externalPlaylistSource by com.android.purebilibili.feature.video.player.PlaylistManager
         .externalPlaylistSource.collectAsStateWithLifecycle()
-    val navigationExternalPlaylist = remember(hasExternalPlaylist, navigationPlaylist) {
-        if (hasExternalPlaylist) navigationPlaylist.map { PiliEpisodeNavigationEntry(it.bvid, it.cid) } else null
-    }
-    val navigationOuter = remember(ugcSeason, hasExternalPlaylist) {
-        if (hasExternalPlaylist) emptyList() else ugcSeason?.sections?.flatMap { section ->
-            section.episodes.map { PiliEpisodeNavigationEntry(it.bvid, it.cid) }
-        }.orEmpty()
-    }
-    val navigationRelated = remember(relatedVideos, hasExternalPlaylist) {
-        if (hasExternalPlaylist) emptyList() else relatedVideos.map { PiliEpisodeNavigationEntry(it.bvid, 0L) }
-    }
-    val outerReversed = if (hasExternalPlaylist) false else if (pages.size > 1 && ugcSeason != null) {
-        val sort by remember(context, ugcSeason) {
-            SettingsManager.getCollectionSortMode(
-                context, com.android.purebilibili.feature.video.ui.components.resolveCollectionSubscriptionId(ugcSeason),
-            )
-        }.collectAsStateWithLifecycle(
-            initialValue = com.android.purebilibili.feature.video.ui.components.CollectionSortMode.ASCENDING,
-        )
-        sort == com.android.purebilibili.feature.video.ui.components.CollectionSortMode.DESCENDING
-    } else collectionSession.isReversed
     val useTabletDanmakuStyle =
         com.android.purebilibili.feature.video.ui.section.LocalUseTabletDanmakuStyle.current
     val inlineDanmakuFontScale = if (useTabletDanmakuStyle) {
@@ -1433,31 +1409,6 @@ private fun VideoPlayerOverlayContent(
             onSeekTo?.invoke(safePosition) ?: seekPlayerFromUserAction(player, safePosition)
         }
     }
-    fun navigateEpisode(forward: Boolean) {
-        val target = resolvePiliEpisodeNavigation(
-            pages = navigationPages,
-            outer = navigationOuter,
-            related = navigationRelated,
-            externalPlaylist = navigationExternalPlaylist,
-            currentBvid = bvid,
-            currentCid = cid.takeIf { it > 0 } ?: pages.getOrNull(currentPageIndex)?.cid ?: 0L,
-            forward = forward,
-            reversePages = pages.size > 1 && collectionSession.isReversed,
-            reverseOuter = outerReversed,
-            loop = playbackCompletionBehavior == PlaybackCompletionBehavior.LOOP_PLAYLIST,
-            autoContinue = playbackCompletionBehavior == PlaybackCompletionBehavior.CONTINUE_CURRENT_LOGIC,
-        )
-        if (target == null) {
-            android.widget.Toast.makeText(context, if (forward) "已经是最后一集了" else "已经是第一集了",
-                android.widget.Toast.LENGTH_SHORT).show()
-        } else {
-            onDismissEndDrawer()
-            if (target.pageIndex != null) onPageSelect(target.pageIndex)
-            else onDrawerVideoClick(target.bvid,
-                com.android.purebilibili.feature.video.screen.buildVideoNavigationOptions(targetCid = target.cid))
-        }
-    }
-
     Box(
         modifier = Modifier
             .then(autoHide.focusModifier)
@@ -1558,20 +1509,31 @@ private fun VideoPlayerOverlayContent(
             )
         }
 
-        // 控件隐藏时保留底部细进度条，便于持续感知当前播放进度
+        // 控件隐藏时保留底部细进度条，便于持续感知当前播放进度；
+        // 手势拖动快进快退时改为加粗进度条，方便分辨拖动位置。
         if (!danmakuComposerVisible &&
             shouldShowPersistentBottomProgressBar(
                 controlsVisible = isVisible,
                 isFullscreen = isFullscreen,
-                behavior = bottomProgressBehavior
+                behavior = bottomProgressBehavior,
+                isGestureSeeking = isGestureSeeking,
             )
         ) {
-            OverlayPersistentProgressBar(
-                progressProvider = displayedProgressProvider,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .landscapeEndDrawerPadding(endDrawerReservedWidthProvider)
-            )
+            if (isGestureSeeking) {
+                OverlaySeekGestureProgressBar(
+                    progressProvider = displayedProgressProvider,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .landscapeEndDrawerPadding(endDrawerReservedWidthProvider)
+                )
+            } else {
+                OverlayPersistentProgressBar(
+                    progressProvider = displayedProgressProvider,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .landscapeEndDrawerPadding(endDrawerReservedWidthProvider)
+                )
+            }
         }
 
         // 两条材质路径共用显示策略；仅显式选择常驻时在控制栏收起后保留章节。
@@ -1706,8 +1668,6 @@ private fun VideoPlayerOverlayContent(
                             onSpeedClick = { showSpeedMenu = true },
                             onPortraitFullscreen = onPortraitFullscreen,
                             onRatioClick = { showRatioMenu = true },
-                            onPreviousEpisodeClick = { navigateEpisode(forward = false) },
-                            onNextEpisodeClick = { navigateEpisode(forward = true) },
                             onEpisodeClick = {
                                 if (hasExternalPlaylist && pages.size > 1) {
                                     showEpisodeSourceMenu = true

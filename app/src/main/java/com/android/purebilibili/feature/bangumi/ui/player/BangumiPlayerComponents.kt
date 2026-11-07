@@ -886,6 +886,7 @@ fun BangumiPlayerView(
             currentAudioUrl = currentAudioUrl,
             debugInfo = debugInfo,
             isVisible = showControls && gestureMode == BangumiGestureMode.None && !features.isInPipMode,
+            isGestureSeeking = gestureMode == BangumiGestureMode.Seek && !features.isInPipMode,
             onToggleVisible = { showControls = !showControls },
             isFullscreen = isFullscreen,
             isScreenLocked = isScreenLocked,

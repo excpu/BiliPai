@@ -962,8 +962,12 @@ fun PortraitVideoPager(
         if (inactivitySnapshot != null) return
         val bvid = currentPlayingBvid ?: return
         val mediaId = exoPlayer.currentMediaItem?.mediaId
-        inactivitySnapshot = if (mediaId == resolvePortraitMediaId(bvid, currentPlayingCid) ||
-            (useSharedPlayer && mediaId == bvid)
+        inactivitySnapshot = if (isPortraitPlayerMediaForVideo(
+                currentPlayerMediaId = mediaId,
+                expectedBvid = bvid,
+                expectedCid = currentPlayingCid,
+                acceptLegacyBvidOnlyMediaId = useSharedPlayer
+            )
         ) {
             PortraitPlaybackRecoverySnapshot(
                 bvid, currentPlayingCid, exoPlayer.currentPosition.coerceAtLeast(0L), exoPlayer.playWhenReady
@@ -1034,8 +1038,13 @@ fun PortraitVideoPager(
             override fun onPlayerError(error: PlaybackException) {
                 if (listenerGeneration != activeLoadGeneration) return
                 val bvid = currentPlayingBvid ?: return
-                val mediaId = exoPlayer.currentMediaItem?.mediaId ?: return
-                if (mediaId != resolvePortraitMediaId(bvid, currentPlayingCid) && !(useSharedPlayer && mediaId == bvid)) return
+                if (!isPortraitPlayerMediaForVideo(
+                        currentPlayerMediaId = exoPlayer.currentMediaItem?.mediaId,
+                        expectedBvid = bvid,
+                        expectedCid = currentPlayingCid,
+                        acceptLegacyBvidOnlyMediaId = useSharedPlayer
+                    )
+                ) return
                 val intent = requestedPlaybackSnapshot?.playWhenReady ?: exoPlayer.playWhenReady
                 playbackFailure = PortraitPlaybackFailure(
                     listenerGeneration,
@@ -1067,9 +1076,12 @@ fun PortraitVideoPager(
             override fun onRenderedFirstFrame() {
                 if (listenerGeneration != activeLoadGeneration) return
                 val bvid = currentPlayingBvid ?: return
-                val mediaId = exoPlayer.currentMediaItem?.mediaId ?: return
-                val matchingMedia = mediaId == resolvePortraitMediaId(bvid, currentPlayingCid) ||
-                    (useSharedPlayer && listenerGeneration == 0 && mediaId == bvid)
+                val matchingMedia = isPortraitPlayerMediaForVideo(
+                    currentPlayerMediaId = exoPlayer.currentMediaItem?.mediaId,
+                    expectedBvid = bvid,
+                    expectedCid = currentPlayingCid,
+                    acceptLegacyBvidOnlyMediaId = useSharedPlayer && listenerGeneration == 0
+                )
                 if (!matchingMedia) return
                 renderedFirstFrameGeneration = listenerGeneration
                 playbackFailure = null
@@ -1283,9 +1295,22 @@ fun PortraitVideoPager(
                 currentPlayingCid = currentPlayingCid
             )
         ) {
+            com.android.purebilibili.core.util.Logger.d("PortraitVideoPager") {
+                "♻️ 复用现有媒体，不重建: bvid=$bvid cid=$requestedCid"
+            }
             isLoading = false
             return false
         }
+
+        // 这里会 stop() + clearMediaItems() 重建整条媒体，进度因此归零；
+        // 只有在“确实换了视频/分P”时才应该走到这里，日志用于区分误重建。
+        com.android.purebilibili.core.util.Logger.w(
+            "PortraitVideoPager",
+            "🔁 重建播放器媒体: target=$bvid/$requestedCid, " +
+                "currentPlaying=$currentPlayingBvid/$currentPlayingCid, " +
+                "currentMediaId=${exoPlayer.currentMediaItem?.mediaId}, " +
+                "forceReload=$forceReload, position=${exoPlayer.currentPosition}",
+        )
 
         currentPlayingBvid?.takeIf { it.isNotBlank() && exoPlayer.currentMediaItem != null }?.let { playingBvid ->
             val mediaId = resolvePortraitMediaId(playingBvid, currentPlayingCid)
@@ -1588,9 +1613,12 @@ fun PortraitVideoPager(
                 it.bvid == identity.bvid && (identity.cid <= 0L || it.cid <= 0L || identity.cid == it.cid)
             } == true
         ) return@LaunchedEffect
-        val mediaId = exoPlayer.currentMediaItem?.mediaId
-        val matchingMedia = mediaId == resolvePortraitMediaId(snapshot.bvid, snapshot.cid) ||
-            (useSharedPlayer && mediaId == snapshot.bvid)
+        val matchingMedia = isPortraitPlayerMediaForVideo(
+            currentPlayerMediaId = exoPlayer.currentMediaItem?.mediaId,
+            expectedBvid = snapshot.bvid,
+            expectedCid = snapshot.cid,
+            acceptLegacyBvidOnlyMediaId = useSharedPlayer
+        )
         if (matchingMedia && exoPlayer.playerError == null) {
             if (exoPlayer.playbackState == Player.STATE_IDLE) exoPlayer.prepare()
             exoPlayer.playWhenReady = snapshot.playWhenReady
@@ -2499,8 +2527,20 @@ private fun VideoPageItem(
         exoPlayer.videoSize,
         enhancement.pipelineActive,
     ) {
-        if (enhancement.pipelineActive) return@LaunchedEffect
-        val view = playerViewRef ?: return@LaunchedEffect
+        if (enhancement.pipelineActive) {
+            com.android.purebilibili.core.util.Logger.w(
+                "PortraitVideoPager",
+                "⚠️ 视频增强管线接通时跳过输出面重绑: page=$bvid pipeline=true",
+            )
+            return@LaunchedEffect
+        }
+        val view = playerViewRef ?: run {
+            com.android.purebilibili.core.util.Logger.w(
+                "PortraitVideoPager",
+                "⚠️ 输出面视图尚未就绪，跳过重绑: page=$bvid",
+            )
+            return@LaunchedEffect
+        }
         if (!shouldRebindSharedPlayerSurfaceOnAttach(
                 isCurrentPage = isCurrentPage,
                 isPlayerReadyForThisVideo = isPlayerReadyForThisVideo,
@@ -2514,6 +2554,27 @@ private fun VideoPageItem(
 
         // Force the shared player to hand over its surface to the portrait pager view.
         rebindPlayerSurfaceIfNeeded(playerView = view, player = exoPlayer)
+        com.android.purebilibili.core.util.Logger.w(
+            "PortraitVideoPager",
+            "🎬 重绑输出面: page=$bvid playing=$currentPlayingBvid, " +
+                "videoSize=${exoPlayer.videoSize.width}x${exoPlayer.videoSize.height}, " +
+                "playbackState=${exoPlayer.playbackState}, position=${exoPlayer.currentPosition}",
+        )
+    }
+
+    // 只用于诊断“有声音无画面”：出帧确认走 Log.w 才能在 release 包的 logcat 里看到。
+    DisposableEffect(exoPlayer) {
+        val listener = object : Player.Listener {
+            override fun onRenderedFirstFrame() {
+                com.android.purebilibili.core.util.Logger.w(
+                    "PortraitVideoPager",
+                    "🎬 首帧已渲染: page=$bvid playing=$currentPlayingBvid, " +
+                        "state=${exoPlayer.playbackState}, position=${exoPlayer.currentPosition}",
+                )
+            }
+        }
+        exoPlayer.addListener(listener)
+        onDispose { exoPlayer.removeListener(listener) }
     }
 
     DisposableEffect(
@@ -3958,6 +4019,8 @@ private fun VideoPageItem(
                 availableAudioQualities = availableAudioQualities,
                 isVerticalVideo = currentVideoAspect < 1f,
                 isSeekScrubbing = seekSliderMoving,
+                // 拖动快进快退时展示加粗底部进度条
+                isGestureSeeking = isSeekGesture && progressDuration > 0L,
                 progressSource = portraitProgress,
                 progressSamplingActive = isCurrentPage && isPortraitPlaybackAllowed,
                 highFrequencyProgressActive = false,
@@ -4351,7 +4414,12 @@ private fun VideoPageItem(
                     }
                 },
                 progressDisplayOverridePositionProvider = {
-                    if (seekSliderMoving) seekSession.sliderPositionMs else progressState.current
+                    when {
+                        seekSliderMoving -> seekSession.sliderPositionMs
+                        // 拖动快进快退时让底部进度条跟随手指目标位置
+                        isSeekGesture -> seekTargetPosition
+                        else -> progressState.current
+                    }
                 },
                 onPlayModeClick = { PlaylistManager.togglePlayMode() },
                 onExternalPlaylistClick = { showPortraitExternalPlaylist = true },

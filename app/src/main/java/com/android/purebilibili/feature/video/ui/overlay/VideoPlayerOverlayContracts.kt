@@ -134,6 +134,8 @@ data class VideoPlayerOverlayState(
     val pbpRidgeSamples: List<PbpRidgeSample> = emptyList(),
     val isVerticalVideo: Boolean = false,
     val isSeekScrubbing: Boolean = false,
+    // 横屏/竖屏手势拖动快进快退时为 true：控制栏此时被隐藏，需要额外展示加粗底部进度条。
+    val isGestureSeeking: Boolean = false,
     val progressDisplayOverridePositionMs: Long? = null,
     val isPlaybackTransitionPending: Boolean = false,
     val highFrequencyProgressActive: Boolean = false,

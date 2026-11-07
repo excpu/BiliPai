@@ -987,6 +987,55 @@ class VideoPlayerOverlayPolicyTest {
     }
 
     @Test
+    fun gestureSeekingShowsBoldBottomBarEvenWhenAlwaysHidden() {
+        // 拖动快进快退时控制栏已收起，必须展示进度条，且不受"始终隐藏"设置影响。
+        assertTrue(
+            shouldShowPersistentBottomProgressBar(
+                controlsVisible = false,
+                isFullscreen = false,
+                behavior = BottomProgressBehavior.ALWAYS_HIDE,
+                isGestureSeeking = true
+            )
+        )
+        assertTrue(
+            shouldShowPersistentBottomProgressBar(
+                controlsVisible = false,
+                isFullscreen = true,
+                behavior = BottomProgressBehavior.ALWAYS_HIDE,
+                isGestureSeeking = true
+            )
+        )
+        // 控制栏仍然可见时不叠加显示，交由控制栏自身的进度条呈现。
+        assertFalse(
+            shouldShowPersistentBottomProgressBar(
+                controlsVisible = true,
+                isFullscreen = true,
+                behavior = BottomProgressBehavior.ALWAYS_HIDE,
+                isGestureSeeking = true
+            )
+        )
+    }
+
+    @Test
+    fun glassGestureSeekingShowsBottomBarEvenWhenAlwaysHidden() {
+        assertTrue(
+            com.android.purebilibili.feature.video.ui.overlay.glass.shouldShowPersistentBottomProgressBar(
+                controlsVisible = false,
+                isFullscreen = false,
+                behavior = BottomProgressBehavior.ALWAYS_HIDE,
+                isGestureSeeking = true
+            )
+        )
+        assertFalse(
+            com.android.purebilibili.feature.video.ui.overlay.glass.shouldShowPersistentBottomProgressBar(
+                controlsVisible = false,
+                isFullscreen = false,
+                behavior = BottomProgressBehavior.ALWAYS_HIDE
+            )
+        )
+    }
+
+    @Test
     fun persistentBottomProgressBarRespectsOnlyShowFullscreenBehavior() {
         assertTrue(
             shouldShowPersistentBottomProgressBar(

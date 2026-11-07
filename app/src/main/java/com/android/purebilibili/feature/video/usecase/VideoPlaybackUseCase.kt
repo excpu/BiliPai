@@ -174,6 +174,16 @@ internal fun resolvePlaybackBootstrapMode(
 internal fun resolvePlaybackBootstrapCid(requestCid: Long, cachedCid: Long): Long =
     requestCid.takeIf { it > 0L } ?: cachedCid.coerceAtLeast(0L)
 
+/**
+ * 播放器的 mediaId 格式：`bvid#cid`。竖屏分页、首帧与错误回调都靠它判断
+ * “当前这条媒体是不是这个视频”，改动格式会影响这些判定。
+ */
+internal fun resolvePlaybackMediaId(bvid: String, cid: Long = 0L): String {
+    val normalized = bvid.trim()
+    if (normalized.isEmpty()) return ""
+    return if (cid > 0L) "$normalized#$cid" else normalized
+}
+
 internal fun shouldFetchRelatedVideosAfterVideoDetail(bvid: String): Boolean {
     val normalized = bvid.trim()
     return normalized.isBlank() || normalized.startsWith("av", ignoreCase = true)
@@ -795,7 +805,8 @@ class VideoPlaybackUseCase(
         audioUrl: String?,
         seekTo: Long = 0L,
         playWhenReady: Boolean = true,
-        cdnCacheKeysByUrl: Map<String, String> = emptyMap()
+        cdnCacheKeysByUrl: Map<String, String> = emptyMap(),
+        mediaId: String = ""
     ) {
         playDashVideo(
             videoUrl = videoUrl,
@@ -803,7 +814,8 @@ class VideoPlaybackUseCase(
             adaptiveDashSource = null,
             seekTo = seekTo,
             playWhenReady = playWhenReady,
-            cdnCacheKeysByUrl = cdnCacheKeysByUrl
+            cdnCacheKeysByUrl = cdnCacheKeysByUrl,
+            mediaId = mediaId
         )
     }
 
@@ -814,7 +826,8 @@ class VideoPlaybackUseCase(
         adaptiveDashSource: AdaptiveDashPlaybackSource?,
         seekTo: Long = 0L,
         playWhenReady: Boolean = true,
-        cdnCacheKeysByUrl: Map<String, String> = emptyMap()
+        cdnCacheKeysByUrl: Map<String, String> = emptyMap(),
+        mediaId: String = ""
     ) {
         val player = exoPlayer ?: return
         com.android.purebilibili.core.player.PlayerVolumeController.applyPreferredVolume(player)
@@ -827,10 +840,10 @@ class VideoPlaybackUseCase(
                 dashSegmentRequestsEnabled = dashSegmentRequestsEnabled
             )
         ) {
-            createAdaptiveDashMediaSource(adaptiveDashSource, cdnCacheKeysByUrl)
-                ?: createLegacyDashMediaSource(videoUrl, audioUrl, cdnCacheKeysByUrl)
+            createAdaptiveDashMediaSource(adaptiveDashSource, cdnCacheKeysByUrl, mediaId)
+                ?: createLegacyDashMediaSource(videoUrl, audioUrl, cdnCacheKeysByUrl, mediaId)
         } else {
-            createLegacyDashMediaSource(videoUrl, audioUrl, cdnCacheKeysByUrl)
+            createLegacyDashMediaSource(videoUrl, audioUrl, cdnCacheKeysByUrl, mediaId)
         }
 
         player.setMediaSource(finalSource)
@@ -850,11 +863,14 @@ class VideoPlaybackUseCase(
     /**
      * Play simple video URL
      */
-    fun playVideo(url: String, seekTo: Long = 0L, playWhenReady: Boolean = true) {
+    fun playVideo(url: String, seekTo: Long = 0L, playWhenReady: Boolean = true, mediaId: String = "") {
         val player = exoPlayer ?: return
         com.android.purebilibili.core.player.PlayerVolumeController.applyPreferredVolume(player)
         
-        val mediaItem = MediaItem.fromUri(url)
+        val mediaItem = MediaItem.Builder()
+            .setUri(url)
+            .apply { if (mediaId.isNotBlank()) setMediaId(mediaId) }
+            .build()
         player.setMediaItem(mediaItem)
         player.playWhenReady = playWhenReady
         if (seekTo > 0) {
@@ -891,7 +907,8 @@ class VideoPlaybackUseCase(
         isDolbyAudioSoftwareDecoded: Boolean =
             com.android.purebilibili.core.util.MediaUtils.isDolbySoftwareAudioDecoderRequired(),
         playWhenReady: Boolean = true,
-        applyToPlayer: Boolean = true
+        applyToPlayer: Boolean = true,
+        mediaId: String = ""
     ): QualitySwitchResult? {
         if (cachedVideos.isEmpty()) {
             Logger.d("VideoPlaybackUseCase", " changeQualityFromCache: cache is EMPTY, returning null")
@@ -970,7 +987,8 @@ class VideoPlaybackUseCase(
                     audioUrl = audioUrl,
                     adaptiveDashSource = adaptiveDashSource,
                     seekTo = currentPos,
-                    playWhenReady = playWhenReady
+                    playWhenReady = playWhenReady,
+                    mediaId = mediaId
                 )
             }
             return QualitySwitchResult(
@@ -1065,10 +1083,16 @@ class VideoPlaybackUseCase(
                 audioUrl = selection.audioUrl,
                 adaptiveDashSource = selection.adaptiveDashSource,
                 seekTo = currentPos,
-                playWhenReady = playWhenReady
+                playWhenReady = playWhenReady,
+                mediaId = resolvePlaybackMediaId(bvid, cid)
             )
         } else if (applyToPlayer) {
-            playVideo(selection.videoUrl, currentPos, playWhenReady = playWhenReady)
+            playVideo(
+                selection.videoUrl,
+                currentPos,
+                playWhenReady = playWhenReady,
+                mediaId = resolvePlaybackMediaId(bvid, cid)
+            )
         }
         
         Logger.d("VideoPlaybackUseCase", " Quality switch result: target=$qualityId, actual=${selection.actualQuality}")
@@ -1266,7 +1290,8 @@ class VideoPlaybackUseCase(
     private fun createLegacyDashMediaSource(
         videoUrl: String,
         audioUrl: String?,
-        cdnCacheKeysByUrl: Map<String, String>
+        cdnCacheKeysByUrl: Map<String, String>,
+        mediaId: String = ""
     ): MediaSource {
         val headers = mapOf(
             "Referer" to "https://www.bilibili.com",
@@ -1278,10 +1303,20 @@ class VideoPlaybackUseCase(
         val dataSourceFactory = buildCachedPlaybackDataSourceFactory(upstreamFactory, cdnCacheKeysByUrl)
 
         val mediaSourceFactory = androidx.media3.exoplayer.source.ProgressiveMediaSource.Factory(dataSourceFactory)
-        val videoSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(videoUrl))
+        val videoSource = mediaSourceFactory.createMediaSource(
+            MediaItem.Builder()
+                .setUri(videoUrl)
+                .apply { if (mediaId.isNotBlank()) setMediaId(mediaId) }
+                .build()
+        )
 
         return if (audioUrl != null) {
-            val audioSource = mediaSourceFactory.createMediaSource(MediaItem.fromUri(audioUrl))
+            val audioSource = mediaSourceFactory.createMediaSource(
+                MediaItem.Builder()
+                    .setUri(audioUrl)
+                    .apply { if (mediaId.isNotBlank()) setMediaId("audio_$mediaId") }
+                    .build()
+            )
             androidx.media3.exoplayer.source.MergingMediaSource(videoSource, audioSource)
         } else {
             videoSource
@@ -1291,7 +1326,8 @@ class VideoPlaybackUseCase(
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     private fun createAdaptiveDashMediaSource(
         adaptiveDashSource: AdaptiveDashPlaybackSource?,
-        cdnCacheKeysByUrl: Map<String, String>
+        cdnCacheKeysByUrl: Map<String, String>,
+        mediaId: String = ""
     ): MediaSource? {
         val source = adaptiveDashSource ?: return null
         val context = appContext ?: NetworkModule.appContext ?: return null
@@ -1314,6 +1350,7 @@ class VideoPlaybackUseCase(
         val mediaItem = MediaItem.Builder()
             .setUri(manifestUri)
             .setMimeType(MimeTypes.APPLICATION_MPD)
+            .apply { if (mediaId.isNotBlank()) setMediaId(mediaId) }
             .build()
         return DashMediaSource.Factory(dataSourceFactory).createMediaSource(mediaItem)
     }

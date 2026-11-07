@@ -255,6 +255,89 @@ class PortraitPagerSwitchPolicyTest {
     }
 
     @Test
+    fun shouldSkipPortraitReloadForCurrentMedia_fallsBackToCidWhenMediaIdMissing() {
+        // 内联播放器写入的条目没有 mediaId，同一条视频进入竖屏时不应整条重建。
+        assertTrue(
+            shouldSkipPortraitReloadForCurrentMedia(
+                currentPlayingBvid = "BV1xx411c7mD",
+                targetBvid = "BV1xx411c7mD",
+                currentPlayerMediaId = "",
+                targetCid = 43L,
+                currentPlayingCid = 43L
+            )
+        )
+        // 同一 bvid 的不同分P仍要重新加载。
+        assertFalse(
+            shouldSkipPortraitReloadForCurrentMedia(
+                currentPlayingBvid = "BV1xx411c7mD",
+                targetBvid = "BV1xx411c7mD",
+                currentPlayerMediaId = null,
+                targetCid = 44L,
+                currentPlayingCid = 43L
+            )
+        )
+        // 换了视频必须重建。
+        assertFalse(
+            shouldSkipPortraitReloadForCurrentMedia(
+                currentPlayingBvid = "BV17x411w7KC",
+                targetBvid = "BV1xx411c7mD",
+                currentPlayerMediaId = "",
+                targetCid = 43L,
+                currentPlayingCid = 43L
+            )
+        )
+    }
+
+    @Test
+    fun isPortraitPlayerMediaForVideo_acceptsMissingMediaIdAndLegacyBvidOnlyId() {
+        assertTrue(
+            isPortraitPlayerMediaForVideo(
+                currentPlayerMediaId = "BV1xx411c7mD#43",
+                expectedBvid = "BV1xx411c7mD",
+                expectedCid = 43L
+            )
+        )
+        assertFalse(
+            isPortraitPlayerMediaForVideo(
+                currentPlayerMediaId = "BV1xx411c7mD#44",
+                expectedBvid = "BV1xx411c7mD",
+                expectedCid = 43L
+            )
+        )
+        // 未写入 mediaId 时无法区分，交给调用方给出的当前播放身份。
+        assertTrue(
+            isPortraitPlayerMediaForVideo(
+                currentPlayerMediaId = "",
+                expectedBvid = "BV1xx411c7mD",
+                expectedCid = 43L
+            )
+        )
+        assertFalse(
+            isPortraitPlayerMediaForVideo(
+                currentPlayerMediaId = "",
+                expectedBvid = null,
+                expectedCid = 43L
+            )
+        )
+        assertTrue(
+            isPortraitPlayerMediaForVideo(
+                currentPlayerMediaId = "BV1xx411c7mD",
+                expectedBvid = "BV1xx411c7mD",
+                expectedCid = 43L,
+                acceptLegacyBvidOnlyMediaId = true
+            )
+        )
+        assertFalse(
+            isPortraitPlayerMediaForVideo(
+                currentPlayerMediaId = "BV1xx411c7mD",
+                expectedBvid = "BV1xx411c7mD",
+                expectedCid = 43L,
+                acceptLegacyBvidOnlyMediaId = false
+            )
+        )
+    }
+
+    @Test
     fun shouldShowPortraitCover_holdsUntilFirstFrameAndStaysHiddenDuringRebuffer() {
         assertTrue(
             shouldShowPortraitCover(

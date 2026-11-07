@@ -3177,7 +3177,20 @@ internal fun VideoDetailScreenStateHolder(
             portraitPendingSelectionBvid = portraitPendingSelectionBvid,
             portraitSyncSnapshotBvid = portraitSyncSnapshotBvid,
             portraitSyncSnapshotCid = portraitSyncSnapshotCid,
-        ) ?: return
+        ) ?: run {
+            com.android.purebilibili.core.util.Logger.w(
+                "VideoDetailScreen",
+                "↩️ 竖屏退出恢复无目标，保持当前详情: route=$bvid",
+            )
+            return
+        }
+        com.android.purebilibili.core.util.Logger.w(
+            "VideoDetailScreen",
+            "↩️ 竖屏退出恢复: target=${target.bvid}/${target.cid}, " +
+                "pendingMainReload=$pendingMainReloadBvidAfterPortrait, " +
+                "pendingSelection=$portraitPendingSelectionBvid, " +
+                "snapshot=$portraitSyncSnapshotBvid/$portraitSyncSnapshotCid, route=$bvid",
+        )
         if (com.android.purebilibili.feature.video.ui.pager
                 .shouldReplaceVideoDetailRouteAfterPortraitExit(
                     routeBvid = bvid,
@@ -3195,7 +3208,13 @@ internal fun VideoDetailScreenStateHolder(
                 pendingInPageSwitchCoverUrl,
                 portraitSyncSnapshotPositionMs.coerceAtLeast(0L),
             )
-            if (routeReplaced) return
+            if (routeReplaced) {
+                com.android.purebilibili.core.util.Logger.w(
+                    "VideoDetailScreen",
+                    "↩️ 竖屏退出已替换详情路由: ${target.bvid}/${target.cid}",
+                )
+                return
+            }
             miniPlayerManager?.isNavigatingToVideo = false
         }
         val loaded = viewModel.uiState.value as? VideoPlaybackUiState.Success
@@ -3207,6 +3226,11 @@ internal fun VideoDetailScreenStateHolder(
                 currentCid = loaded?.info?.cid ?: 0L,
             )
         ) {
+            com.android.purebilibili.core.util.Logger.w(
+                "VideoDetailScreen",
+                "↩️ 竖屏退出就地重载主播放器: ${target.bvid}/${target.cid}, " +
+                    "loaded=${loaded?.info?.bvid}/${loaded?.info?.cid}",
+            )
             // Commit the detail subject together with the portrait exit. Relying on the later
             // currentBvid observer leaves a frame-order race with AnimatedVisibility disposal:
             // the player/cover can already point at page N while title/description still expose
@@ -3215,6 +3239,12 @@ internal fun VideoDetailScreenStateHolder(
                 bvid = target.bvid,
                 cid = target.cid.takeIf { it > 0L } ?: 0L,
                 autoPlay = resolveAutoPlayOverrideForInternalBvidSync(forceAutoPlay = false),
+            )
+        } else {
+            com.android.purebilibili.core.util.Logger.w(
+                "VideoDetailScreen",
+                "↩️ 竖屏退出无需重载主播放器: ${target.bvid}/${target.cid}, " +
+                    "loaded=${loaded?.info?.bvid}/${loaded?.info?.cid}",
             )
         }
     }

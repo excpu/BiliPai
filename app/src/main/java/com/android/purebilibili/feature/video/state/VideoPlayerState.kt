@@ -1443,7 +1443,10 @@ fun rememberVideoPlayerState(
                 val errorCodeName = androidx.media3.common.PlaybackException.getErrorCodeName(error.errorCode)
                 com.android.purebilibili.core.util.Logger.e(
                     "VideoPlayerState",
-                    "❌ Player error: code=${error.errorCode}($errorCodeName), message=${error.message}, cause=$causeName",
+                    "❌ Player error: code=${error.errorCode}($errorCodeName), message=${error.message}, " +
+                        "cause=$causeName, mediaId=${player.currentMediaItem?.mediaId}, " +
+                        "state=${player.playbackState}, position=${player.currentPosition}, " +
+                        "detail=${describePlaybackErrorDetail(error)}",
                     error
                 )
                 holder.recordDiagnosticEvent(

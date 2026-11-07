@@ -6,6 +6,7 @@ import com.android.purebilibili.data.model.response.RelatedVideo
 import com.android.purebilibili.data.model.response.VideoItem
 import com.android.purebilibili.data.model.response.ViewInfo
 import com.android.purebilibili.data.repository.VideoRepository
+import com.android.purebilibili.feature.video.usecase.resolvePlaybackMediaId
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -59,9 +60,15 @@ internal fun shouldSkipPortraitReloadForCurrentMedia(
     targetCid: Long = 0L,
     currentPlayingCid: Long = 0L
 ): Boolean {
-    val normalizedMediaId = currentPlayerMediaId?.trim().orEmpty()
-    if (normalizedMediaId.isBlank()) return false
     if (currentPlayingBvid != targetBvid) return false
+    val normalizedMediaId = currentPlayerMediaId?.trim().orEmpty()
+    if (normalizedMediaId.isBlank()) {
+        // 旧版播放链路写入的条目没有 mediaId，退回按 bvid + cid 判断，
+        // 否则同一条视频进入竖屏时会被当成换视频整条重建（进度归零、重取播放地址）。
+        return !currentPlayingBvid.isNullOrBlank() &&
+            targetCid > 0L &&
+            targetCid == currentPlayingCid
+    }
     // Multi-P shares bvid; media id encodes cid so part switches still reload.
     val expectedMediaId = resolvePortraitMediaId(targetBvid, targetCid)
     if (normalizedMediaId == expectedMediaId) return true
@@ -73,10 +80,25 @@ internal fun shouldSkipPortraitReloadForCurrentMedia(
     return false
 }
 
-internal fun resolvePortraitMediaId(bvid: String, cid: Long = 0L): String {
-    val normalized = bvid.trim()
-    return if (cid > 0L) "$normalized#$cid" else normalized
+/**
+ * 判断播放器当前条目是否就是 [expectedBvid]/[expectedCid]。
+ * 未写入 mediaId 的条目无法区分视频，按调用方给出的当前播放身份处理，避免首帧/错误回调被直接丢弃。
+ */
+internal fun isPortraitPlayerMediaForVideo(
+    currentPlayerMediaId: String?,
+    expectedBvid: String?,
+    expectedCid: Long,
+    acceptLegacyBvidOnlyMediaId: Boolean = false
+): Boolean {
+    if (expectedBvid.isNullOrBlank()) return false
+    val normalizedMediaId = currentPlayerMediaId?.trim().orEmpty()
+    if (normalizedMediaId.isBlank()) return true
+    if (normalizedMediaId == resolvePortraitMediaId(expectedBvid, expectedCid)) return true
+    return acceptLegacyBvidOnlyMediaId && normalizedMediaId == expectedBvid
 }
+
+internal fun resolvePortraitMediaId(bvid: String, cid: Long = 0L): String =
+    resolvePlaybackMediaId(bvid, cid)
 
 internal fun shouldShowPortraitCover(
     isLoading: Boolean,

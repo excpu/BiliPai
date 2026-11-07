@@ -88,6 +88,7 @@ import com.android.purebilibili.feature.video.usecase.VideoLoadResult
 import com.android.purebilibili.feature.video.usecase.VideoPlaybackUseCase
 import com.android.purebilibili.feature.video.usecase.pausePlayerFromUserAction
 import com.android.purebilibili.feature.video.usecase.playPlayerFromUserAction
+import com.android.purebilibili.feature.video.usecase.resolvePlaybackMediaId
 import com.android.purebilibili.feature.audio.player.AudioNowPlayingSession
 import com.android.purebilibili.feature.video.usecase.togglePlayerPlaybackFromUserAction
 
@@ -2918,18 +2919,21 @@ class MiniPlayerManager private constructor(private val context: Context) :
                         loadResult.info.bvid,
                         loadResult.info.cid,
                     )
+                    val mediaId = resolvePlaybackMediaId(loadResult.info.bvid, loadResult.info.cid)
                     if (loadResult.audioUrl != null) {
                         backgroundPlaybackUseCase.playDashVideo(
                             videoUrl = loadResult.playUrl,
                             audioUrl = loadResult.audioUrl,
                             seekTo = 0L,
-                            playWhenReady = true
+                            playWhenReady = true,
+                            mediaId = mediaId
                         )
                     } else {
                         backgroundPlaybackUseCase.playVideo(
                             url = loadResult.playUrl,
                             seekTo = 0L,
-                            playWhenReady = true
+                            playWhenReady = true,
+                            mediaId = mediaId
                         )
                     }
                     currentBvid = loadResult.info.bvid

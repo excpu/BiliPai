@@ -118,6 +118,20 @@ internal fun OverlayPersistentProgressBar(
     )
 }
 
+/** 手势拖动快进快退期间的加粗底部进度条。 */
+@Composable
+internal fun OverlaySeekGestureProgressBar(
+    progressProvider: () -> PlayerProgress,
+    modifier: Modifier = Modifier,
+) {
+    val progress = progressProvider()
+    SeekGestureBottomProgressBar(
+        current = progress.current,
+        duration = progress.duration,
+        modifier = modifier,
+    )
+}
+
 @Composable
 internal fun OverlayChapterListPanel(
     progressProvider: () -> PlayerProgress,

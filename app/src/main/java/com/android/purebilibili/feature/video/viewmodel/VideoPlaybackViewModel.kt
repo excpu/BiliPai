@@ -1669,7 +1669,8 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
             videoSecondCodecPreference = videoSecondCodecPreference,
             isHevcSupported = isHevcSupported,
             isAv1Supported = isAv1Supported,
-            playWhenReady = playWhenReady
+            playWhenReady = playWhenReady,
+            mediaId = resolvePlaybackMediaId(currentBvid, currentCid)
         ) ?: playbackUseCase.changeQualityFromApi(
             bvid = currentBvid,
             cid = currentCid,
@@ -9822,6 +9823,7 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
         cdnFallbackState: PlaybackCdnFallbackState = PlaybackCdnFallbackState.Inactive,
         cdnCacheKeysByUrl: Map<String, String> = emptyMap()
     ) {
+        val mediaId = resolvePlaybackMediaId(currentBvid, currentCid)
         exoPlayer?.let {
             PlayerHistorySessions.forPlayer(it).bindMedia(currentBvid, currentCid, preserveStarted = true)
         }
@@ -9835,10 +9837,16 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
                 adaptiveDashSource = adaptiveDashSource,
                 seekTo = startPositionMs,
                 playWhenReady = playWhenReady,
-                cdnCacheKeysByUrl = cdnCacheKeysByUrl
+                cdnCacheKeysByUrl = cdnCacheKeysByUrl,
+                mediaId = mediaId
             )
         } else {
-            playbackUseCase.playVideo(videoUrl, startPositionMs, playWhenReady = playWhenReady)
+            playbackUseCase.playVideo(
+                videoUrl,
+                startPositionMs,
+                playWhenReady = playWhenReady,
+                mediaId = mediaId
+            )
         }
     }
 

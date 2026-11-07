@@ -426,9 +426,12 @@ internal fun FullscreenLockButton(
 internal fun shouldShowPersistentBottomProgressBar(
     controlsVisible: Boolean,
     isFullscreen: Boolean,
-    behavior: BottomProgressBehavior
+    behavior: BottomProgressBehavior,
+    isGestureSeeking: Boolean = false,
 ): Boolean {
     if (controlsVisible) return false
+    // 手势拖动快进快退时控制栏已收起，此时强制展示底部进度条（加粗样式）。
+    if (isGestureSeeking) return true
     return when (behavior) {
         BottomProgressBehavior.ALWAYS_SHOW -> true
         BottomProgressBehavior.ALWAYS_HIDE -> false
@@ -644,6 +647,7 @@ private fun VideoPlayerOverlayContent(
     val onSeekDragUpdate = actions.onSeekDragUpdate
     val onSeekDragCancel = actions.onSeekDragCancel
     val isSeekScrubbing = state.isSeekScrubbing
+    val isGestureSeeking = state.isGestureSeeking
     val onSeekTo = actions.onSeekTo
     val progressDisplayOverridePositionMs = state.progressDisplayOverridePositionMs
     val progressDisplayOverridePositionProvider = actions.progressDisplayOverridePositionProvider
@@ -1514,20 +1518,31 @@ private fun VideoPlayerOverlayContent(
             )
         }
 
-        // 控件隐藏时保留底部细进度条，便于持续感知当前播放进度
+        // 控件隐藏时保留底部细进度条，便于持续感知当前播放进度；
+        // 手势拖动快进快退时改为加粗进度条，方便分辨拖动位置。
         if (!danmakuComposerVisible &&
             shouldShowPersistentBottomProgressBar(
                 controlsVisible = isVisible,
                 isFullscreen = isFullscreen,
-                behavior = bottomProgressBehavior
+                behavior = bottomProgressBehavior,
+                isGestureSeeking = isGestureSeeking,
             )
         ) {
-            OverlayPersistentProgressBar(
-                progressProvider = displayedProgressProvider,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .landscapeEndDrawerPadding(endDrawerReservedWidthProvider)
-            )
+            if (isGestureSeeking) {
+                OverlaySeekGestureProgressBar(
+                    progressProvider = displayedProgressProvider,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .landscapeEndDrawerPadding(endDrawerReservedWidthProvider)
+                )
+            } else {
+                OverlayPersistentProgressBar(
+                    progressProvider = displayedProgressProvider,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .landscapeEndDrawerPadding(endDrawerReservedWidthProvider)
+                )
+            }
         }
 
         // 两条材质路径共用显示策略；仅显式选择常驻时在控制栏收起后保留章节。

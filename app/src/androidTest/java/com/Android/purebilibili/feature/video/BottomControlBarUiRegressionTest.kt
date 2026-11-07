@@ -136,10 +136,19 @@ class BottomControlBarUiRegressionTest {
                             episodes.value = true; glass.value = false
                         }
                         // 播放/暂停固定在控制栏最左侧，与其它图标共用同一槽位。
-                        rule.onNodeWithTag("player_episode_action").assertIsDisplayed()
+                        // 非全屏内嵌控制栏不显示合集（选集）入口。
+                        if (isFullscreen) {
+                            rule.onNodeWithTag("player_episode_action").assertIsDisplayed()
+                        } else {
+                            rule.onNodeWithTag("player_episode_action").assertDoesNotExist()
+                        }
                         rule.onNodeWithTag("player_more_actions").assertDoesNotExist()
                         rule.onNodeWithTag("player_danmaku_toggle").assertDoesNotExist()
-                        val tags = mutableListOf("player_play_pause", "player_previous_episode", "player_next_episode", "player_episode_action")
+                        // 上一个/下一个视频按键已移除，任何模式下都不应存在。
+                        rule.onNodeWithTag("player_previous_episode").assertDoesNotExist()
+                        rule.onNodeWithTag("player_next_episode").assertDoesNotExist()
+                        val tags = mutableListOf("player_play_pause")
+                        if (isFullscreen) tags += "player_episode_action"
                         if (isFullscreen || widthDp >= 500) {
                             rule.onNodeWithTag("player_ratio_action").assertIsDisplayed()
                             rule.onNodeWithTag("player_quality_action").assertIsDisplayed()
@@ -162,8 +171,6 @@ class BottomControlBarUiRegressionTest {
                         }
                         rule.runOnIdle { episodes.value = false }
                         rule.onNodeWithTag("player_episode_action").assertDoesNotExist()
-                        rule.onNodeWithTag("player_next_episode").assertDoesNotExist()
-                        rule.onNodeWithTag("player_previous_episode").assertDoesNotExist()
                     }
                 }
             }

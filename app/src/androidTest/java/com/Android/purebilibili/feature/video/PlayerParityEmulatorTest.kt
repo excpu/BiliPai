@@ -150,11 +150,18 @@ class PlayerParityEmulatorTest {
 
                 var targetPage = 0
                 var currentLanguage = ""
-                scenario.onActivity { targetPage = (it.selectedPage + 1) % 3; currentLanguage = it.audioLanguage }
-                rule.onNodeWithTag("player_episode_action").performClick()
-                rule.onNodeWithText("Local episode ${targetPage + 1}", substring = true).performScrollTo().performClick()
-                awaitPlayer { it.player.currentMediaItem?.mediaId == "$targetPage:$currentLanguage" && it.player.playbackState == Player.STATE_READY }
-                scenario.onActivity { assertEquals(targetPage, it.selectedPage) }
+                scenario.onActivity {
+                    // 非全屏控制栏没有选集入口，翻译断言仍停留在当前分P。
+                    targetPage = if (fullscreen) (it.selectedPage + 1) % 3 else it.selectedPage
+                    currentLanguage = it.audioLanguage
+                }
+                // 合集（选集）入口只在全屏控制栏提供。
+                if (fullscreen) {
+                    rule.onNodeWithTag("player_episode_action").performClick()
+                    rule.onNodeWithText("Local episode ${targetPage + 1}", substring = true).performScrollTo().performClick()
+                    awaitPlayer { it.player.currentMediaItem?.mediaId == "$targetPage:$currentLanguage" && it.player.playbackState == Player.STATE_READY }
+                    scenario.onActivity { assertEquals(targetPage, it.selectedPage) }
+                }
 
                 val language = if (currentLanguage.isEmpty()) "en" else ""
                 rule.onNodeWithTag("player_translation_action").performClick()
@@ -216,12 +223,13 @@ class PlayerParityEmulatorTest {
     }
 
     @Test
-    fun inlineEpisodeSelectionChangesMediaIdentityWithoutEnteringFullscreen() {
+    fun inlineControlsHideEpisodeEntryAndPrevNextActions() {
         scenario.onActivity { it.rotateToLandscape(false); it.fullscreen = false }
         awaitPlayer { it.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT }
-        rule.onNodeWithTag("player_episode_action").performClick()
-        rule.onNodeWithText("Local episode 3", substring = true).performScrollTo().performClick()
-        awaitPlayer { it.player.currentMediaItem?.mediaId == "2:" && it.player.playbackState == Player.STATE_READY }
+        rule.onNodeWithTag("player_play_pause").assertIsDisplayed()
+        rule.onNodeWithTag("player_episode_action").assertDoesNotExist()
+        rule.onNodeWithTag("player_previous_episode").assertDoesNotExist()
+        rule.onNodeWithTag("player_next_episode").assertDoesNotExist()
         scenario.onActivity { assertFalse(it.fullscreen) }
     }
 
@@ -239,7 +247,7 @@ class PlayerParityEmulatorTest {
 
     private fun visibleControlBounds(): Map<String, Rect> {
         val order = listOf(
-            "player_play_pause", "player_previous_episode", "player_next_episode", "player_enhancement_action",
+            "player_play_pause", "player_enhancement_action",
             "player_chapter_action", "player_episode_action", "player_ratio_action", "player_translation_action",
             "player_subtitle_action", "player_speed_action", "player_quality_action", "player_fullscreen_toggle",
         )

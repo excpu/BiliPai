@@ -5621,6 +5621,8 @@ private fun VideoPlayerSectionContent(
                     // 📱 [新增] 竖屏全屏模式
                     isVerticalVideo = isVerticalVideo,
                     isSeekScrubbing = seekSliderMoving && gestureMode != VideoGestureMode.Seek,
+                    // 手势拖动快进快退时展示加粗底部进度条
+                    isGestureSeeking = shouldShowSeekIndicator,
                     isPlaybackTransitionPending = uiState.pendingPlaybackTransitionPositionMs != null,
                     highFrequencyProgressActive = isLongPressing,
                     // [New] Codec & Audio
