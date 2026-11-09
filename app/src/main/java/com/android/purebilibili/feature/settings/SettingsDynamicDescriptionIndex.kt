@@ -19,7 +19,8 @@ private val settingsDynamicDescriptionIndex = mapOf(
     "playback.danmaku_cloud_sync_enabled" to listOf(true, false).joinToString("；") {
         com.android.purebilibili.feature.video.danmaku.resolveDanmakuCloudSyncToggleSubtitle(it)
     },
-    "playback.portrait_player_collapse_mode" to PortraitPlayerCollapseMode.entries.joinToString("；") { it.description },
+    "playback.portrait_player_collapse_mode" to (PortraitPlayerCollapseMode.entries.joinToString("；") { it.description } +
+        "；手机竖屏播放中的竖屏视频始终可缩小"),
     "playback.auto_rotate_enabled" to "跟随设备方向旋转播放页，并保留平板/展开态折叠屏分栏布局；跟随设备方向自动进入/退出全屏，不受系统旋转锁影响",
     "playback.horizontal_adaptation_enabled" to "横屏时使用大屏布局，适合平板和折叠屏；主要适用于平板和折叠屏",
     "playback.fullscreen_mode" to FullscreenMode.entries.joinToString("；") { it.description } + "；自动横竖屏仅旋转播放页，手动全屏时使用此方向；已开启自动横竖屏，将跟随设备方向自动进退全屏",

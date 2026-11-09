@@ -34,7 +34,9 @@ internal fun shouldAutoPauseOnPlayerCollapse(
     isPlayerCollapsed: Boolean,
     isPlaying: Boolean,
     isPortraitFullscreen: Boolean = false,
-): Boolean = autoPauseEnabled && isPlayerCollapsed && isPlaying && !isPortraitFullscreen
+    playingPortraitDetailCollapse: Boolean = false,
+): Boolean = autoPauseEnabled && isPlayerCollapsed && isPlaying &&
+    !isPortraitFullscreen && !playingPortraitDetailCollapse
 
 /**
  * Resume only if this feature previously auto-paused — never override a manual pause.
@@ -44,6 +46,7 @@ internal fun shouldAutoResumeOnPlayerExpand(
     isPlayerCollapsed: Boolean,
     wasAutoPausedByCollapse: Boolean,
     isPortraitFullscreen: Boolean = false,
+    playingPortraitDetailCollapse: Boolean = false,
 ): Boolean = autoPauseEnabled &&
-    (!isPlayerCollapsed || isPortraitFullscreen) &&
+    (!isPlayerCollapsed || isPortraitFullscreen || playingPortraitDetailCollapse) &&
     wasAutoPausedByCollapse

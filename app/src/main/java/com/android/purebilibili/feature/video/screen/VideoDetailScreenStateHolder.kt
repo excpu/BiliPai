@@ -3763,6 +3763,7 @@ internal fun VideoDetailScreenStateHolder(
             modifier = layout.modifier,
             animatedViewportWidth = layout.viewportWidth,
             contentTopInset = layout.contentTopInset,
+            forceFitVideo = layout.forceFitVideo,
             inlinePlayerAlpha = layout.alpha,
             inlinePlayerScale = layout.scale,
             isFullscreen = layout.isFullscreen,
@@ -4315,7 +4316,16 @@ internal fun VideoDetailScreenStateHolder(
                                 isPlaybackPaused = isPlaybackPausedForInlineLayout,
                                 isCommentThreadVisible = subReplyVisible,
                             )
-                        val inlinePortraitScrollEnabled = shouldEnableInlinePortraitScrollTransform(
+                        val playingPortraitDetailCollapse = usePlayingPortraitDetailCollapse(
+                            isVerticalVideo = isVerticalVideo,
+                            isPlaybackPaused = isPlaybackPausedForInlineLayout,
+                            isLandscape = isLandscape,
+                            isFullscreen = isFullscreenMode || isPortraitFullscreen,
+                            useTabletLayout = useTabletLayout,
+                            suppressDetailBody = suppressPhoneDetailBodyForDirectPortrait,
+                        )
+                        val inlinePortraitScrollEnabled = enablePhoneDetailPlayerScroll(
+                            playingPortraitDetailCollapse = playingPortraitDetailCollapse,
                             collapseMode = portraitPlayerCollapseMode,
                             selectedTabIndex = selectedVideoContentTabIndex,
                             isVerticalVideo = isVerticalVideo,
@@ -4371,6 +4381,10 @@ internal fun VideoDetailScreenStateHolder(
                         }
                         val standardCollapsedViewportHeight = when {
                             hidePausedPlayerForComments -> 56.dp
+                            playingPortraitDetailCollapse -> playingPortraitDetailCollapsedHeightDp(
+                                screenHeightDp = screenHeightDp.value,
+                                expandedHeightDp = expandedViewportHeight.value,
+                            ).dp
                             useOfficialInlinePortraitDetailExperience -> collapsedPortraitInlineSpec.heightDp.dp
                             portraitPlayerCollapseMode != PortraitPlayerCollapseMode.OFF ||
                                 (hidePausedPlayerForComments && !isVerticalVideo) -> 56.dp
@@ -4475,6 +4489,7 @@ internal fun VideoDetailScreenStateHolder(
                             playerCollapsedForAutoPause,
                             pauseOnPlayerCollapseEnabled,
                             isPortraitFullscreen,
+                            playingPortraitDetailCollapse,
                             currentBvid,
                         ) {
                             val player = playerState.player
@@ -4483,6 +4498,7 @@ internal fun VideoDetailScreenStateHolder(
                                     isPlayerCollapsed = playerCollapsedForAutoPause,
                                     isPlaying = player.isPlaying,
                                     isPortraitFullscreen = isPortraitFullscreen,
+                                    playingPortraitDetailCollapse = playingPortraitDetailCollapse,
                                 )
                             ) {
                                 autoPausedByPlayerCollapse = true
@@ -4498,6 +4514,7 @@ internal fun VideoDetailScreenStateHolder(
                                     isPlayerCollapsed = playerCollapsedForAutoPause,
                                     wasAutoPausedByCollapse = autoPausedByPlayerCollapse,
                                     isPortraitFullscreen = isPortraitFullscreen,
+                                    playingPortraitDetailCollapse = playingPortraitDetailCollapse,
                                 )
                             ) {
                                 autoPausedByPlayerCollapse = false
@@ -5266,6 +5283,9 @@ internal fun VideoDetailScreenStateHolder(
                                         scale = inlinePlayerScale,
                                         isFullscreen = false,
                                         contentTopInset = playerTopInset,
+                                        forceFitVideo = playingPortraitDetailCollapse &&
+                                            inlineViewportHeight < expandedViewportHeight &&
+                                            !expandPlayerForSharedReturn,
                                     )
                                 )
                             }
@@ -5378,7 +5398,12 @@ internal fun VideoDetailScreenStateHolder(
                                         this@drawWithContent.drawContent()
                                     }
                                     val collapseShadowAlpha =
-                                        resolveVideoDetailCollapseShadowAlpha(layoutCollapseProgress)
+                                        resolveVideoDetailCollapseShadowAlpha(
+                                            collapseProgress = layoutCollapseProgress,
+                                            playingPortraitDetailCollapse = playingPortraitDetailCollapse,
+                                            pausedPlayerHidden = hidePausedPlayerForComments &&
+                                                inlineViewportHeight <= collapsedViewportHeight + 0.5.dp,
+                                        )
                                     if (collapseShadowAlpha > 0f) {
                                         val shadowHeight = 20.dp.toPx()
                                         clipRect(bottom = shadowHeight) {

@@ -81,6 +81,17 @@ internal fun resolveSafeVideoAspectRatio(
     @Suppress("UNUSED_PARAMETER") isVerticalVideo: Boolean,
 ): VideoAspectRatio = preferred
 
+internal fun resolvePlayerViewportAspectRatio(
+    preferred: VideoAspectRatio,
+    forceFitVideo: Boolean,
+    liquidGlassLayoutEnabled: Boolean,
+    isFullscreen: Boolean,
+): VideoAspectRatio = if (forceFitVideo || (liquidGlassLayoutEnabled && !isFullscreen)) {
+    VideoAspectRatio.FIT
+} else {
+    preferred
+}
+
 internal fun resolveVideoViewportLayout(
     containerWidth: Int,
     containerHeight: Int,

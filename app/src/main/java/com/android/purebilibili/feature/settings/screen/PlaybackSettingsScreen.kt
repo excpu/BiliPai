@@ -2354,7 +2354,7 @@ SettingsItemAnchor("playback.seek_backward_seconds") {
 SettingsItemAnchor("playback.portrait_player_collapse_mode") {
         SettingsSingleChoicePreference(
             title = settingItemTitle("playback.portrait_player_collapse_mode"),
-            subtitle = portraitPlayerCollapseMode.description,
+            subtitle = "${portraitPlayerCollapseMode.description}；手机竖屏播放中的竖屏视频始终可缩小",
             options = resolvePortraitPlayerCollapseModeSegmentOptions(),
             selectedValue = portraitPlayerCollapseMode,
             onSelectionChange = { mode ->
@@ -2394,7 +2394,7 @@ SettingsItemAnchor("playback.portrait_player_collapse_mode") {
                 icon = rememberSettingsSemanticIcon(SettingsIconRole.PLAYER_COLLAPSE_PAUSE),
                 title = playbackSettingTitle("playback.pause_on_player_collapse_enabled"),
                 subtitle = if (pauseOnPlayerCollapseEnabled) {
-                    "浏览推荐并缩小画面时暂停，展开后恢复"
+                    "浏览推荐并缩小画面时暂停，展开后恢复；手机竖屏播放中的竖屏视频除外"
                 } else {
                     "关闭后缩小播放器时仍继续播放"
                 },

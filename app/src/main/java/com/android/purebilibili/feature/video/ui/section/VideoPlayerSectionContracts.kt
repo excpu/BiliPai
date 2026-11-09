@@ -67,6 +67,7 @@ internal data class VideoPlayerSectionState(
     val sponsorMarkers: List<SponsorProgressMarker> = emptyList(),
     val pbpProgressData: PbpProgressData? = null,
     val isVerticalVideo: Boolean = false,
+    val forceFitVideo: Boolean = false,
     val isPortraitFullscreen: Boolean = false,
     val viewportWidthDpOverride: Int? = null,
     val currentCodec: String = "hev1",

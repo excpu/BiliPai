@@ -30,6 +30,7 @@ internal data class ContinuousPlayerHostLayout(
     val scale: State<Float>,
     val isFullscreen: Boolean,
     val contentTopInset: Dp = 0.dp,
+    val forceFitVideo: Boolean = false,
 )
 
 // 视口宽度 override 的量化步长：消费方策略全部断点式，量化后过渡期状态稳定。
@@ -173,6 +174,7 @@ internal fun PortraitInlineVideoPlayerHost(
     modifier: Modifier,
     animatedViewportWidth: Dp,
     contentTopInset: Dp = 0.dp,
+    forceFitVideo: Boolean = false,
     inlinePlayerAlpha: State<Float>,
     inlinePlayerScale: State<Float>,
     isFullscreen: Boolean = false,
@@ -287,6 +289,7 @@ internal fun PortraitInlineVideoPlayerHost(
                 pbpProgressData = pbpProgressData,
                 sponsorMarkers = sponsorProgressMarkers,
                 isVerticalVideo = isVerticalVideo,
+                forceFitVideo = forceFitVideo,
                 isPortraitFullscreen = isPortraitFullscreen,
                 viewportWidthDpOverride = if (animatedViewportWidth.isSpecified) {
                     // 消费方（播放器 UI/控制栏布局策略）全部是断点式档位；

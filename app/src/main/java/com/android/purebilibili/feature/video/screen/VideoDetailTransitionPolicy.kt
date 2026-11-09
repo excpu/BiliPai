@@ -571,8 +571,15 @@ internal fun resolvePlayerCollapseProgressForLayout(
     return manualOrCompactCollapseProgress.coerceIn(0f, 1f)
 }
 
-internal fun resolveVideoDetailCollapseShadowAlpha(collapseProgress: Float): Float =
+internal fun resolveVideoDetailCollapseShadowAlpha(
+    collapseProgress: Float,
+    playingPortraitDetailCollapse: Boolean = false,
+    pausedPlayerHidden: Boolean = false,
+): Float = if (playingPortraitDetailCollapse || pausedPlayerHidden) {
+    0f
+} else {
     collapseProgress.coerceIn(0f, 1f) * 0.16f
+}
 
 /** Darkens the still-visible media while it collapses, without washing it out in light theme. */
 internal fun resolveCollapsedPlayerMediaScrimAlpha(collapseProgress: Float): Float =

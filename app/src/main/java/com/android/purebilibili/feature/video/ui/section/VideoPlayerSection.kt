@@ -59,6 +59,7 @@ import com.android.purebilibili.feature.video.ui.components.shouldTriggerGesture
 import com.android.purebilibili.feature.video.ui.components.applyPlayerViewResizeMode
 import com.android.purebilibili.feature.video.ui.components.resolveSafeVideoAspectRatio
 import com.android.purebilibili.feature.video.ui.components.resolveVideoViewportLayout
+import com.android.purebilibili.feature.video.ui.components.resolvePlayerViewportAspectRatio
 import com.android.purebilibili.feature.video.ui.components.schedulePlayerViewViewportRefresh
 import com.android.purebilibili.feature.video.ui.components.cancelPlayerViewViewportRefresh
 import com.android.purebilibili.feature.video.ui.components.shouldUseFillMaxPlayerViewport
@@ -3929,7 +3930,12 @@ private fun VideoPlayerSectionContent(
         // LaunchedEffect 在退出瞬间直接重绑 surface（rebindPlayerSurfaceIfNeeded）恢复画面。
         // HDR/色彩元数据与纹理翻转维度仍触发重建。
         key(effectiveFlippedHorizontal, effectiveFlippedVertical, useTextureSurface) {
-            val viewportAspectRatio = if (liquidGlassLayoutEnabled && !isFullscreen) VideoAspectRatio.FIT else currentAspectRatio
+            val viewportAspectRatio = resolvePlayerViewportAspectRatio(
+                preferred = currentAspectRatio,
+                forceFitVideo = state.forceFitVideo,
+                liquidGlassLayoutEnabled = liquidGlassLayoutEnabled,
+                isFullscreen = isFullscreen,
+            )
             val playerVideoSize = playerState.player.videoSize
             BoxWithConstraints(
                 modifier = playerContentModifier
@@ -4729,7 +4735,12 @@ private fun VideoPlayerSectionContent(
 
             //  [修复] 移除 key(isFullscreen)，避免横竖屏切换时重建 DanmakuView 导致弹幕消失
             // 使用 remember 保存 DanmakuView 引用，在 update 回调中处理尺寸变化
-            val viewportAspectRatio = if (liquidGlassLayoutEnabled && !isFullscreen) VideoAspectRatio.FIT else currentAspectRatio
+            val viewportAspectRatio = resolvePlayerViewportAspectRatio(
+                preferred = currentAspectRatio,
+                forceFitVideo = state.forceFitVideo,
+                liquidGlassLayoutEnabled = liquidGlassLayoutEnabled,
+                isFullscreen = isFullscreen,
+            )
             BoxWithConstraints(
                 modifier = playerContentModifier
                     .then(if (capturePlayerPage) playerPageBackdrop.danmaku.modifier else Modifier)

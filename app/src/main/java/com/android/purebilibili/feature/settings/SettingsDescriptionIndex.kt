@@ -137,7 +137,7 @@ internal val settingsStaticDescriptionIndex: Map<String, String> = mapOf(
     "playback.music_lyrics_ui_style" to "经典全屏歌词；可在听视频右上角更多菜单临时切换；大字歌词，随播放逐字高亮",
     "playback.native_miuix_player_popups" to "播放器、动态和 UP 主页使用；关闭后用 Material 3",
     "playback.next_watch_hint_enabled" to "最后 5 秒提示下一集或相关推荐，关闭不影响自动续播",
-    "playback.pause_on_player_collapse_enabled" to "浏览推荐并缩小画面时暂停，展开后恢复；关闭后缩小播放器时仍继续播放",
+    "playback.pause_on_player_collapse_enabled" to "浏览推荐并缩小画面时暂停，展开后恢复；手机竖屏播放中的竖屏视频除外；关闭后缩小播放器时仍继续播放",
     "playback.pip_no_danmaku_enabled" to "需先开启后台播放；小窗和画中画中不显示弹幕；小窗和画中画中显示弹幕；选择小窗或画中画模式后生效",
     "playback.playback_cdn_custom_host" to "任意 host[:port]，保留播放路径与鉴权参数；留空则回退原始线路",
     "playback.playback_cdn_custom_strict" to "仅使用手动输入的线路；播放失败时只在该线路上重试，不回退其他线路",
