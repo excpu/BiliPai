@@ -7417,4 +7417,214 @@
             column="70"/>
     </issue>
 
+    <issue
+        id="Instantiatable"
+        message="`PlayerParityTestActivity` must extend android.app.Activity"
+        errorLine1="            android:name=&quot;com.android.purebilibili.feature.video.PlayerParityTestActivity&quot;"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/debug/AndroidManifest.xml"
+            line="4"
+            column="27"/>
+    </issue>
+    <issue
+        id="Instantiatable"
+        message="`MainActivity` must extend android.app.Activity"
+        errorLine1="            android:name=&quot;.MainActivity&quot;"
+        errorLine2="                          ~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="111"
+            column="27"/>
+    </issue>
+    <issue
+        id="Instantiatable"
+        message="`MainActivitySplashBlueSnowMaid` must extend android.app.Activity"
+        errorLine1="            android:name=&quot;.MainActivitySplashBlueSnowMaid&quot;"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="226"
+            column="27"/>
+    </issue>
+    <issue
+        id="Instantiatable"
+        message="`MainActivitySplashBlueSnowMaidAnnouncement` must extend android.app.Activity"
+        errorLine1="            android:name=&quot;.MainActivitySplashBlueSnowMaidAnnouncement&quot;"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="236"
+            column="27"/>
+    </issue>
+    <issue
+        id="Instantiatable"
+        message="`MainActivitySplashBlueSnowMaidAnnouncementLight` must extend android.app.Activity"
+        errorLine1="            android:name=&quot;.MainActivitySplashBlueSnowMaidAnnouncementLight&quot;"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="246"
+            column="27"/>
+    </issue>
+    <issue
+        id="Instantiatable"
+        message="`MainActivitySplashBlueSnowMaidAnnouncementDark` must extend android.app.Activity"
+        errorLine1="            android:name=&quot;.MainActivitySplashBlueSnowMaidAnnouncementDark&quot;"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="256"
+            column="27"/>
+    </issue>
+    <issue
+        id="Instantiatable"
+        message="`MainActivitySplashBlueSnowMaidFront` must extend android.app.Activity"
+        errorLine1="            android:name=&quot;.MainActivitySplashBlueSnowMaidFront&quot;"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="266"
+            column="27"/>
+    </issue>
+    <issue
+        id="Instantiatable"
+        message="`MainActivitySplashBlueSnowMaidLight` must extend android.app.Activity"
+        errorLine1="            android:name=&quot;.MainActivitySplashBlueSnowMaidLight&quot;"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="276"
+            column="27"/>
+    </issue>
+    <issue
+        id="Instantiatable"
+        message="`MainActivitySplashBlueSnowMaidDark` must extend android.app.Activity"
+        errorLine1="            android:name=&quot;.MainActivitySplashBlueSnowMaidDark&quot;"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="286"
+            column="27"/>
+    </issue>
+    <issue
+        id="Instantiatable"
+        message="`MainActivitySplashBlueSnowMaidFrontLight` must extend android.app.Activity"
+        errorLine1="            android:name=&quot;.MainActivitySplashBlueSnowMaidFrontLight&quot;"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="296"
+            column="27"/>
+    </issue>
+    <issue
+        id="Instantiatable"
+        message="`MainActivitySplashBlueSnowMaidFrontDark` must extend android.app.Activity"
+        errorLine1="            android:name=&quot;.MainActivitySplashBlueSnowMaidFrontDark&quot;"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="306"
+            column="27"/>
+    </issue>
+    <issue
+        id="Instantiatable"
+        message="`MainActivitySplashIcon3D` must extend android.app.Activity"
+        errorLine1="            android:name=&quot;.MainActivitySplashIcon3D&quot;"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="316"
+            column="27"/>
+    </issue>
+    <issue
+        id="Instantiatable"
+        message="`MainActivitySplashBiliPai` must extend android.app.Activity"
+        errorLine1="            android:name=&quot;.MainActivitySplashBiliPai&quot;"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="326"
+            column="27"/>
+    </issue>
+    <issue
+        id="Instantiatable"
+        message="`MainActivitySplashBiliPaiPink` must extend android.app.Activity"
+        errorLine1="            android:name=&quot;.MainActivitySplashBiliPaiPink&quot;"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="336"
+            column="27"/>
+    </issue>
+    <issue
+        id="Instantiatable"
+        message="`MainActivitySplashBiliPaiWhite` must extend android.app.Activity"
+        errorLine1="            android:name=&quot;.MainActivitySplashBiliPaiWhite&quot;"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="346"
+            column="27"/>
+    </issue>
+    <issue
+        id="Instantiatable"
+        message="`MainActivitySplashBiliPaiMonet` must extend android.app.Activity"
+        errorLine1="            android:name=&quot;.MainActivitySplashBiliPaiMonet&quot;"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="356"
+            column="27"/>
+    </issue>
+    <issue
+        id="Instantiatable"
+        message="`MainActivitySplashNoIcon` must extend android.app.Activity"
+        errorLine1="            android:name=&quot;.MainActivitySplashNoIcon&quot;"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="366"
+            column="27"/>
+    </issue>
+    <issue
+        id="Instantiatable"
+        message="`VideoActivity` must extend android.app.Activity"
+        errorLine1="            android:name=&quot;.feature.video.VideoActivity&quot;"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="1001"
+            column="27"/>
+    </issue>
+    <issue
+        id="Instantiatable"
+        message="`PlaybackService` must extend android.app.Service"
+        errorLine1="            android:name=&quot;.feature.video.player.PlaybackService&quot;"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="1011"
+            column="27"/>
+    </issue>
+    <issue
+        id="Instantiatable"
+        message="`BackgroundAudioService` must extend android.app.Service"
+        errorLine1="            android:name=&quot;.feature.audio.player.BackgroundAudioService&quot;"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="1031"
+            column="27"/>
+    </issue>
+    <issue
+        id="Instantiatable"
+        message="`SystemForegroundService` must extend android.app.Service"
+        errorLine1="            android:name=&quot;androidx.work.impl.foreground.SystemForegroundService&quot;"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/AndroidManifest.xml"
+            line="1060"
+            column="27"/>
+    </issue>
 </issues>
