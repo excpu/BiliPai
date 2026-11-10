@@ -79,6 +79,10 @@ fun VideoProgressBar(
     displayPositionProvider: (() -> Long)? = null,
     seekAreaHeight: Dp? = null,
     verticalHeightScale: Float = 1f,
+    // 内嵌（非全屏）档：可见轨道与滑块贴到触摸区底部，收紧与按钮行之间的空白。
+    trackBottomAnchored: Boolean = false,
+    // 贴底锚定时轨道中心距触摸区下沿的预留高度；null 取拖动态滑块半径。
+    bottomAnchorReserveDp: Dp? = null,
 ) {
     var containerWidthPx by remember { mutableFloatStateOf(0f) }
     var dragTargetPositionMs by remember { mutableLongStateOf(displayPositionMs.coerceAtLeast(0L)) }
@@ -162,6 +166,16 @@ fun VideoProgressBar(
     }
     val thumbSizePx = with(LocalDensity.current) { thumbSizeDp.toPx() }
     val trackHeightPx = with(LocalDensity.current) { layoutPolicy.trackHeightDp.dp.toPx() }
+    // 贴底锚定时预留滑块半径（可由调用方收紧），滑块放大也不越出触摸区下沿。
+    val bottomAnchorReservePx = with(LocalDensity.current) {
+        bottomAnchorReserveDp?.toPx() ?: layoutPolicy.thumbDraggingSizeDp.dp.toPx() / 2f
+    }
+    val thumbAlignment = if (trackBottomAnchored) Alignment.BottomStart else Alignment.CenterStart
+    val thumbVerticalOffsetPx = if (trackBottomAnchored) {
+        (thumbSizePx / 2f - bottomAnchorReservePx).roundToInt()
+    } else {
+        0
+    }
 
     // Seek gestures must wrap chapter + track. A track-sibling pointerInput loses DOWN to the
     // chapter clickable (full-width + 48dp min touch), which is why chapter videos cannot scrub.
@@ -337,7 +351,12 @@ fun VideoProgressBar(
                         Modifier.fillMaxWidth()
                             .height(layoutPolicy.touchContainerHeightDp.dp * verticalHeightScale)
                             .drawWithCache {
-                                val trackTop = ((size.height - trackHeightPx) / 2f).coerceAtLeast(0f)
+                                val trackTop = if (trackBottomAnchored) {
+                                    (size.height - bottomAnchorReservePx - trackHeightPx / 2f)
+                                        .coerceAtLeast(0f)
+                                } else {
+                                    ((size.height - trackHeightPx) / 2f).coerceAtLeast(0f)
+                                }
                                 val centerY = trackTop + trackHeightPx / 2f
                                 val ridgeHeight = (size.height * 0.42f).coerceAtMost(18.dp.toPx())
                                 val ridgePoints = pbpRidgeSamples.map { sample ->
@@ -394,6 +413,7 @@ fun VideoProgressBar(
                                         activeColor = primaryColor,
                                         bufferedColor = bufferedTrackColor,
                                         inactiveColor = inactiveTrackColor,
+                                        trackTopPx = if (trackBottomAnchored) trackTop else null,
                                     )
                                     glassTrackHighlight?.draw(this, trackHeightPx)
                                     sponsorLines.forEach { (start, end, color) ->
@@ -420,22 +440,22 @@ fun VideoProgressBar(
                                 size = thumbSizeDp,
                                 iterations = if (isSeekScrubbing) Int.MAX_VALUE else 1,
                                 modifier = Modifier
-                                    .align(Alignment.CenterStart)
-                                    .offset { IntOffset(thumbOffsetProvider(), 0) },
+                                    .align(thumbAlignment)
+                                    .offset { IntOffset(thumbOffsetProvider(), thumbVerticalOffsetPx) },
                                 contentDescription = null,
                             )
                         } else if (LocalPlayerControlGlassEnabled.current) {
                             PlayerControlGlassThumb(
                                 size = thumbSizeDp,
                                 dragging = isSeekScrubbing,
-                                modifier = Modifier.align(Alignment.CenterStart)
-                                    .offset { IntOffset(thumbOffsetProvider(), 0) },
+                                modifier = Modifier.align(thumbAlignment)
+                                    .offset { IntOffset(thumbOffsetProvider(), thumbVerticalOffsetPx) },
                             )
                         } else {
                             Box(
                                 modifier = Modifier
-                                    .align(Alignment.CenterStart)
-                                    .offset { IntOffset(thumbOffsetProvider(), 0) }
+                                    .align(thumbAlignment)
+                                    .offset { IntOffset(thumbOffsetProvider(), thumbVerticalOffsetPx) }
                                     .size(thumbSizeDp)
                                     .background(primaryColor, CircleShape)
                             )

@@ -1650,6 +1650,14 @@ private fun VideoPlayerOverlayContent(
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
+                        // 内嵌底栏铺满播放窗口宽度；横屏全屏保留挖孔安全区避让。
+                        .then(
+                            if (isFullscreen) {
+                                Modifier.windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
+                            } else {
+                                Modifier.fillMaxWidth()
+                            },
+                        )
                         .onSizeChanged { onBottomControlsSizeChanged(it.height) }
                 ) {
                     key(player, bvid, cid) {

@@ -561,7 +561,10 @@ fun BottomControlBar(
             rightActionSpacingDp = 0,
             actionTextFontSp = 12,
             fullscreenIconSizeDp = 22,
-        ) else base
+        ) else base.copy(
+            // 内嵌档收紧控制行与进度条的留白，手机贴紧视频底边。
+            progressSpacingDp = resolveGlassInlineProgressSpacingDp(uiLayoutWidthDp),
+        )
     }
     val floatingPanelMinWidthDp = remember(uiLayoutWidthDp) {
         resolveFloatingControlPanelMinWidthDp(widthDp = uiLayoutWidthDp)
@@ -591,11 +594,16 @@ fun BottomControlBar(
     val floatingPanelBottomOffsetDp = remember(
         layoutPolicy.bottomPaddingDp,
         layoutPolicy.playButtonSizeDp,
-        layoutPolicy.danmakuInputHeightDp
+        layoutPolicy.danmakuInputHeightDp,
+        isFullscreen,
     ) {
         resolveFloatingPanelBottomOffsetDp(
             bottomPaddingDp = layoutPolicy.bottomPaddingDp,
-            controlRowHeightDp = maxOf(layoutPolicy.playButtonSizeDp, layoutPolicy.danmakuInputHeightDp),
+            controlRowHeightDp = if (isFullscreen) {
+                maxOf(layoutPolicy.playButtonSizeDp, layoutPolicy.danmakuInputHeightDp)
+            } else {
+                GLASS_INLINE_CONTROL_ROW_HEIGHT_DP
+            },
             gapDp = 20
         )
     }
@@ -763,6 +771,12 @@ fun BottomControlBar(
     val actionSpacing = if (isFullscreen && liquidGlassEnabled) 6.dp
         else (layoutPolicy.actionTextFontSp * 2).dp
     val chromeDensity = LocalDensity.current
+    // 内嵌控制行与原生底栏共用同一高度常量；横屏仍按圆形按钮尺寸收口。
+    val inlineRowHeightDp = GLASS_INLINE_CONTROL_ROW_HEIGHT_DP.dp
+    // 玻璃内嵌圆钮与文字胶囊同高，整行因此收口到同一几何；横屏保留圆形按钮尺寸。
+    val inlineCircularButtonSizeDp = minOf(fullscreenToggleTouchTargetDp, layoutPolicy.playButtonSizeDp, GLASS_INLINE_CONTROL_ROW_HEIGHT_DP)
+    // 独立胶囊的触控下限：玻璃跟随控制行高度，原生保留 48dp 无障碍标准。
+    val inlineActionMinHeightDp = if (liquidGlassEnabled) inlineRowHeightDp else 48.dp
     val controlRowDensity = remember(chromeDensity, isFullscreen) {
         if (isFullscreen) Density(chromeDensity.density, fontScale = 1f) else chromeDensity
     }
@@ -874,7 +888,11 @@ fun BottomControlBar(
         // Fullscreen chrome keeps fixed label sizes so system font scaling cannot clip
         // fixed-width slots such as "更多"; inline controls still follow system font scale.
         CompositionLocalProvider(
-            LocalMinimumInteractiveComponentSize provides layoutPolicy.playButtonSizeDp.dp,
+            LocalMinimumInteractiveComponentSize provides if (isFullscreen) {
+                layoutPolicy.playButtonSizeDp.dp
+            } else {
+                inlineRowHeightDp
+            },
             LocalDensity provides controlRowDensity,
         ) {
         Row(
@@ -936,7 +954,7 @@ fun BottomControlBar(
                         modifier = Modifier.then(
                             when {
                                 isFullscreen -> Modifier.height(PlayerChromeLayout.CircularButtonSizeDp.dp)
-                                inlineTimeGlassDock -> Modifier.heightIn(min = 40.dp)
+                                inlineTimeGlassDock -> Modifier.heightIn(min = inlineRowHeightDp)
                                 else -> Modifier
                             },
                         ),
@@ -947,8 +965,8 @@ fun BottomControlBar(
                                     .fillMaxHeight()
                                     .padding(horizontal = 4.dp)
                                 inlineTimeGlassDock -> Modifier
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                                    .heightIn(min = 28.dp)
+                                    .padding(horizontal = 10.dp, vertical = 3.dp)
+                                    .heightIn(min = 24.dp)
                                 else -> Modifier
                             },
                             verticalAlignment = Alignment.CenterVertically,
@@ -1453,7 +1471,7 @@ fun BottomControlBar(
                                             .testTag("player_portrait_fullscreen")
                                             .then(
                                                 if (liquidGlassEnabled) Modifier
-                                                    .heightIn(min = 40.dp)
+                                                    .heightIn(min = inlineRowHeightDp)
                                                     .padding(horizontal = 10.dp)
                                                     .wrapContentSize(Alignment.Center)
                                                 else Modifier
@@ -1489,6 +1507,8 @@ fun BottomControlBar(
                             onClick = onPlayPauseClick,
                             sizeDp = layoutPolicy.playButtonSizeDp,
                             iconSizeDp = layoutPolicy.playIconSizeDp,
+                            // 玻璃内嵌圆钮跟随控制行收口；原生保留原尺寸。
+                            shellHeightDp = if (isFullscreen) null else inlineCircularButtonSizeDp,
                         )
                         Spacer(modifier = Modifier.width(layoutPolicy.afterPlaySpacingDp.dp))
                     }
@@ -1499,16 +1519,16 @@ fun BottomControlBar(
                     PlayerControlGlassDock(
                         enabled = true,
                         modifier = when {
-                            compactInlineGlassControls -> Modifier.weight(1f, fill = false).heightIn(min = 40.dp)
-                            inlineTimeGlassDock -> Modifier.heightIn(min = 40.dp)
+                            compactInlineGlassControls -> Modifier.weight(1f, fill = false).heightIn(min = inlineRowHeightDp)
+                            inlineTimeGlassDock -> Modifier.heightIn(min = inlineRowHeightDp)
                             else -> Modifier
                         },
                     ) {
                         Row(
                             modifier = when {
                                 inlineTimeGlassDock -> Modifier
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                                    .heightIn(min = 28.dp)
+                                    .padding(horizontal = 10.dp, vertical = 3.dp)
+                                    .heightIn(min = 24.dp)
                                 else -> Modifier
                             },
                             verticalAlignment = Alignment.CenterVertically,
@@ -1605,7 +1625,7 @@ fun BottomControlBar(
                         InlineDockActionRow(
                             fillAvailableWidth = expandInlineActionDock,
                             modifier = if (expandInlineActionDock) Modifier
-                                .heightIn(min = 40.dp)
+                                .heightIn(min = inlineRowHeightDp)
                                 .padding(horizontal = 8.dp)
                             else Modifier,
                             minimumSpacing = when {
@@ -1632,7 +1652,7 @@ fun BottomControlBar(
                                         modifier = Modifier
                                             .sizeIn(
                                                 minWidth = InlineDockActionMinWidth,
-                                                minHeight = if (liquidGlassEnabled) 40.dp else 48.dp,
+                                                minHeight = inlineActionMinHeightDp,
                                             )
                                             .appGlassMenuSource(subtitleMenuSource, onOpen = openSubtitleMenu, enabled = subtitleTrackAvailable, captureSurface = false)
                                             .appActionClickable(enabled = subtitleTrackAvailable) {
@@ -1659,7 +1679,7 @@ fun BottomControlBar(
                                         modifier = Modifier
                                             .sizeIn(
                                                 minWidth = InlineDockActionMinWidth,
-                                                minHeight = if (liquidGlassEnabled) 40.dp else 48.dp,
+                                                minHeight = inlineActionMinHeightDp,
                                             )
                                             .appActionClickable(onClick = onRatioClick),
                                         contentAlignment = Alignment.Center
@@ -1717,7 +1737,7 @@ fun BottomControlBar(
                                             .playerGlassMenuAnchor(onQualityAnchorChanged)
                                             .then(qualityMenuSource?.let { Modifier.appGlassMenuSource(it, onOpen = onQualityClick, captureSurface = !liquidGlassEnabled) } ?: Modifier)
                                             .appActionClickable(onClick = onQualityClick)
-                                            .then(if (liquidGlassEnabled) Modifier.heightIn(min = 40.dp).padding(horizontal = 10.dp).wrapContentSize(Alignment.Center) else Modifier)
+                                            .then(if (liquidGlassEnabled) Modifier.heightIn(min = inlineRowHeightDp).padding(horizontal = 10.dp).wrapContentSize(Alignment.Center) else Modifier)
                                     )
                                 }
                             }
@@ -1734,7 +1754,7 @@ fun BottomControlBar(
                                         softWrap = false,
                                         modifier = Modifier
                                             .appActionClickable(onClick = onEpisodeClick)
-                                            .then(if (liquidGlassEnabled) Modifier.heightIn(min = 40.dp).padding(horizontal = 10.dp).wrapContentSize(Alignment.Center) else Modifier)
+                                            .then(if (liquidGlassEnabled) Modifier.heightIn(min = inlineRowHeightDp).padding(horizontal = 10.dp).wrapContentSize(Alignment.Center) else Modifier)
                                     )
                                 }
                             }
@@ -1754,7 +1774,7 @@ fun BottomControlBar(
                                             .playerGlassMenuAnchor(onSpeedAnchorChanged)
                                             .then(speedMenuSource?.let { Modifier.appGlassMenuSource(it, onOpen = onSpeedClick, captureSurface = !liquidGlassEnabled) } ?: Modifier)
                                             .appActionClickable(onClick = onSpeedClick)
-                                            .then(if (liquidGlassEnabled) Modifier.heightIn(min = 40.dp).padding(horizontal = 10.dp).wrapContentSize(Alignment.Center) else Modifier)
+                                            .then(if (liquidGlassEnabled) Modifier.heightIn(min = inlineRowHeightDp).padding(horizontal = 10.dp).wrapContentSize(Alignment.Center) else Modifier)
                                     )
                                 }
                             }
@@ -1771,7 +1791,7 @@ fun BottomControlBar(
                                     modifier = Modifier
                                         .sizeIn(
                                             minWidth = InlineDockActionMinWidth,
-                                            minHeight = if (liquidGlassEnabled) 40.dp else 48.dp,
+                                            minHeight = inlineActionMinHeightDp,
                                         )
                                         .appActionClickable {
                                             val nextShowSubtitlePanel = !showSubtitlePanel
@@ -1951,7 +1971,7 @@ fun BottomControlBar(
                                             .testTag("player_portrait_fullscreen")
                                             .then(
                                                 if (liquidGlassEnabled) Modifier
-                                                    .heightIn(min = 40.dp)
+                                                    .heightIn(min = inlineRowHeightDp)
                                                     .padding(horizontal = 10.dp)
                                                     .wrapContentSize(Alignment.Center)
                                                 else Modifier
@@ -1968,7 +1988,7 @@ fun BottomControlBar(
             PlayerControlGlassDock(enabled = true, shape = androidx.compose.foundation.shape.CircleShape) {
                 Box(
                     modifier = Modifier
-                        .size(fullscreenToggleTouchTargetDp.dp)
+                        .size(if (isFullscreen) fullscreenToggleTouchTargetDp.dp else inlineCircularButtonSizeDp.dp)
                         .testTag("player_fullscreen_toggle")
                         .consumeTap(onToggleFullscreen),
                     contentAlignment = Alignment.Center
@@ -2210,12 +2230,14 @@ private fun PlayerPlayPauseButton(
     onClick: () -> Unit,
     sizeDp: Int,
     iconSizeDp: Int,
+    shellHeightDp: Int? = null,
 ) {
     PlayerControlGlassDock(enabled = true, shape = CircleShape) {
         AppIconButton(
             onClick = onClick,
             modifier = Modifier
                 .size(sizeDp.dp)
+                .then(shellHeightDp?.let { Modifier.height(it.dp) } ?: Modifier)
                 .testTag("player_play_pause"),
         ) {
             AppIcon(

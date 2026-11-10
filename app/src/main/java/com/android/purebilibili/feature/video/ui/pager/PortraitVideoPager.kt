@@ -160,6 +160,8 @@ import com.android.purebilibili.core.plugin.PluginManager
 import com.android.purebilibili.core.store.DanmakuSettings
 import com.android.purebilibili.core.util.NetworkUtils
 import com.android.purebilibili.plugin.sdk.PlaybackCdnPlugin
+import com.android.purebilibili.plugin.sdk.PlaybackCdnCandidate
+import com.android.purebilibili.feature.plugin.PlaybackCdnSelectionSettings
 import com.android.purebilibili.core.store.DanmakuSettingsScope
 import com.android.purebilibili.core.store.PlaybackCompletionBehavior
 import com.android.purebilibili.core.store.PortraitDanmakuDisplayAreaMode
@@ -272,6 +274,29 @@ private data class PortraitPlaybackFailure(
     val snapshot: PortraitPlaybackRecoverySnapshot,
     val message: String,
 )
+
+/** 签名地址被 CDN 拒绝（B 站 567 / 通用 403）后，重取播放地址前的短暂退避。 */
+private const val PORTRAIT_SIGNED_URL_RECOVERY_DELAY_MS = 1_200L
+
+/**
+ * onPlayerError 里登记的「作废缓存后重取签名」请求。
+ * 监听器不能直接调用后面声明的局部播放函数，交给 effect 消费；generation 防过期。
+ */
+private data class PortraitSignedUrlRecoveryRequest(
+    val generation: Int,
+    val snapshot: PortraitPlaybackRecoverySnapshot,
+)
+
+/**
+ * 判断播放器错误是否属于「带签名的播放地址被判非法」。
+ *
+ * B 站 m4s 的 upsig/deadline 只对当次 playurl 下发的 URL 有效；缓存串用或并发下发
+ * 的第二份签名会直接吃 HTTP 567（media3 归为 ERROR_CODE_IO_BAD_HTTP_STATUS）。
+ * 这类失败无法靠重试同一地址恢复，必须作废缓存重新解析 playurl。
+ */
+internal fun shouldRefreshSignedPlayUrlAfterPlaybackError(errorCode: Int): Boolean =
+    errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ||
+        errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
 
 /**
  * 竖屏无缝滑动播放页面 (TikTok Style)
@@ -911,6 +936,11 @@ fun PortraitVideoPager(
     var portraitCurrentAudioUrl by remember { mutableStateOf("") }
     var portraitVideoUrlCandidates by remember { mutableStateOf<List<String>>(emptyList()) }
     var portraitAudioUrlCandidates by remember { mutableStateOf<List<String>>(emptyList()) }
+    // 与详情页共用一套选线：保存按优先级排好序的候选（首条即首选），
+    // 567 等取流被拒时按顺序轮换到下一条线路，而不是只认第一条。
+    var portraitCdnCandidates by remember { mutableStateOf<List<PlaybackCdnCandidate>>(emptyList()) }
+    var portraitCdnCandidatesMediaId by remember { mutableStateOf<String?>(null) }
+    var portraitCdnCandidateIndex by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(false) }
     var lastCommittedPage by remember(useSharedPlayer) {
         mutableIntStateOf(if (useSharedPlayer) 0 else -1)
@@ -929,6 +959,7 @@ fun PortraitVideoPager(
     }
     var inactivitySnapshot by remember { mutableStateOf<PortraitPlaybackRecoverySnapshot?>(null) }
     var playbackFailure by remember { mutableStateOf<PortraitPlaybackFailure?>(null) }
+    var signedUrlRecoveryRequest by remember { mutableStateOf<PortraitSignedUrlRecoveryRequest?>(null) }
     var hasAppliedSharedEntryResume by remember { mutableStateOf(false) }
     val pagePlaybackSnapshots = remember(initialBvid) { linkedMapOf<String, Pair<Long, Boolean>>() }
     var hasConsumedInitialSeek by remember(useSharedPlayer) { mutableStateOf(useSharedPlayer) }
@@ -1046,13 +1077,29 @@ fun PortraitVideoPager(
                     )
                 ) return
                 val intent = requestedPlaybackSnapshot?.playWhenReady ?: exoPlayer.playWhenReady
+                val failureSnapshot = PortraitPlaybackRecoverySnapshot(
+                    bvid, currentPlayingCid, exoPlayer.currentPosition.coerceAtLeast(0L), intent
+                )
                 playbackFailure = PortraitPlaybackFailure(
                     listenerGeneration,
-                    PortraitPlaybackRecoverySnapshot(bvid, currentPlayingCid, exoPlayer.currentPosition.coerceAtLeast(0L), intent),
+                    failureSnapshot,
                     "视频播放失败，请重试"
                 )
                 pendingAutoPlayGeneration = -1
                 isLoading = false
+                // 签名地址被 CDN 判非法（567/403）：按候选顺序轮换线路自愈，与详情页
+                // SWITCH_CDN 同源；候选耗尽才作废缓存重取新签名。失败保留错误浮层走手动
+                // 「重试播放」，不再依赖详情页按旧 bvid 恢复（那会把画面切回上一条视频）。
+                if (shouldRefreshSignedPlayUrlAfterPlaybackError(error.errorCode)) {
+                    com.android.purebilibili.core.util.Logger.w(
+                        "PortraitVideoPager",
+                        "🩹 取流被拒(${error.errorCode})，切换 CDN 线路自愈: $bvid/$currentPlayingCid",
+                    )
+                    signedUrlRecoveryRequest = PortraitSignedUrlRecoveryRequest(
+                        generation = listenerGeneration,
+                        snapshot = failureSnapshot,
+                    )
+                }
             }
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_READY &&
@@ -1218,7 +1265,8 @@ fun PortraitVideoPager(
             requestedAudioQuality = audioQuality,
             targetVideoQuality = resolvePortraitPlaybackTargetQuality(portraitSelectedQuality),
             mediaId = resolvePortraitMediaId(activeBvid, currentPlayingCid),
-            cdnPlugin = portraitPlaybackCdnPlugin
+            cdnPlugin = portraitPlaybackCdnPlugin,
+            settings = viewModel.currentPlaybackCdnSelectionSettings(),
         )
             ?: return false
         portraitCurrentVideoUrl = result.videoUrl
@@ -1236,12 +1284,17 @@ fun PortraitVideoPager(
         return true
     }
 
+    /**
+     * 失败自愈：跳过 playbackFailure 守卫，按快照身份强制重建当前页媒体（重取签名地址）。
+     * 声明在 requestPortraitPlaybackForPage 之后：Kotlin 局部函数要求先声明后引用。
+     */
     fun requestPortraitPlaybackForPage(
         targetPage: Int,
         applyInitialSeekOnFirstPage: Boolean,
         forceReload: Boolean = false,
         resumePositionMs: Long? = null,
         playWhenReadyOverride: Boolean? = null,
+        cdnCandidateIndex: Int = 0,
     ): Boolean {
         val item = pageItems.getOrNull(targetPage) ?: return false
         val playbackIdentity = resolvePortraitPagePlaybackIdentity(item) ?: return false
@@ -1368,6 +1421,10 @@ fun PortraitVideoPager(
         portraitVideoUrlCandidates = emptyList()
         portraitAudioUrlCandidates = emptyList()
         portraitAvailableAudioQualities = emptyList()
+        // 换视频/换分 P 一律从首选线路重新开始轮换。
+        portraitCdnCandidates = emptyList()
+        portraitCdnCandidatesMediaId = null
+        portraitCdnCandidateIndex = 0
         currentPlayingCid = 0L
         currentPlayingAid = 0L
         onPlaybackIdentityChange(bvid, requestedCid, targetCover)
@@ -1405,7 +1462,7 @@ fun PortraitVideoPager(
                                 failPlayback("没有可播放的视频流，请重试")
                                 return@fold
                             }
-                        val resolvedUrls = resolvePortraitPlaybackCdnUrls(
+                        val cdnCandidates = resolvePortraitPlaybackCdnCandidates(
                             streamUrls = streamUrls,
                             cachedDashVideos = playData.dash?.video.orEmpty(),
                             cachedDashAudios = playData.dash
@@ -1413,8 +1470,23 @@ fun PortraitVideoPager(
                                 ?.map { it.track }
                                 .orEmpty(),
                             targetQuality = targetQuality,
-                            cdnPlugin = portraitPlaybackCdnPlugin
+                            cdnPlugin = portraitPlaybackCdnPlugin,
+                            settings = viewModel.currentPlaybackCdnSelectionSettings(),
                         )
+                        val candidateIndex = cdnCandidateIndex.coerceIn(0, (cdnCandidates.size - 1).coerceAtLeast(0))
+                        val chosen = cdnCandidates[candidateIndex]
+                        val resolvedUrls = PortraitPlaybackStreamUrls(
+                            videoUrl = chosen.videoUrl.takeIf { it.isNotBlank() } ?: streamUrls.videoUrl,
+                            audioUrl = chosen.audioUrl?.takeIf { it.isNotBlank() } ?: streamUrls.audioUrl,
+                            audioSelection = streamUrls.audioSelection,
+                        )
+                        portraitCdnCandidates = cdnCandidates
+                        // 键与失败快照一致（快照用 currentPlayingCid=resolvedCid），story 种子 cid=0 时也能轮换。
+                        portraitCdnCandidatesMediaId = resolvePortraitMediaId(
+                            bvid,
+                            info.cid.takeIf { it > 0L } ?: requestedCid
+                        )
+                        portraitCdnCandidateIndex = candidateIndex
                         val dashVideoIds = playData.playableVideoQualityIds()
                         portraitSwitchableQualityIds = dashVideoIds
                         val availableQualityIds = resolvePortraitAvailableQualityIds(
@@ -1572,6 +1644,53 @@ fun PortraitVideoPager(
         return true
     }
 
+    /**
+     * 失败自愈：优先按候选顺序轮换到下一条 CDN 线路（与详情页 switchCdn 同一思路，
+     * 直接复用已排好序的候选，不重新请求 playurl）；候选耗尽才作废缓存重取签名地址。
+     * 供 onPlayerError 的自动恢复与「重试播放」按钮共用；身份已变或页面不在当前页时不动作。
+     */
+    fun retryFailedPortraitPlayback(
+        snapshot: PortraitPlaybackRecoverySnapshot,
+        preferNextCdnCandidate: Boolean = false,
+    ): Boolean {
+        val page = pagerState.settledPage
+        val identity = pageItems.getOrNull(page)
+            ?.let(::resolvePortraitPagePlaybackIdentity) ?: return false
+        if (identity.bvid != snapshot.bvid ||
+            (identity.cid > 0L && snapshot.cid > 0L && identity.cid != snapshot.cid)
+        ) return false
+        val currentMediaId = resolvePortraitMediaId(snapshot.bvid, snapshot.cid)
+        val nextIndex = if (preferNextCdnCandidate && portraitCdnCandidatesMediaId == currentMediaId) {
+            (portraitCdnCandidateIndex + 1).takeIf { it < portraitCdnCandidates.size }
+        } else null
+        if (nextIndex == null && preferNextCdnCandidate) {
+            // 候选已耗尽：缓存里那份 playurl 拿到的还是同一批被拒签名，必须作废重取。
+            VideoRepository.invalidateVideoLoadCaches(
+                snapshot.bvid, currentPlayingAid, snapshot.cid
+            )
+        }
+        return requestPortraitPlaybackForPage(
+            targetPage = page,
+            applyInitialSeekOnFirstPage = false,
+            forceReload = true,
+            resumePositionMs = snapshot.positionMs,
+            playWhenReadyOverride = snapshot.playWhenReady,
+            cdnCandidateIndex = nextIndex ?: 0,
+        )
+    }
+
+    // 消费 onPlayerError 登记的签名重取请求：短暂退避后重建当前页，只重试一次。
+    // 声明在 retryFailedPortraitPlayback 之后：Kotlin 局部函数要求先声明后引用。
+    LaunchedEffect(signedUrlRecoveryRequest) {
+        val request = signedUrlRecoveryRequest ?: return@LaunchedEffect
+        signedUrlRecoveryRequest = null
+        delay(PORTRAIT_SIGNED_URL_RECOVERY_DELAY_MS)
+        if (request.generation != activeLoadGeneration) return@LaunchedEffect
+        if (playbackFailure?.generation != request.generation) return@LaunchedEffect
+        if (!latestPortraitPlaybackAllowed) return@LaunchedEffect
+        retryFailedPortraitPlayback(request.snapshot, preferNextCdnCandidate = true)
+    }
+
     LaunchedEffect(
         exoPlayer, wifiPreloadQueue, portraitWifiAvailable, isPortraitPlaybackAllowed,
         portraitSelectedQuality, portraitRequestedAudioQuality, portraitPreloadSpeed, activeLoadGeneration, isLoading
@@ -1699,7 +1818,8 @@ fun PortraitVideoPager(
                                 cachedDashAudios = playData.dash
                                     ?.let(::collectAudioStreamCandidates)?.map { it.track }.orEmpty(),
                                 targetQuality = targetQuality,
-                                cdnPlugin = portraitPlaybackCdnPlugin
+                                cdnPlugin = portraitPlaybackCdnPlugin,
+                                settings = viewModel.currentPlaybackCdnSelectionSettings(),
                             )
                             prefetchPortraitPlaybackHead(context, resolvedUrls)
                         } catch (error: CancellationException) {
@@ -2137,20 +2257,13 @@ fun PortraitVideoPager(
                 AppText(visiblePlaybackFailure.message, color = Color.White)
                 AppButton(onClick = {
                     val failure = playbackFailure ?: return@AppButton
-                    val page = pagerState.settledPage
-                    val identity = pageItems.getOrNull(page)?.let(::resolvePortraitPagePlaybackIdentity)
-                        ?: return@AppButton
-                    if (failure.generation != activeLoadGeneration || identity.bvid != failure.snapshot.bvid ||
-                        (identity.cid > 0L && failure.snapshot.cid > 0L && identity.cid != failure.snapshot.cid) ||
+                    if (failure.generation != activeLoadGeneration ||
                         pagerState.isScrollInProgress || !latestPortraitPlaybackAllowed
                     ) return@AppButton
-                    VideoRepository.invalidateVideoLoadCaches(identity.bvid, identity.aid, failure.snapshot.cid)
-                    requestPortraitPlaybackForPage(
-                        targetPage = page,
-                        applyInitialSeekOnFirstPage = false,
-                        forceReload = true,
-                        resumePositionMs = failure.snapshot.positionMs,
-                        playWhenReadyOverride = failure.snapshot.playWhenReady
+                    // 手动重试与自动自愈共用同一策略：先轮换候选线路，耗尽再作废缓存重取。
+                    retryFailedPortraitPlayback(
+                        failure.snapshot,
+                        preferNextCdnCandidate = true,
                     )
                 }) {
                     AppText("重试播放")

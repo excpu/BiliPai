@@ -31,16 +31,37 @@ import kotlin.math.roundToInt
 
 enum class PlayerControlAnchor { QUALITY, SPEED, EPISODES, RATIO, TRANSLATION, SUBTITLE, ENHANCEMENT, CHAPTERS }
 
-internal const val PILI_PLAYER_BOTTOM_ROW_HEIGHT_DP = 34
-internal const val PILI_PLAYER_BOTTOM_VERTICAL_PADDING_DP = 12
-internal const val PILI_PLAYER_PROGRESS_GAP_DP = 7
+internal const val PILI_PLAYER_BOTTOM_ROW_HEIGHT_DP = 30
+internal const val PILI_PLAYER_BOTTOM_VERTICAL_PADDING_DP = 6
+internal const val PILI_PLAYER_PROGRESS_GAP_DP = 4
+/** 内嵌档轨道贴底后与按钮行的留白；全屏沿用 4dp。 */
+internal const val PILI_PLAYER_INLINE_PROGRESS_GAP_DP = 2
 internal const val PILI_PLAYER_PROGRESS_HEIGHT_DP = 14
 internal const val PILI_PLAYER_CHAPTER_PROGRESS_HEIGHT_DP = 23
 
-internal fun piliPlayerBottomControlsHeightDp(hasChapters: Boolean): Int =
-    PILI_PLAYER_BOTTOM_VERTICAL_PADDING_DP * 2 + PILI_PLAYER_BOTTOM_ROW_HEIGHT_DP +
-        PILI_PLAYER_PROGRESS_GAP_DP + if (hasChapters) PILI_PLAYER_CHAPTER_PROGRESS_HEIGHT_DP
+internal fun piliPlayerProgressGapDp(isFullscreen: Boolean): Int =
+    if (isFullscreen) PILI_PLAYER_PROGRESS_GAP_DP else PILI_PLAYER_INLINE_PROGRESS_GAP_DP
+
+internal fun piliPlayerBottomControlsHeightDp(
+    hasChapters: Boolean,
+    isFullscreen: Boolean = true,
+): Int =
+    PILI_PLAYER_BOTTOM_ROW_HEIGHT_DP +
+        piliPlayerProgressGapDp(isFullscreen) + if (hasChapters) PILI_PLAYER_CHAPTER_PROGRESS_HEIGHT_DP
         else PILI_PLAYER_PROGRESS_HEIGHT_DP
+
+/** 内嵌底栏贴紧视频下边缘，只保留顶部留白；横屏全屏仍有上下留白。 */
+internal fun piliPlayerBottomVerticalPaddingDp(isFullscreen: Boolean): Int =
+    if (isFullscreen) PILI_PLAYER_BOTTOM_VERTICAL_PADDING_DP * 2
+    else PILI_PLAYER_BOTTOM_VERTICAL_PADDING_DP
+
+/** 原生底栏整列高度：几何常量加垂直留白，供避让计算与首帧种子共用。 */
+internal fun piliPlayerBottomColumnHeightDp(
+    hasChapters: Boolean,
+    isFullscreen: Boolean,
+): Int =
+    piliPlayerBottomControlsHeightDp(hasChapters, isFullscreen) +
+        piliPlayerBottomVerticalPaddingDp(isFullscreen)
 
 internal fun Modifier.playerActionBounds(onBounds: (IntRect) -> Unit): Modifier =
     onGloballyPositioned { coordinates ->

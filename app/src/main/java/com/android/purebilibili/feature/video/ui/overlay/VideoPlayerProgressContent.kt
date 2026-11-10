@@ -59,6 +59,8 @@ internal fun PlayerControlProgressBar(
     modifier: Modifier = Modifier,
     seekAreaHeight: Dp? = null,
     verticalHeightScale: Float = 1f,
+    trackBottomAnchored: Boolean = false,
+    bottomAnchorReserveDp: Dp? = null,
 ) {
     val progress = progressProvider()
     VideoProgressBar(
@@ -83,6 +85,8 @@ internal fun PlayerControlProgressBar(
         modifier = modifier,
         seekAreaHeight = seekAreaHeight,
         verticalHeightScale = verticalHeightScale,
+        trackBottomAnchored = trackBottomAnchored,
+        bottomAnchorReserveDp = bottomAnchorReserveDp,
     )
 }
 

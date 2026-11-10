@@ -42,6 +42,121 @@ class PortraitPagerSwitchPolicyTest {
         assertNull(target)
     }
 
+    /**
+     * 竖屏上滑切换后取流 HTTP 567（B 站对非当前签名的 m4s 的拒绝码）时，pager 必须
+     * 判定为「需要作废缓存重取播放地址」；纯解码类失败重试同一地址没有意义，不触发。
+     */
+    @Test
+    fun signedUrlRecovery_triggersOnBadHttpStatusButNotDecoderErrors() {
+        assertTrue(
+            shouldRefreshSignedPlayUrlAfterPlaybackError(
+                androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
+            )
+        )
+        assertFalse(
+            shouldRefreshSignedPlayUrlAfterPlaybackError(
+                androidx.media3.common.PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED
+            )
+        )
+        assertFalse(
+            shouldRefreshSignedPlayUrlAfterPlaybackError(
+                androidx.media3.common.PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW
+            )
+        )
+    }
+
+    /**
+     * 取流被拒（567）后的自愈与详情页同源：先按候选顺序轮换 CDN 线路（复用已排好序的
+     * 候选，不重新请求 playurl），候选耗尽才 invalidateVideoLoadCaches 作废缓存重取签名。
+     */
+    @Test
+    fun signedUrlRecovery_rotatesCdnCandidatesBeforeInvalidatingPlayUrlCache() {
+        val source = java.io.File(
+            "app/src/main/java/com/android/purebilibili/feature/video/ui/pager/PortraitVideoPager.kt"
+        ).takeIf { it.exists() }
+            ?: java.io.File("src/main/java/com/android/purebilibili/feature/video/ui/pager/PortraitVideoPager.kt")
+        val text = source.readText()
+
+        val errorBlock = text.substringAfter("override fun onPlayerError(error: PlaybackException) {")
+            .substringBefore("override fun onPlaybackStateChanged(playbackState: Int) {")
+        assertTrue(
+            errorBlock.contains("shouldRefreshSignedPlayUrlAfterPlaybackError(error.errorCode)"),
+            "onPlayerError 需按错误码判定是否轮换线路。",
+        )
+        // 监听器只登记恢复请求，不直接作废缓存（轮换优先，交给消费端与重试入口决策）。
+        assertTrue(
+            errorBlock.contains("signedUrlRecoveryRequest = PortraitSignedUrlRecoveryRequest("),
+            "onPlayerError 应登记带 generation 的恢复请求而不是直接调用后置局部函数。",
+        )
+        assertFalse(
+            errorBlock.contains("invalidateVideoLoadCaches"),
+            "线路轮换不应作废 playurl 缓存；只有候选耗尽才作废。",
+        )
+
+        // 共享自愈入口：优先取下一个候选索引，强制重建并沿用失败快照的进度与播放意图。
+        val retryBlock = text.substringAfter("fun retryFailedPortraitPlayback(")
+            .substringBefore("// 消费 onPlayerError 登记的签名重取请求")
+        assertTrue(retryBlock.contains("preferNextCdnCandidate: Boolean = false"))
+        assertTrue(retryBlock.contains("portraitCdnCandidateIndex + 1"))
+        assertTrue(retryBlock.contains("portraitCdnCandidates.size"))
+        // 候选耗尽（nextIndex == null）时作废缓存重取新签名。
+        assertTrue(retryBlock.contains("if (nextIndex == null && preferNextCdnCandidate)"))
+        assertTrue(retryBlock.contains("VideoRepository.invalidateVideoLoadCaches"))
+        assertTrue(retryBlock.contains("forceReload = true"), "自愈重播必须强制重建媒体。")
+        assertTrue(retryBlock.contains("cdnCandidateIndex = nextIndex ?: 0"))
+
+        // 消费端只重试一次：立即清空请求并校验 generation / 失败仍是本次，且要求轮换。
+        val consumerBlock = text.substringAfter("LaunchedEffect(signedUrlRecoveryRequest) {")
+            .substringBefore("\n    }")
+        assertTrue(consumerBlock.contains("signedUrlRecoveryRequest = null"))
+        assertTrue(consumerBlock.contains("request.generation != activeLoadGeneration"))
+        assertTrue(consumerBlock.contains("playbackFailure?.generation != request.generation"))
+        assertTrue(
+            consumerBlock.contains("retryFailedPortraitPlayback(request.snapshot, preferNextCdnCandidate = true)"),
+        )
+
+        // 「重试播放」按钮与自动恢复共用同一入口，同样先轮换线路。
+        val retryButtonBlock = text.substringAfter("AppButton(onClick = {\n                    val failure = playbackFailure")
+            .substringBefore("AppText(\"重试播放\")")
+        assertTrue(retryButtonBlock.contains("retryFailedPortraitPlayback("))
+        assertTrue(retryButtonBlock.contains("preferNextCdnCandidate = true"))
+    }
+
+    /**
+     * 竖屏 pager 的起播线路必须与详情页共用同一套选线解析（resolvePlaybackCdnCandidates），
+     * 用户在线路设置里选的内置/自定义线路要对竖屏生效，不能只认插件重排后的第一条。
+     */
+    @Test
+    fun portraitPlayback_usesSharedCdnSelectionWithUserPreferences() {
+        val pager = java.io.File(
+            "app/src/main/java/com/android/purebilibili/feature/video/ui/pager/PortraitVideoPager.kt"
+        ).takeIf { it.exists() }
+            ?: java.io.File("src/main/java/com/android/purebilibili/feature/video/ui/pager/PortraitVideoPager.kt")
+        val text = pager.readText()
+
+        val loadBlock = text.substringAfter("val cdnCandidates = resolvePortraitPlaybackCdnCandidates(")
+        assertTrue(
+            loadBlock.substringBefore("\n                        }").contains("currentPlaybackCdnSelectionSettings()"),
+            "竖屏起播选线必须读取与详情页相同的线路偏好设置。",
+        )
+        assertTrue(
+            text.contains("settings = viewModel.currentPlaybackCdnSelectionSettings()"),
+            "预取/换音轨等其它竖屏选线入口同样要传入用户偏好设置。",
+        )
+
+        val policy = java.io.File(
+            "app/src/main/java/com/android/purebilibili/feature/video/ui/pager/PortraitVideoLoadPolicy.kt"
+        ).takeIf { it.exists() }
+            ?: java.io.File("src/main/java/com/android/purebilibili/feature/video/ui/pager/PortraitVideoLoadPolicy.kt")
+        val policyText = policy.readText()
+        val selectionBlock = policyText.substringAfter("internal fun resolvePortraitPlaybackCdnCandidates(")
+            .substringBefore("internal fun resolvePortraitPlaybackCdnUrls(")
+        assertTrue(
+            selectionBlock.contains("resolvePlaybackCdnCandidates("),
+            "竖屏候选解析必须复用共享的 resolvePlaybackCdnCandidates，而不是自己只调插件重排。",
+        )
+    }
+
     @Test
     fun resolveCommittedPage_returnsPageWhenSettledAndChanged() {
         val target = resolveCommittedPage(

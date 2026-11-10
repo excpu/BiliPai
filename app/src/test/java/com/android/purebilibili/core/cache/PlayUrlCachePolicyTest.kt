@@ -41,6 +41,54 @@ class PlayUrlCachePolicyTest {
     }
 
     /**
+     * 竖屏上滑切换后取流 HTTP 567 的缓存侧根因：详情内联播放器与 portrait pager / story
+     * 预取按各自目标档位（80/125/127…）分键，但首播发现请求实际都以 qn=129 拿到同一批
+     * 签名地址。多份互不认识的签名会让 B 站 CDN 判第二份非法。读写与失效必须归一到
+     * 规范发现键；低清直取档（≤32）保持独立，避免命中高档签名却播低清流。
+     */
+    @Test
+    fun discoveryQualityKeysNormalizeToOneCanonicalVariant() {
+        assertEquals(129, PlayUrlCache.normalizeDiscoveryQualityKey(129))
+        assertEquals(129, PlayUrlCache.normalizeDiscoveryQualityKey(127))
+        assertEquals(129, PlayUrlCache.normalizeDiscoveryQualityKey(125))
+        assertEquals(129, PlayUrlCache.normalizeDiscoveryQualityKey(80))
+        // 低清单次直取不归一。
+        assertEquals(32, PlayUrlCache.normalizeDiscoveryQualityKey(32))
+        assertEquals(16, PlayUrlCache.normalizeDiscoveryQualityKey(16))
+        // auto（null）维持原语义。
+        assertEquals(null, PlayUrlCache.normalizeDiscoveryQualityKey(null))
+    }
+
+    @Test
+    fun repositoryReadsWritesAndInvalidationsShareTheNormalizedKey() {
+        val source = listOf(
+            File("app/src/main/java/com/android/purebilibili/core/cache/PlayUrlCache.kt"),
+            File("src/main/java/com/android/purebilibili/core/cache/PlayUrlCache.kt"),
+        ).first { it.exists() }.readText()
+
+        // get / put / invalidate 都必须先归一再构键，防止读写分叉重新制造多签名。
+        val getBlock = source.substringAfter("fun get(").substringBefore("internal fun isFallbackReuseFreshEnough")
+        val putBlock = source.substringAfter("fun put(").substringBefore("fun invalidate(")
+        val invalidateBlock = source.substringAfter("fun invalidate(").substringBefore("fun clear()")
+        assertTrue(getBlock.contains("normalizeDiscoveryQualityKey(requestedQuality)"))
+        assertTrue(putBlock.contains("normalizeDiscoveryQualityKey(quality)"))
+        assertTrue(invalidateBlock.contains("normalizeDiscoveryQualityKey(requestedQuality)"))
+    }
+
+    /**
+     * 兜底复用（requestedQuality=null 时跨档位取最新条目）在旧实现里只要求「未过期」。
+     * deadline-30s 的余量对起播+缓冲来说太紧：接近过期的签名被拿去播放同样吃 567。
+     * 兜底命中必须额外保留足够的新鲜度；精确键命中沿用原有 expiresAt 判定。
+     */
+    @Test
+    fun fallbackReuseRequiresMoreRemainingLifetimeThanExactMatch() {
+        assertTrue(PlayUrlCache.isFallbackReuseFreshEnough(remainingMs = 1_000L, exactMatch = true))
+        assertFalse(PlayUrlCache.isFallbackReuseFreshEnough(remainingMs = 1_000L, exactMatch = false))
+        assertTrue(PlayUrlCache.isFallbackReuseFreshEnough(remainingMs = 60_000L, exactMatch = false))
+        assertFalse(PlayUrlCache.isFallbackReuseFreshEnough(remainingMs = -1L, exactMatch = false))
+    }
+
+    /**
      * 双账号会让 `accountScope` 键空间翻倍（同一 bvid 的不同账号缓存必须隔离，不能互用）。
      *
      * 因此：① 容量必须为账号变体留足余量，否则热条目被 LRU 挤掉后重进同一视频必然

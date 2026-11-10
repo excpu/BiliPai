@@ -57,6 +57,48 @@ class PortraitVideoLoadPolicyTest {
         assertEquals(64, resolvePortraitPlaybackTargetQuality(preferredQuality = -1))
     }
 
+    /**
+     * 竖屏候选解析必须与详情页共用同一套逻辑：默认走基础 URL 原顺序；
+     * 自定义/内置线路偏好对竖屏同样生效；严格模式只保留自定义一条，其余仍可轮换。
+     */
+    @Test
+    fun portraitCdnCandidates_applyUserLinePreferenceLikeDetailPage() {
+        val primary = "https://upos-sz-mirrorcosov.bilivideo.com/upgcxcode/24/97/42339142497/42339142497-1-100026.m4s?deadline=1&upsig=abc"
+        val backup = "https://upos-sz-mirrorali.bilivideo.com/upgcxcode/24/97/42339142497/42339142497-1-100026.m4s?deadline=1&upsig=abc"
+        val track = DashVideo(id = 80, baseUrl = primary, backupUrl = listOf(backup))
+        fun selection(settings: com.android.purebilibili.feature.plugin.PlaybackCdnSelectionSettings) =
+            resolvePortraitPlaybackCdnCandidates(
+                streamUrls = PortraitPlaybackStreamUrls(videoUrl = primary, audioUrl = null),
+                cachedDashVideos = listOf(track),
+                cachedDashAudios = emptyList(),
+                targetQuality = 80,
+                cdnPlugin = null,
+                settings = settings,
+            )
+
+        val defaults = selection(com.android.purebilibili.feature.plugin.PlaybackCdnSelectionSettings())
+        assertEquals(primary, defaults.first().videoUrl)
+        assertEquals(2, defaults.size)
+
+        val custom = selection(
+            com.android.purebilibili.feature.plugin.PlaybackCdnSelectionSettings(
+                preference = com.android.purebilibili.feature.plugin.PlaybackCdnPreference.CUSTOM,
+                customHost = "ca-bcdn-cmo-mtbuffer.5share.site",
+            )
+        )
+        assertTrue(custom.first().videoUrl.contains("5share.site"), "自定义线路必须对竖屏起播生效。")
+        assertTrue(custom.size >= 2, "非严格模式下原始候选仍保留，供 567 时轮换。")
+
+        val strict = selection(
+            com.android.purebilibili.feature.plugin.PlaybackCdnSelectionSettings(
+                preference = com.android.purebilibili.feature.plugin.PlaybackCdnPreference.CUSTOM,
+                customHost = "ca-bcdn-cmo-mtbuffer.5share.site",
+                strictCustomHost = true,
+            )
+        )
+        assertEquals(1, strict.size, "严格模式只保留自定义线路，不回退其它候选。")
+    }
+
     @Test
     fun qualityLabel_coversPremiumAndAutoTiers() {
         assertEquals("自动", resolvePortraitQualityLabel(127))
