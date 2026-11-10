@@ -17,7 +17,11 @@ import com.android.purebilibili.data.model.response.RelatedVideo
 import com.android.purebilibili.data.model.response.ViewInfo
 import com.android.purebilibili.data.model.response.getBestVideo
 import com.android.purebilibili.data.repository.playableVideoQualityIds
+import com.android.purebilibili.plugin.sdk.PlaybackCdnCandidate
+import com.android.purebilibili.plugin.sdk.PlaybackCdnCandidateSource
 import com.android.purebilibili.plugin.sdk.PlaybackCdnPlugin
+import com.android.purebilibili.feature.plugin.PlaybackCdnSelectionSettings
+import com.android.purebilibili.feature.plugin.resolvePlaybackCdnCandidates
 import com.android.purebilibili.feature.video.playback.audio.AudioSelectionDecision
 import com.android.purebilibili.feature.video.playback.audio.resolveAudioStreamSelection
 import com.android.purebilibili.feature.video.viewmodel.buildPlaybackAudioUrlCandidates
@@ -309,13 +313,19 @@ internal fun resolvePortraitPlaybackStreamUrls(
     )
 }
 
-internal fun resolvePortraitPlaybackCdnUrls(
+/**
+ * 竖屏 pager 的 CDN 选线，复用与详情页 [com.android.purebilibili.feature.plugin.resolvePlaybackCdnCandidates]
+ * 完全相同的解析：插件重排 → 用户线路偏好（设置里选的内置/自定义线路）→ 镜像共享缓存键。
+ * 返回按优先级排好序的候选（首条即首选），pager 起播用首条、567 时按顺序轮换。
+ */
+internal fun resolvePortraitPlaybackCdnCandidates(
     streamUrls: PortraitPlaybackStreamUrls,
     cachedDashVideos: List<DashVideo>,
     cachedDashAudios: List<DashAudio>,
     targetQuality: Int = PORTRAIT_PLAYBACK_TARGET_QUALITY,
-    cdnPlugin: PlaybackCdnPlugin?
-): PortraitPlaybackStreamUrls {
+    cdnPlugin: PlaybackCdnPlugin?,
+    settings: PlaybackCdnSelectionSettings = PlaybackCdnSelectionSettings(),
+): List<PlaybackCdnCandidate> {
     // Discovery can select a different quality (or codec) than the preference.
     // Only take backups from that exact URL's track, never from the requested tier.
     val selectedTrack = cachedDashVideos.find {
@@ -335,12 +345,42 @@ internal fun resolvePortraitPlaybackCdnUrls(
         audioUrl = streamUrls.audioUrl,
         cachedDashAudios = cachedDashAudios
     )
-    val rewrite = cdnPlugin?.rewritePlaybackCandidates(rawVideoUrls, rawAudioUrls)
+    val resolution = resolvePlaybackCdnCandidates(
+        videoUrls = rawVideoUrls,
+        audioUrls = rawAudioUrls,
+        cdnPlugin = cdnPlugin,
+        settings = settings,
+    )
+    return resolution.candidates.ifEmpty {
+        listOf(
+            PlaybackCdnCandidate(
+                videoUrl = streamUrls.videoUrl,
+                audioUrl = streamUrls.audioUrl,
+                source = PlaybackCdnCandidateSource.ORIGINAL,
+            )
+        )
+    }
+}
+
+internal fun resolvePortraitPlaybackCdnUrls(
+    streamUrls: PortraitPlaybackStreamUrls,
+    cachedDashVideos: List<DashVideo>,
+    cachedDashAudios: List<DashAudio>,
+    targetQuality: Int = PORTRAIT_PLAYBACK_TARGET_QUALITY,
+    cdnPlugin: PlaybackCdnPlugin?,
+    settings: PlaybackCdnSelectionSettings = PlaybackCdnSelectionSettings(),
+): PortraitPlaybackStreamUrls {
+    val preferred = resolvePortraitPlaybackCdnCandidates(
+        streamUrls = streamUrls,
+        cachedDashVideos = cachedDashVideos,
+        cachedDashAudios = cachedDashAudios,
+        targetQuality = targetQuality,
+        cdnPlugin = cdnPlugin,
+        settings = settings,
+    ).first()
     return PortraitPlaybackStreamUrls(
-        videoUrl = rewrite?.videoUrls?.firstOrNull()?.takeIf { it.isNotBlank() }
-            ?: streamUrls.videoUrl,
-        audioUrl = rewrite?.audioUrls?.firstOrNull()?.takeIf { it.isNotBlank() }
-            ?: streamUrls.audioUrl,
+        videoUrl = preferred.videoUrl.takeIf { it.isNotBlank() } ?: streamUrls.videoUrl,
+        audioUrl = preferred.audioUrl?.takeIf { it.isNotBlank() } ?: streamUrls.audioUrl,
         audioSelection = streamUrls.audioSelection
     )
 }

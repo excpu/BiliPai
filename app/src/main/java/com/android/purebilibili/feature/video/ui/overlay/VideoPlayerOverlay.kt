@@ -1417,7 +1417,10 @@ private fun VideoPlayerOverlayContent(
             .playerActionBounds { playerBoundsInWindow = it },
     ) {
         val subtitleChromeHeightSeed = with(androidx.compose.ui.platform.LocalDensity.current) {
-            piliPlayerBottomControlsHeightDp(showViewPointMarkers && viewPoints.isNotEmpty()).dp.roundToPx()
+            piliPlayerBottomColumnHeightDp(
+                hasChapters = showViewPointMarkers && viewPoints.isNotEmpty(),
+                isFullscreen = isFullscreen,
+            ).dp.roundToPx()
         }
         var subtitleChromeHeightPx by remember(subtitleChromeHeightSeed) {
             mutableIntStateOf(subtitleChromeHeightSeed)
@@ -1641,6 +1644,16 @@ private fun VideoPlayerOverlayContent(
                 )
                 Column(
                     modifier = Modifier.align(Alignment.BottomStart)
+                        // 内嵌底栏铺满播放窗口宽度；横屏全屏保留挖孔安全区避让。
+                        .then(
+                            if (isFullscreen) {
+                                Modifier.windowInsetsPadding(
+                                    playerControlHorizontalInsets(isFullscreen, !viewportIsLandscape),
+                                )
+                            } else {
+                                Modifier.fillMaxWidth()
+                            },
+                        )
                         .onSizeChanged {
                             subtitleChromeHeightPx = it.height
                             onBottomControlsSizeChanged(it.height)

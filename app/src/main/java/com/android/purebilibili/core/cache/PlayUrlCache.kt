@@ -19,6 +19,33 @@ object PlayUrlCache {
     // 避免热条目被 LRU 挤掉后重进同一视频必然重新解析 playurl。
     private const val MAX_CACHE_SIZE = 160
     private const val CACHE_DURATION_MS = 10 * 60 * 1000L // 10 分钟
+
+    /**
+     * 首播发现请求的规范画质键。
+     *
+     * 详情内联播放器与竖屏 pager / story 预取的目标档位可能不同（80、125、127…），
+     * 但 [com.android.purebilibili.data.repository.resolveInitialStartQuality] 会把它们
+     * 统一归到 qn=129 去发现画质目录并拿到同一批签名地址。若仍按各自目标档位分键，
+     * 一次播放会话会拉回多份彼此独立的签名 URL；B 站 CDN 判定同一路径出现第二份签名
+     * 非法时直接回 HTTP 567，表现为竖屏上滑切换后「视频播放失败」。
+     * 默认音频语言的发现型读写一律归一到本键（显式 audioLang 不缓存，维持原样）。
+     */
+    internal const val DISCOVERY_PLAYBACK_QUALITY_KEY = 129
+
+    /**
+     * 把发现型播放地址请求的目标画质归一为缓存键。
+     * null（auto，跨变体兜底查询）与低清直取档（≤32，独立单次请求）保持原样；
+     * 其余档位统一归到 [DISCOVERY_PLAYBACK_QUALITY_KEY]，避免同一会话产生多份签名。
+     */
+    fun normalizeDiscoveryQualityKey(quality: Int?): Int? =
+        if (quality != null && quality > 32) DISCOVERY_PLAYBACK_QUALITY_KEY else quality
+
+    /**
+     * 兜底复用（requestedQuality=null）的新鲜度余量：精确键未命中时宁可重取一份
+     * 新签名，也不要用只剩几十秒有效期的旧地址——起播 + 缓冲很容易跨过 deadline，
+     * CDN 会以 567 拒绝。
+     */
+    private const val FALLBACK_REUSE_MIN_REMAINING_MS = 60_000L
     
     /**
      * 缓存条目
@@ -137,7 +164,8 @@ object PlayUrlCache {
         audioLang: String? = null,
         accountScope: String = videoPlaybackAccountScope()
     ): PlayUrlData? {
-        val key = generateKey(bvid, cid, requestedQuality, audioLang, accountScope)
+        val normalizedQuality = normalizeDiscoveryQualityKey(requestedQuality)
+        val key = generateKey(bvid, cid, normalizedQuality, audioLang, accountScope)
         val exact = cache.get(key)
 
         val (matchedKey, cached) = when {
@@ -153,17 +181,29 @@ object PlayUrlCache {
             cached == null -> {
                 com.android.purebilibili.core.util.Logger.d(
                     TAG,
-                    " Cache miss: bvid=$bvid, cid=$cid, reqQ=${requestedQuality ?: "auto"}, lang=${audioLang ?: "default"}"
+                    " Cache miss: bvid=$bvid, cid=$cid, reqQ=${normalizedQuality ?: "auto"}, lang=${audioLang ?: "default"}"
                 )
                 null
             }
             cached.isExpired() -> {
                 com.android.purebilibili.core.util.Logger.d(
                     TAG,
-                    "⏰ Cache expired: bvid=$bvid, cid=$cid, reqQ=${requestedQuality ?: "auto"}, lang=${audioLang ?: "default"}"
+                    "⏰ Cache expired: bvid=$bvid, cid=$cid, reqQ=${normalizedQuality ?: "auto"}, lang=${audioLang ?: "default"}"
                 )
                 cache.remove(matchedKey)
                 unindexKey(matchedKey, generateVideoPrefix(bvid, cid, accountScope))
+                null
+            }
+            !isFallbackReuseFreshEnough(
+                remainingMs = cached.expiresAt - System.currentTimeMillis(),
+                exactMatch = matchedKey == key,
+            ) -> {
+                // 兜底命中的条目太接近 deadline：当作未命中，让调用方重新取一份新签名。
+                com.android.purebilibili.core.util.Logger.d(
+                    TAG,
+                    "⏳ Fallback reuse too close to expiry: bvid=$bvid, cid=$cid, " +
+                        "reqQ=${normalizedQuality ?: "auto"}, remaining=${cached.expiresAt - System.currentTimeMillis()}ms"
+                )
                 null
             }
             else -> {
@@ -176,6 +216,13 @@ object PlayUrlCache {
             }
         }
     }
+
+    /**
+     * 精确键命中沿用原有 `expiresAt`（deadline-30s）判定；跨档位兜底命中额外要求
+     * 剩余有效期 ≥ [FALLBACK_REUSE_MIN_REMAINING_MS]，避免拿着即将过期的签名去起播。
+     */
+    internal fun isFallbackReuseFreshEnough(remainingMs: Long, exactMatch: Boolean): Boolean =
+        exactMatch || remainingMs >= FALLBACK_REUSE_MIN_REMAINING_MS
     
     /**
      * 添加播放地址到缓存
@@ -195,13 +242,15 @@ object PlayUrlCache {
         audioLang: String? = null,
         accountScope: String = videoPlaybackAccountScope()
     ) {
-        val key = generateKey(bvid, cid, quality, audioLang, accountScope)
+        // 与 get 同步归一：发现型条目只存一份规范键，读写不再分叉。
+        val normalizedQuality = normalizeDiscoveryQualityKey(quality)
+        val key = generateKey(bvid, cid, normalizedQuality, audioLang, accountScope)
         val entry = CachedPlayUrl(
             bvid = bvid,
             cid = cid,
             data = data,
             quality = data.quality,
-            requestedQuality = quality,
+            requestedQuality = normalizedQuality,
             requestedAudioLang = audioLang
         )
         if (entry.isExpired()) {
@@ -213,7 +262,7 @@ object PlayUrlCache {
         indexKey(key, generateVideoPrefix(bvid, cid, accountScope))
         com.android.purebilibili.core.util.Logger.d(
             TAG,
-            " Cached: bvid=$bvid, cid=$cid, reqQ=${quality ?: "auto"}, actualQ=${data.quality}, lang=${audioLang ?: "default"}"
+            " Cached: bvid=$bvid, cid=$cid, reqQ=${normalizedQuality ?: "auto"}, actualQ=${data.quality}, lang=${audioLang ?: "default"}"
         )
     }
     
@@ -244,7 +293,7 @@ object PlayUrlCache {
             return
         }
 
-        val key = generateKey(bvid, cid, requestedQuality, audioLang, accountScope)
+        val key = generateKey(bvid, cid, normalizeDiscoveryQualityKey(requestedQuality), audioLang, accountScope)
         cache.remove(key)
         unindexKey(key, generateVideoPrefix(bvid, cid, accountScope))
         com.android.purebilibili.core.util.Logger.d(

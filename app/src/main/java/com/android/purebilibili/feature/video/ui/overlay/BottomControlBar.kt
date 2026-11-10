@@ -258,13 +258,23 @@ fun BottomControlBar(
             modifier = modifier.fillMaxWidth()
                 .semantics { testTagsAsResourceId = true }
                 .windowInsetsPadding(playerControlHorizontalInsets(isFullscreen, !viewportIsLandscape))
-                .padding(vertical = PILI_PLAYER_BOTTOM_VERTICAL_PADDING_DP.dp),
+                .padding(top = PILI_PLAYER_BOTTOM_VERTICAL_PADDING_DP.dp)
+                .padding(bottom = (piliPlayerBottomVerticalPaddingDp(isFullscreen) -
+                    PILI_PLAYER_BOTTOM_VERTICAL_PADDING_DP).dp),
         ) {
-            val seekInsets = WindowInsets.systemGestures.only(WindowInsetsSides.Horizontal).union(
-                WindowInsets(left = 20.dp, right = 20.dp),
-            )
+            val seekInsets = if (isFullscreen) {
+                WindowInsets.systemGestures.only(WindowInsetsSides.Horizontal).union(
+                    WindowInsets(left = 20.dp, right = 20.dp),
+                )
+            } else {
+                // 内嵌档进度条铺满播放窗口宽度：不缩进 20dp，也不让系统返回手势区
+                // 的横向 inset 在两侧留出空隙。
+                WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)
+            }
             val hasSegments = showViewPoints && viewPoints.isNotEmpty()
-            Box(Modifier.windowInsetsPadding(seekInsets).padding(bottom = PILI_PLAYER_PROGRESS_GAP_DP.dp)
+            // 内嵌档轨道贴底后只留 2dp 呼吸；全屏保持原有间距。
+            Box(Modifier.windowInsetsPadding(seekInsets)
+                .padding(bottom = piliPlayerProgressGapDp(isFullscreen).dp)
                 .height((if (hasSegments) PILI_PLAYER_CHAPTER_PROGRESS_HEIGHT_DP else PILI_PLAYER_PROGRESS_HEIGHT_DP).dp)) {
                 PlayerControlProgressBar(
                     progressProvider = progressProvider,
@@ -285,6 +295,9 @@ fun BottomControlBar(
                     onChapterClick = onChapterClick,
                     // 进度条槽位固定为 14dp；预览按完整高度向上展开，不能被槽位压缩到按钮区。
                     // 横竖屏与玻璃开关共用该槽位，控件行的位置不随拖动改变。
+                    // 内嵌档轨道贴到槽位底部，收紧与按钮行之间的空白；全屏保持居中。
+                    trackBottomAnchored = !isFullscreen,
+                    bottomAnchorReserveDp = if (isFullscreen) null else 4.dp,
                     modifier = Modifier
                         .align(androidx.compose.ui.Alignment.BottomCenter)
                         .testTag("player_progress")

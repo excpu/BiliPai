@@ -24,10 +24,14 @@ class ViewPointSegmentBarPolicyTest {
             durationMs = 250_000L
         )
 
-        assertEquals(2, segments.size)
+        // 策略是「截断保留」而非合并（见 normalizeViewPointSegments KDoc）：
+        // 每个有效章节都保留自己的标题与跳起点，重叠部分从后段起点裁掉。
+        assertEquals(3, segments.size)
         assertEquals(0L to 50_000L, segments[0].fromMs to segments[0].toMs)
-        // 40s 起点被前段截断到 50s；重叠部分被吸收
-        assertEquals(50_000L to 200_000L, segments[1].fromMs to segments[1].toMs)
+        // 40s 起点被前段截断到 50s。
+        assertEquals(50_000L to 120_000L, segments[1].fromMs to segments[1].toMs)
+        // 100s 起点被 B 段截断到 120s。
+        assertEquals(120_000L to 200_000L, segments[2].fromMs to segments[2].toMs)
     }
 
     @Test

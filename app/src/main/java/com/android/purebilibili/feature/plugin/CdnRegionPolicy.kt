@@ -5,6 +5,7 @@ import com.android.purebilibili.plugin.sdk.PlaybackCdnCandidate
 import com.android.purebilibili.plugin.sdk.PlaybackCdnCandidateSource
 import com.android.purebilibili.plugin.sdk.CdnHealthEvent
 import com.android.purebilibili.plugin.sdk.CdnLineDiagnostic
+import com.android.purebilibili.plugin.sdk.PlaybackCdnPlugin
 import com.android.purebilibili.plugin.sdk.PlaybackCdnRewriteResult
 import java.net.URI
 
@@ -134,6 +135,57 @@ internal fun applyPlaybackCdnPreference(
     }
     return usable
 }
+
+/**
+ * 播放选线设置快照（设置页三项），供详情页与竖屏 pager / Story 流共用同一解析入口。
+ * [strictCustomHost] 传原始设置值即可：严格模式只在自定义线路下生效，由解析端统一判定。
+ */
+internal data class PlaybackCdnSelectionSettings(
+    val preference: PlaybackCdnPreference = PlaybackCdnPreference.BASE_URL,
+    val customHost: String? = null,
+    val strictCustomHost: Boolean = false,
+)
+
+/**
+ * 一次完整的签名候选解析：原始候选 → 插件重排 → 用户线路偏好 → 镜像共享缓存键。
+ *
+ * 详情播放器此前把这几步写在 ViewModel 里；竖屏 pager 只做了「插件重排 + 取第一条」，
+ * 用户线路设置完全不生效，567 时也没有可轮换的候选。所有播放链路统一走这里，
+ * 顺序与缓存键不再分叉。
+ */
+internal fun resolvePlaybackCdnCandidates(
+    videoUrls: List<String>,
+    audioUrls: List<String>,
+    cdnPlugin: PlaybackCdnPlugin?,
+    settings: PlaybackCdnSelectionSettings,
+): PlaybackCdnCandidateResolution {
+    val originalCandidates = buildPlaybackCdnCandidates(videoUrls, audioUrls)
+    val rewrite = cdnPlugin?.rewritePlaybackCandidates(videoUrls, audioUrls)
+    val strictCustomHost = settings.strictCustomHost &&
+        settings.preference == PlaybackCdnPreference.CUSTOM
+    val candidates = applyPlaybackCdnPreference(
+        candidates = rewrite?.candidates ?: originalCandidates,
+        preference = settings.preference,
+        customHost = settings.customHost,
+        pluginApplied = rewrite != null,
+        strictCustomHost = strictCustomHost,
+    )
+    return PlaybackCdnCandidateResolution(
+        candidates = candidates,
+        cacheKeysByUrl = buildPlaybackCdnCacheKeys(candidates),
+        regionLabel = rewrite?.regionLabel,
+        usesCustomRule = rewrite?.sources?.firstOrNull() == PlaybackCdnCandidateSource.CUSTOM,
+        strictCustomHostApplied = strictCustomHost,
+    )
+}
+
+internal data class PlaybackCdnCandidateResolution(
+    val candidates: List<PlaybackCdnCandidate>,
+    val cacheKeysByUrl: Map<String, String>,
+    val regionLabel: String?,
+    val usesCustomRule: Boolean,
+    val strictCustomHostApplied: Boolean,
+)
 
 private fun rewriteCandidateHost(url: String, host: String, unrestricted: Boolean): String? =
     if (unrestricted) rewriteCdnUrlHost(url, host) else rewriteBilivideoHost(url, host)

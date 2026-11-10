@@ -74,13 +74,25 @@ internal fun resolveVideoDetailProgressPlacement(
     }
 }
 
+/**
+ * 内嵌（非全屏）控制行的统一高度：与原生底栏的 PILI_PLAYER_BOTTOM_ROW_HEIGHT_DP 共用同一数值，
+ * 玻璃胶囊与原生槽位因此保持同样的收口高度。
+ */
+internal const val GLASS_INLINE_CONTROL_ROW_HEIGHT_DP = 30
+
+/**
+ * 内嵌控制行与进度条之间的留白：手机档贴紧视频底边，大屏保留少量呼吸空间。
+ */
+internal fun resolveGlassInlineProgressSpacingDp(widthDp: Int): Int =
+    if (widthDp >= 840) 4 else 0
+
 fun resolveBottomControlBarLayoutPolicy(
     widthDp: Int,
     compact: Boolean = false
 ): BottomControlBarLayoutPolicy {
     if (widthDp >= 1600) {
         return BottomControlBarLayoutPolicy(
-            bottomPaddingDp = 7,
+            bottomPaddingDp = 4,
             progressSpacingDp = if (compact) 5 else 8,
             horizontalPaddingDp = if (compact) 10 else 20,
             playButtonSizeDp = 48,
@@ -109,7 +121,7 @@ fun resolveBottomControlBarLayoutPolicy(
 
     if (widthDp >= 840) {
         return BottomControlBarLayoutPolicy(
-            bottomPaddingDp = 5,
+            bottomPaddingDp = 3,
             progressSpacingDp = if (compact) 4 else 6,
             horizontalPaddingDp = if (compact) 8 else 16,
             playButtonSizeDp = 40,
@@ -138,7 +150,7 @@ fun resolveBottomControlBarLayoutPolicy(
 
     if (widthDp >= 600) {
         return BottomControlBarLayoutPolicy(
-            bottomPaddingDp = 5,
+            bottomPaddingDp = 3,
             progressSpacingDp = if (compact) 3 else 5,
             horizontalPaddingDp = if (compact) 6 else 12,
             playButtonSizeDp = 36,
@@ -166,7 +178,7 @@ fun resolveBottomControlBarLayoutPolicy(
     }
 
     return BottomControlBarLayoutPolicy(
-        bottomPaddingDp = 4,
+        bottomPaddingDp = 2,
         progressSpacingDp = if (compact) 3 else 0,
         horizontalPaddingDp = if (compact) 4 else 6,
         playButtonSizeDp = 32,

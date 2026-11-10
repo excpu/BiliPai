@@ -964,7 +964,10 @@ private fun VideoPlayerSectionContent(
     val liquidGlassLayoutEnabled = com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled
     // 两种材质共用控制栏几何，首帧与实际测量使用同一高度依据。
     val bottomGestureExclusionHeightDp =
-        com.android.purebilibili.feature.video.ui.overlay.piliPlayerBottomControlsHeightDp(viewPoints.isNotEmpty())
+        com.android.purebilibili.feature.video.ui.overlay.piliPlayerBottomColumnHeightDp(
+            hasChapters = viewPoints.isNotEmpty(),
+            isFullscreen = false,
+        )
     val gestureSeekFallbackDurationMs = remember(uiState) {
         (uiState as? VideoPlaybackUiState.Success)?.videoDurationMs ?: 0L
     }

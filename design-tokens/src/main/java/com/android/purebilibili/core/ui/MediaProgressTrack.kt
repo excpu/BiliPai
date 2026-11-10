@@ -14,9 +14,11 @@ fun DrawScope.drawMediaProgressTrack(
     activeColor: Color,
     bufferedColor: Color,
     inactiveColor: Color,
+    // 内嵌档把可见轨道贴到触摸区底部（上方留白交给手势区）；null 保持垂直居中。
+    trackTopPx: Float? = null,
 ) {
     if (trackHeightPx <= 0f || size.width <= 0f) return
-    val top = ((size.height - trackHeightPx) / 2f).coerceAtLeast(0f)
+    val top = trackTopPx ?: ((size.height - trackHeightPx) / 2f).coerceAtLeast(0f)
     val radius = CornerRadius(trackHeightPx / 2f, trackHeightPx / 2f)
     fun drawTrack(width: Float, color: Color) {
         if (width <= 0f) return

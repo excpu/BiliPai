@@ -52,7 +52,8 @@ import com.android.purebilibili.feature.plugin.CdnDashSegmentPrefetcher
 import com.android.purebilibili.plugin.sdk.CdnLineDiagnostic
 import com.android.purebilibili.plugin.sdk.PlaybackCdnPlugin
 import com.android.purebilibili.feature.plugin.PlaybackCdnPreference
-import com.android.purebilibili.feature.plugin.applyPlaybackCdnPreference
+import com.android.purebilibili.feature.plugin.PlaybackCdnSelectionSettings
+import com.android.purebilibili.feature.plugin.resolvePlaybackCdnCandidates
 import com.android.purebilibili.feature.plugin.normalizePlaybackCdnHost
 import com.android.purebilibili.feature.plugin.resolvePlaybackCdnFallbackTimeoutSeconds
 import com.android.purebilibili.feature.plugin.playbackCdnFallbackTimeoutMillisFromSeconds
@@ -9729,6 +9730,17 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
         val playbackQualityMode: PlaybackQualityMode
     )
 
+    /**
+     * 竖屏 pager / Story 流读取当前生效的 CDN 线路偏好，与详情页共用同一份设置，
+     * 避免「设置里选的线路只对横屏生效」。strictCustomHost 传原始值，解析端按自定义线路判定。
+     */
+    internal fun currentPlaybackCdnSelectionSettings(): PlaybackCdnSelectionSettings =
+        PlaybackCdnSelectionSettings(
+            preference = playbackCdnPreference.value,
+            customHost = playbackCdnCustomHost.value,
+            strictCustomHost = playbackCdnStrictCustomHost.value,
+        )
+
     private fun resolvePlaybackCdnCandidateSelection(
         videoUrl: String,
         audioUrl: String?,
@@ -9747,27 +9759,26 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
             audioUrl = audioUrl,
             cachedDashAudios = cachedDashAudios
         )
-        val originalCandidates = com.android.purebilibili.feature.plugin.buildPlaybackCdnCandidates(
-            videoUrls = rawVideoUrls,
-            audioUrls = rawAudioUrls
-        )
-
-        val cdnPlugin = PluginManager
-            .getEnabledPlugins(PlaybackCdnPlugin::class)
-            .firstOrNull()
-        val cdnRewrite = cdnPlugin?.rewritePlaybackCandidates(rawVideoUrls, rawAudioUrls)
 
         // 严格模式只对「自定义线路」生效：内置线路仍保留回退候选。
         val strictCustomHost = playbackCdnStrictCustomHost.value &&
             playbackCdnPreference.value == PlaybackCdnPreference.CUSTOM
 
-        val preferredCandidates = applyPlaybackCdnPreference(
-            candidates = cdnRewrite?.candidates ?: originalCandidates,
-            preference = playbackCdnPreference.value,
-            customHost = playbackCdnCustomHost.value,
-            pluginApplied = cdnRewrite != null,
-            strictCustomHost = strictCustomHost,
+        // 与竖屏 pager / Story 流共用同一选线解析：插件重排 → 用户线路偏好 → 镜像共享缓存键。
+        val cdnPlugin = PluginManager
+            .getEnabledPlugins(PlaybackCdnPlugin::class)
+            .firstOrNull()
+        val cdnResolution = resolvePlaybackCdnCandidates(
+            videoUrls = rawVideoUrls,
+            audioUrls = rawAudioUrls,
+            cdnPlugin = cdnPlugin,
+            settings = PlaybackCdnSelectionSettings(
+                preference = playbackCdnPreference.value,
+                customHost = playbackCdnCustomHost.value,
+                strictCustomHost = playbackCdnStrictCustomHost.value,
+            ),
         )
+        val preferredCandidates = cdnResolution.candidates
         val allVideoUrls = preferredCandidates.map { it.videoUrl }
         val allAudioUrls = preferredCandidates.map { it.audioUrl.orEmpty() }
         val selectedVideoUrl = allVideoUrls.firstOrNull() ?: videoUrl
@@ -9785,9 +9796,9 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
             adaptiveDashSource = selectedAdaptiveDashSource,
             allVideoUrls = allVideoUrls,
             allAudioUrls = allAudioUrls,
-            cdnCacheKeysByUrl = buildPlaybackCdnCacheKeys(preferredCandidates),
+            cdnCacheKeysByUrl = cdnResolution.cacheKeysByUrl,
             candidateSources = preferredCandidates.map { it.source },
-            regionLabel = cdnRewrite?.regionLabel,
+            regionLabel = cdnResolution.regionLabel,
             lineDiagnostics = cdnPlugin?.buildPlaybackCdnDiagnostics(
                 videoUrls = allVideoUrls,
                 sources = preferredCandidates.map { it.source }
@@ -9803,12 +9814,11 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
                 selectedAudioUrl = selectedAudioUrl,
                 originalVideoUrl = videoUrl,
                 originalAudioUrl = audioUrl,
-                regionLabel = cdnRewrite?.regionLabel,
+                regionLabel = cdnResolution.regionLabel,
                 audioFallbackUrl = rawAudioUrls.drop(1).firstOrNull(),
                 // 用已应用「设置线路 > 排除 PCDN」的候选，回退时才不会又捡回 PCDN
                 fallbackCandidates = preferredCandidates,
-                usesCustomRule = cdnRewrite?.sources?.firstOrNull() ==
-                    com.android.purebilibili.plugin.sdk.PlaybackCdnCandidateSource.CUSTOM,
+                usesCustomRule = cdnResolution.usesCustomRule,
                 strictCustomHost = strictCustomHost
             )
         )
