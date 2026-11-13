@@ -910,17 +910,9 @@ fun FluidHomeTopBar(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             AppIcon(
                                 Icons.Outlined.Search,
-                                null,
+                                "搜索",
                                 tint = AppContentColors.secondaryText().copy(0.5f),
                                 modifier = Modifier.size(AppSpacingTokens.Large + AppSpacingTokens.Micro)
-                            )
-                            Spacer(modifier = Modifier.width(AppSpacingTokens.Small))
-                            AppText(
-                                text = "搜索视频、UP主...",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontSize = MaterialTheme.typography.labelMedium.fontSize,
-                                color = AppContentColors.secondaryText(),
-                                maxLines = 1
                             )
                         }
                     }
@@ -976,6 +968,7 @@ internal fun resolveIosTopTabCapsuleContainerColor(
 /** Same full-strength shell lens as [FloatingBottomBar] (24dp / 24dp). */
 internal const val TOP_DOCK_SHELL_LENS_INTENSITY = 1f
 
+@Composable
 internal fun Modifier.homeTopBottomBarMatchedSurface(
     renderMode: HomeTopChromeRenderMode,
     shape: Shape,
@@ -992,7 +985,7 @@ internal fun Modifier.homeTopBottomBarMatchedSurface(
     isScrolling: Boolean = false,
     materialScrollProgress: Float = if (isScrolling) 1f else 0f,
     interactionState: com.android.purebilibili.core.ui.components.AppElasticPressState? = null,
-): Modifier = composed {
+): Modifier {
     val isGlassEnabled = renderMode == HomeTopChromeRenderMode.LIQUID_GLASS_BACKDROP ||
         renderMode == HomeTopChromeRenderMode.LIQUID_GLASS_HAZE
     val isBlurEnabled = renderMode != HomeTopChromeRenderMode.PLAIN
@@ -1014,7 +1007,7 @@ internal fun Modifier.homeTopBottomBarMatchedSurface(
         liquidGlassPreset = liquidGlassPreset,
         liquidGlassTuning = resolvedLiquidGlassTuning
     )
-    if (isGlassEnabled && miuixBackdrop != null) {
+    return if (isGlassEnabled && miuixBackdrop != null) {
         // BiliPai outer dock shell (same stack as bottom FloatingBottomBar).
         this.biliPaiFloatingDockShell(
             backdrop = miuixBackdrop,
@@ -2094,7 +2087,7 @@ private fun LightweightHomeTopTabs(
                                         .background(topTabIndicatorCaptureSurfaceColor)
                                 }
                             }
-                            .then(topTabCaptureHighlight?.modifier ?: Modifier),
+                            .then(topTabCaptureHighlight?.backgroundModifier ?: Modifier),
                         contentAlignment = Alignment.CenterStart
                     ) {
                         Row(
@@ -2619,6 +2612,8 @@ private fun BoxScope.LightweightTopTabIndicatorOverlay(
                 width = indicatorWidth,
                 height = dockIndicatorHeight,
                 dockHeight = rowHeight,
+                // 完整边缘色散只属于玻璃材质，原生指示器保留缝隙策略。
+                gapOnlyDispersion = !shouldUseLiquidGlassIndicator,
                 combinedBackdrop = indicatorCombinedBackdrop,
                 pressProgress = topTabLensProgress,
                 scaleX = indicatorScaleX,
@@ -2657,6 +2652,8 @@ private fun BoxScope.LightweightTopTabIndicatorOverlay(
                 width = md3LiquidCapsuleWidth,
                 height = dockIndicatorHeight,
                 dockHeight = rowHeight,
+                // 完整边缘色散只属于玻璃材质，原生指示器保留缝隙策略。
+                gapOnlyDispersion = !shouldUseLiquidGlassIndicator,
                 combinedBackdrop = indicatorCombinedBackdrop,
                 pressProgress = topTabLensProgress,
                 scaleX = indicatorScaleX,
@@ -2693,6 +2690,8 @@ private fun BoxScope.LightweightTopTabIndicatorOverlay(
                 width = md3LiquidCapsuleWidth,
                 height = dockIndicatorHeight,
                 dockHeight = rowHeight,
+                // 完整边缘色散只属于玻璃材质，原生指示器保留缝隙策略。
+                gapOnlyDispersion = !shouldUseLiquidGlassIndicator,
                 combinedBackdrop = indicatorCombinedBackdrop,
                 pressProgress = topTabLensProgress,
                 scaleX = indicatorScaleX,

@@ -12,6 +12,10 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 internal const val EXTRA_LAUNCHER_COMPONENT = "com.android.purebilibili.extra.LAUNCHER_COMPONENT"
 
 internal fun resolveSplashThemeResIdForActivityClassName(className: String?): Int {
+    val themePrefix = "com.android.purebilibili.MainActivitySplashBiliPaiTheme"
+    if (className?.startsWith(themePrefix) == true) {
+        return biliPaiThemeSplashThemes[className.removePrefix(themePrefix).toInt()]
+    }
     return when (className) {
         "com.android.purebilibili.MainActivitySplashBlueSnowMaid" -> R.style.Theme_PureBiliBili_Splash_BlueSnowMaid
         "com.android.purebilibili.MainActivitySplashBlueSnowMaidAnnouncement" -> R.style.Theme_PureBiliBili_Splash_BlueSnowMaidAnnouncement
@@ -23,9 +27,14 @@ internal fun resolveSplashThemeResIdForActivityClassName(className: String?): In
         "com.android.purebilibili.MainActivitySplashBlueSnowMaidFrontLight" -> R.style.Theme_PureBiliBili_Splash_BlueSnowMaidFrontLight
         "com.android.purebilibili.MainActivitySplashBlueSnowMaidFrontDark" -> R.style.Theme_PureBiliBili_Splash_BlueSnowMaidFrontDark
         "com.android.purebilibili.MainActivitySplashIcon3D" -> R.style.Theme_PureBiliBili_Splash_Icon3D
+        "com.android.purebilibili.MainActivitySplashIcon3DLight" -> R.style.Theme_PureBiliBili_Splash_Icon3DLight
+        "com.android.purebilibili.MainActivitySplashIcon3DDark" -> R.style.Theme_PureBiliBili_Splash_Icon3DDark
         "com.android.purebilibili.MainActivitySplashBiliPai" -> R.style.Theme_PureBiliBili_Splash_BiliPai
         "com.android.purebilibili.MainActivitySplashBiliPaiPink" -> R.style.Theme_PureBiliBili_Splash_BiliPaiPink
         "com.android.purebilibili.MainActivitySplashBiliPaiWhite" -> R.style.Theme_PureBiliBili_Splash_BiliPaiWhite
+        "com.android.purebilibili.MainActivitySplashBiliPaiViolet" -> R.style.Theme_PureBiliBili_Splash_BiliPaiViolet
+        "com.android.purebilibili.MainActivitySplashBiliPaiGreen" -> R.style.Theme_PureBiliBili_Splash_BiliPaiGreen
+        "com.android.purebilibili.MainActivitySplashBiliPaiInk" -> R.style.Theme_PureBiliBili_Splash_BiliPaiInk
         "com.android.purebilibili.MainActivitySplashBiliPaiMonet" -> R.style.Theme_PureBiliBili_Splash_BiliPaiMonet
         "com.android.purebilibili.MainActivitySplashNoIcon" -> R.style.Theme_PureBiliBili_Splash_NoIcon
         else -> 0
@@ -77,8 +86,16 @@ class MainActivitySplashBlueSnowMaidDark : MainActivityLauncherEntry()
 class MainActivitySplashBlueSnowMaidFrontLight : MainActivityLauncherEntry()
 class MainActivitySplashBlueSnowMaidFrontDark : MainActivityLauncherEntry()
 class MainActivitySplashIcon3D : MainActivityLauncherEntry()
+class MainActivitySplashIcon3DLight : MainActivityLauncherEntry()
+class MainActivitySplashIcon3DDark : MainActivityLauncherEntry()
 class MainActivitySplashBiliPai : MainActivityLauncherEntry()
 class MainActivitySplashBiliPaiPink : MainActivityLauncherEntry()
 class MainActivitySplashBiliPaiWhite : MainActivityLauncherEntry()
 class MainActivitySplashBiliPaiMonet : MainActivityLauncherEntry()
 class MainActivitySplashNoIcon : MainActivityLauncherEntry()
+
+class MainActivitySplashBiliPaiViolet : MainActivityLauncherEntry()
+
+class MainActivitySplashBiliPaiGreen : MainActivityLauncherEntry()
+
+class MainActivitySplashBiliPaiInk : MainActivityLauncherEntry()

@@ -557,6 +557,15 @@ internal fun shouldUseRealtimeSplashBlur(
 }
 
 internal fun resolveSplashIconResIdForComponentClassName(className: String?): Int {
+    val simpleName = className?.substringAfterLast('.')
+    val themePrefix = when {
+        simpleName?.startsWith("MainActivityAliasBiliPaiTheme") == true -> "MainActivityAliasBiliPaiTheme"
+        simpleName?.startsWith("MainActivitySplashBiliPaiTheme") == true -> "MainActivitySplashBiliPaiTheme"
+        else -> null
+    }
+    if (themePrefix != null) {
+        return biliPaiThemeIconResources[simpleName!!.removePrefix(themePrefix).removeSuffix("NoIcon").toInt()]
+    }
     return when (className?.substringAfterLast('.')) {
         "MainActivityAliasBlueSnowMaid",
         "MainActivityAliasBlueSnowMaidNoIcon" -> R.mipmap.ic_launcher_blue_snow_maid
@@ -585,6 +594,12 @@ internal fun resolveSplashIconResIdForComponentClassName(className: String?): In
         "MainActivityAliasBlueSnowMaidFrontDark",
         "MainActivityAliasBlueSnowMaidFrontDarkNoIcon" -> R.mipmap.ic_launcher_blue_snow_maid_front_dark
         "MainActivitySplashBlueSnowMaidFrontDark" -> R.drawable.splash_icon_blue_snow_maid_front_dark
+        "MainActivityAlias3DLight",
+        "MainActivityAlias3DLightNoIcon",
+        "MainActivitySplashIcon3DLight" -> R.mipmap.ic_launcher_3d_light
+        "MainActivityAlias3DDark",
+        "MainActivityAlias3DDarkNoIcon",
+        "MainActivitySplashIcon3DDark" -> R.mipmap.ic_launcher_3d_dark
         "MainActivityAlias3DLauncher",
         "MainActivityAlias3D",
         "MainActivityAlias3DNoIcon",
@@ -598,6 +613,15 @@ internal fun resolveSplashIconResIdForComponentClassName(className: String?): In
         "MainActivityAliasBiliPaiWhite",
         "MainActivityAliasBiliPaiWhiteNoIcon",
         "MainActivitySplashBiliPaiWhite" -> R.mipmap.ic_launcher_bilipai_white
+        "MainActivityAliasBiliPaiViolet",
+        "MainActivityAliasBiliPaiVioletNoIcon",
+        "MainActivitySplashBiliPaiViolet" -> R.mipmap.ic_launcher_bilipai_violet
+        "MainActivityAliasBiliPaiGreen",
+        "MainActivityAliasBiliPaiGreenNoIcon",
+        "MainActivitySplashBiliPaiGreen" -> R.mipmap.ic_launcher_bilipai_green
+        "MainActivityAliasBiliPaiInk",
+        "MainActivityAliasBiliPaiInkNoIcon",
+        "MainActivitySplashBiliPaiInk" -> R.mipmap.ic_launcher_bilipai_ink
         "MainActivityAliasBiliPaiMonet",
         "MainActivityAliasBiliPaiMonetNoIcon" -> R.mipmap.ic_launcher_bilipai_monet
         "MainActivitySplashBiliPaiMonet" -> R.mipmap.splash_icon_bilipai_monet
@@ -1473,6 +1497,9 @@ class MainActivity : AppCompatActivity() {
             val globalTextTapCopyEnabled by SettingsManager
                 .getGlobalTextTapCopyEnabled(context)
                 .collectAsStateWithLifecycle(initialValue = false)
+            val commentIpLocationEnabled by remember(context) {
+                SettingsManager.getCommentIpLocationEnabled(context)
+            }.collectAsStateWithLifecycle(initialValue = true)
             val detailedCommentTimeEnabled by remember(context) {
                 SettingsManager.getDetailedCommentTimeEnabled(context)
             }.collectAsStateWithLifecycle(initialValue = false)
@@ -1491,14 +1518,21 @@ class MainActivity : AppCompatActivity() {
             val nativeMiuixPopupsEnabled by com.android.purebilibili.core.store.player.PlayerSettingsStore
                 .getNativeMiuixPlayerPopups(context)
                 .collectAsStateWithLifecycle(initialValue = true)
-            val liquidGlassEnabled by SettingsManager.getAndroidNativeLiquidGlassEnabled(context)
+            val liquidGlassMasterEnabled by SettingsManager.getAndroidNativeLiquidGlassEnabled(context)
                 .collectAsStateWithLifecycle(initialValue = true)
             val liquidControlsUseThemeColor by SettingsManager.getLiquidControlsUseThemeColor(context)
                 .collectAsStateWithLifecycle(initialValue = false)
+            val liquidGlassScenes by SettingsManager.getLiquidGlassScenes(context)
+                .collectAsStateWithLifecycle(initialValue = com.android.purebilibili.core.ui.AppLiquidGlassSettings())
+            val liquidGlassEnabled = liquidGlassMasterEnabled && liquidGlassScenes.isEnabled(
+                com.android.purebilibili.core.ui.AppLiquidGlassScene.OTHER_COMPONENTS,
+            )
             val liquidSwitchThumbMode by SettingsManager.getLiquidSwitchThumbMode(context)
                 .collectAsStateWithLifecycle(initialValue = com.android.purebilibili.core.ui.LiquidSwitchThumbMode.THEME)
             val appThemeConfig = remember(
                 liquidGlassEnabled,
+                liquidGlassMasterEnabled,
+                liquidGlassScenes,
                 liquidControlsUseThemeColor,
                 liquidSwitchThumbMode,
                 blurIntensity,
@@ -1516,6 +1550,9 @@ class MainActivity : AppCompatActivity() {
             ) {
                 AppThemeConfig(
                     liquidGlassEnabled = liquidGlassEnabled,
+                    playerGlassEnabled = liquidGlassMasterEnabled && liquidGlassScenes.isEnabled(com.android.purebilibili.core.ui.AppLiquidGlassScene.PLAYER_CONTROLS),
+                    popupGlassEnabled = liquidGlassMasterEnabled && liquidGlassScenes.isEnabled(com.android.purebilibili.core.ui.AppLiquidGlassScene.MENUS_DIALOGS),
+                    nowPlayingGlassEnabled = liquidGlassMasterEnabled && liquidGlassScenes.isEnabled(com.android.purebilibili.core.ui.AppLiquidGlassScene.NOW_PLAYING),
                     liquidControlsUseThemeColor = liquidControlsUseThemeColor,
                     liquidSwitchThumbMode = liquidSwitchThumbMode,
                     blurIntensity = blurIntensity,
@@ -1629,6 +1666,7 @@ class MainActivity : AppCompatActivity() {
 
             // 6. 传入参数
             PureBiliBiliTheme(
+                syncLauncherIcon = true,
                 themeTransitionEnabled = uiEntranceAnimationEnabled,
                 liquidGlassEnabled = liquidGlassEnabled,
                 uiStyle = appThemeSettings.uiStyle,
@@ -1659,6 +1697,8 @@ class MainActivity : AppCompatActivity() {
                 ProvideAppTextSelectionHost {
                     //  📐 [平板适配] 提供全局 WindowSizeClass
                     CompositionLocalProvider(
+                        com.android.purebilibili.core.ui.blur.LocalProgressiveBlurRenderer provides
+                            com.android.purebilibili.core.ui.blur.rememberWindowProgressiveBlurRenderer(),
                         com.android.purebilibili.feature.settings.LocalSettingsThemeConfiguration provides appThemeSettings,
                         com.android.purebilibili.core.ui.LocalAdaptiveScaffoldHazeFactory provides
                             { userEnabled -> com.android.purebilibili.core.ui.blur.rememberAppScaffoldHazeHandle(userEnabled) },
@@ -1667,6 +1707,7 @@ class MainActivity : AppCompatActivity() {
                         com.android.purebilibili.core.ui.components.LocalContentImageSettings provides contentImages,
                         com.android.purebilibili.core.ui.components.LocalScrollFeedbackPreset provides scrollFeedbackPreset,
                         LocalDensity provides effectiveDensity,
+                        com.android.purebilibili.core.ui.LocalCommentIpLocationEnabled provides commentIpLocationEnabled,
                         LocalDetailedCommentTimeEnabled provides detailedCommentTimeEnabled,
                         com.android.purebilibili.core.ui.LocalCommentReplyPreviewVisible provides commentReplyPreviewVisible,
                         LocalWindowSizeClass provides windowSizeClass,

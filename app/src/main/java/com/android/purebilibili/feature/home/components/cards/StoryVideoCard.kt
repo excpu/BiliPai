@@ -1,6 +1,7 @@
 // 文件路径: feature/home/components/cards/StoryVideoCard.kt
 package com.android.purebilibili.feature.home.components.cards
 
+import com.android.purebilibili.core.ui.transition.videoCardSourceAnchor
 import com.android.purebilibili.core.ui.AppContentColors
 
 import coil3.request.crossfade
@@ -53,6 +54,7 @@ import com.android.purebilibili.core.util.CardPositionManager
 import com.android.purebilibili.core.ui.transition.videoCardSourceBoundsInRoot
 import com.android.purebilibili.core.ui.components.LocalPageImageLoadingAllowed
 import com.android.purebilibili.data.model.response.VideoItem
+import com.android.purebilibili.feature.plugin.rememberSponsorFeedBadgeLabel
 import com.android.purebilibili.core.util.rememberHapticFeedback
 import com.android.purebilibili.core.util.HapticType
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -90,7 +92,6 @@ import com.android.purebilibili.core.ui.transition.recordNativeVideoCardLayer
 import com.android.purebilibili.core.ui.transition.resolveVideoCardSharedTransitionMotionSpec
 import com.android.purebilibili.core.ui.transition.shouldEnableVideoCoverSharedTransition
 import com.android.purebilibili.core.ui.transition.shouldUseVideoCardShellSharedBounds
-import com.android.purebilibili.core.ui.transition.videoCardShellSharedBoundsOrEmpty
 import com.android.purebilibili.feature.home.HomeCoverRequestSpec
 import com.android.purebilibili.feature.home.resolveHomeCoverImageSource
 import com.android.purebilibili.feature.home.resolveHomeCardEnterAnimationEnabledAtMount
@@ -141,6 +142,7 @@ internal fun StoryVideoCard(
     modifier: Modifier = Modifier,
     onClick: (String, Long) -> Unit
 ) {
+    val sponsorStatusLabel = rememberSponsorFeedBadgeLabel(video.bvid)
     val contentTypography = feedContentTypography(
         titleHierarchy = if (compactMetadata) {
             FeedTitleHierarchy.Compact
@@ -210,12 +212,11 @@ internal fun StoryVideoCard(
         CardPositionManager.newVideoCardSourceInstanceId()
     }
     val sourceEnabled = transitionEnabled && LocalSharedTransitionEnabled.current
-    val onDemandSource = LocalHomeScrollTickProvider.current != null && sourceEnabled
     val sourceInteraction = remember(video.bvid, video.cid, effectiveSharedElementSourceRoute) {
         VideoCardSourceInteraction()
     }
-    val sourceInteractionAllowed by rememberUpdatedState(
-        onDemandSource && LocalPageImageLoadingAllowed.current && cardVisibleInWindow &&
+    val sourcePreparationAllowed by rememberUpdatedState(
+        sourceEnabled && LocalPageImageLoadingAllowed.current && cardVisibleInWindow &&
             com.android.purebilibili.core.ui.rememberVisualWorkActive() &&
             LocalHomeCardScrolling.current?.value != true
     )
@@ -225,10 +226,9 @@ internal fun StoryVideoCard(
     val isSharedReturnTarget = isVideoCardSharedReturnTarget(
         video.bvid, effectiveSharedElementSourceRoute, CardPositionManager.lastClickedVideoSourceKey,
     ) && sourceInstanceOwnsReturn
-    // Home sources mount for input or their own navigation session. Other lists keep
-    // their existing eager source preparation; disabling transitions skips capture entirely.
+    // 所有列表按输入或当前导航源身份准备图层；关闭转场时不创建快照。
     val prepareCardTransition = sourceEnabled && (
-        !onDemandSource || (sourceInteractionAllowed && sourceInteraction.preparing) || isSharedReturnTarget
+        (sourcePreparationAllowed && sourceInteraction.preparing) || isSharedReturnTarget
     )
     val captureState = if (prepareCardTransition) rememberVideoCardCaptureState(video.bvid) else null
     val captureScope = if (prepareCardTransition) rememberCoroutineScope() else null
@@ -278,15 +278,15 @@ internal fun StoryVideoCard(
     })
 
     val requestCardClick by rememberUpdatedState {
-        if (onDemandSource) {
-            if (sourceInteractionAllowed && !CardPositionManager.isVideoNavigationDebounceActive()) {
+        if (sourceEnabled) {
+            if (!CardPositionManager.isVideoNavigationDebounceActive()) {
                 sourceInteraction.requestClick()
             }
         } else triggerCardClick()
     }
     if (sourceInteraction.preparing) {
         VideoCardPreparedClickEffect(
-            sourceInteraction, captureState, onDemandSource && sourceInteractionAllowed,
+            sourceInteraction, captureState, sourceEnabled && sourcePreparationAllowed,
             onClick = { triggerCardClick() },
         )
     }
@@ -305,7 +305,7 @@ internal fun StoryVideoCard(
     val useCardShellSharedBounds = shouldUseVideoCardShellSharedBounds(
         sourceRoute = effectiveSharedElementSourceRoute,
         transitionEnabled = coverSharedEnabled
-    ) && ((onDemandSource && sourceInteraction.preparing) || sourceInstanceOwnsReturn)
+    ) && ((sourceEnabled && sourceInteraction.preparing) || sourceInstanceOwnsReturn)
     val coverCrossfadeEnabled = shouldEnableVideoCardCoverCrossfade(
         isScrollInProgress = false,
         isReturningFromDetail = isReturningFromVideoDetail,
@@ -373,15 +373,7 @@ internal fun StoryVideoCard(
             .then(cardVisibility.observerModifier)
             .fillMaxWidth()
             .adaptiveCardHoverEffect(shape = cardShellShape)
-            .videoCardShellSharedBoundsOrEmpty(
-                enabled = useCardShellSharedBounds,
-                sharedTransitionScope = sharedTransitionScope,
-                animatedVisibilityScope = animatedVisibilityScope,
-                bvid = video.bvid,
-                sourceRoute = effectiveSharedElementSourceRoute,
-                motionSpec = cardSharedTransitionMotionSpec,
-                clipShape = cardShellShape
-            )
+            .videoCardSourceAnchor(video.bvid, cardShellShape)
             .padding(horizontal = cardHorizontalPadding, vertical = AppSpacingTokens.Small)
             .animateEnter(
                 index = index,
@@ -403,11 +395,11 @@ internal fun StoryVideoCard(
             .onPlaced { coordinates -> cardCoordinates.value = coordinates }
             .semantics { semanticClick(label = "播放视频") { requestCardClick(); true } }
             .then(
-                if (onDemandSource) Modifier.pointerInput(sourceInteraction) {
+                if (sourceEnabled) Modifier.pointerInput(sourceInteraction) {
                     // Observe before clickable/long-press handlers without consuming their events.
                     awaitEachGesture {
                         awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                        if (sourceInteractionAllowed) sourceInteraction.press()
+                        if (sourcePreparationAllowed) sourceInteraction.press()
                         try {
                             // Finish the down event before observing later moves/up: the
                             // existing clickable is allowed to consume this initial down.
@@ -444,7 +436,7 @@ internal fun StoryVideoCard(
                          pressScale = 1f,
                          pressTranslationY = 0f,
                          // Deferred navigation owns its feedback; do not also emit it here.
-                         hapticEnabled = !onDemandSource
+                         hapticEnabled = !sourceEnabled
                      ) {
                          requestCardClick()
                      }
@@ -495,7 +487,8 @@ internal fun StoryVideoCard(
                     ),
             ) {
             com.android.purebilibili.core.ui.components.VideoStatusBadges(
-                labels = video.statusLabels.ifEmpty { listOfNotNull(premiumBadgeLabel) },
+                labels = (video.statusLabels + listOfNotNull(sponsorStatusLabel))
+                    .ifEmpty { listOfNotNull(premiumBadgeLabel) },
                 modifier = Modifier.align(Alignment.TopEnd).padding(AppSpacingTokens.Small),
             )
             //  时长标签 (保留在封面上)

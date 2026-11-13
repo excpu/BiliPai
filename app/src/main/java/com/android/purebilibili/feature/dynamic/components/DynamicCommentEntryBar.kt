@@ -59,9 +59,12 @@ internal fun DynamicCommentEntryBar(
                 .clip(shape),
             backdrop = backdrop,
             reuseEnabled = true,
+            materialEnabled = liquidGlassEnabled,
             elasticFeedbackEnabled = true,
             drawShellLens = true,
             shellLensIntensity = resolveFloatingDockGeometryScale(44f),
+            // 内容只含文字与图标，不需要再录制玻璃外壳。
+            captureShellForContent = false,
         ) { liquidChromeActive ->
             Row(
                 modifier = Modifier

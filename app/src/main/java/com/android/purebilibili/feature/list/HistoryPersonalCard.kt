@@ -72,7 +72,6 @@ import com.android.purebilibili.core.ui.transition.VideoCardSourceLayout
 import com.android.purebilibili.core.ui.transition.rememberNativeVideoCardSnapshotController
 import com.android.purebilibili.core.ui.transition.resolveVideoCardSharedTransitionMotionSpec
 import com.android.purebilibili.core.ui.transition.shouldUseVideoCardShellSharedBounds
-import com.android.purebilibili.core.ui.transition.videoCardShellSharedBoundsOrEmpty
 import com.android.purebilibili.core.ui.transition.withMeasuredCoverDecodeSize
 import com.android.purebilibili.core.util.CardPositionManager
 import com.android.purebilibili.core.util.FormatUtils
@@ -80,6 +79,7 @@ import com.android.purebilibili.data.model.response.HistoryBusiness
 import com.android.purebilibili.data.model.response.HistoryItem
 import com.android.purebilibili.feature.home.components.cards.resolveVideoCardCoverOverlayTextShadow
 import com.android.purebilibili.feature.home.components.cards.HorizontalVideoCardFrame
+import com.android.purebilibili.feature.plugin.rememberSponsorFeedBadgeLabel
 import com.android.purebilibili.feature.personal.PersonalCardSelectMask
 
 internal fun resolveHistoryKindLabel(business: HistoryBusiness): String = when (business) {
@@ -103,13 +103,16 @@ internal fun HistoryPersonalCardSkeleton(
     blockColor: (() -> Color)? = null,
     stacked: Boolean = false,
 ) {
-    val color = blockColor ?: rememberContentSkeletonBlockColor(rememberContentSkeletonPulseState())
+    val animationGate = com.android.purebilibili.core.ui.rememberDecorativeAnimationGate(
+        respectComponentMotion = false,
+    )
+    val color = blockColor ?: rememberContentSkeletonBlockColor(rememberContentSkeletonPulseState(animated = animationGate.active))
     val blockShape = AppShapes.container(ContainerLevel.Card)
 
     HorizontalVideoCardFrame(
         stacked = stacked,
         fillInfoHeight = !stacked,
-        modifier = modifier
+        modifier = modifier.then(animationGate.modifier)
             .fillMaxWidth(),
         coverContent = {
             ContentSkeletonBlock(
@@ -169,6 +172,7 @@ internal fun HistoryPersonalCard(
 ) {
     val video = item.videoItem
     val context = LocalContext.current
+    val sponsorStatusLabel = rememberSponsorFeedBadgeLabel(video.bvid)
     val coverShape = AppShapes.mediaCover()
     val containerTarget = if (batchMode) null else resolveHistoryCardContainerTarget(item)
     val usesVideoTransition = !batchMode && containerTarget == null && item.business != HistoryBusiness.ARTICLE
@@ -322,7 +326,7 @@ internal fun HistoryPersonalCard(
             },
             coverOverlayContent = {
                 VideoStatusBadges(
-                    labels = video.statusLabels,
+                    labels = video.statusLabels + listOfNotNull(sponsorStatusLabel),
                     modifier = Modifier.align(Alignment.TopEnd).padding(AppSpacingTokens.ExtraSmall),
                 )
                 AppText(
@@ -372,7 +376,7 @@ internal fun HistoryPersonalCard(
         },
         coverOverlayContent = {
             VideoStatusBadges(
-                labels = video.statusLabels,
+                labels = video.statusLabels + listOfNotNull(sponsorStatusLabel),
                 modifier = Modifier.align(Alignment.TopEnd).padding(AppSpacingTokens.ExtraSmall),
             )
             AppText(

@@ -1,15 +1,39 @@
 package com.android.purebilibili.data.repository
 
+import com.android.purebilibili.core.network.grpc.BiliGrpcException
 import com.android.purebilibili.data.model.response.ReplyCursor
 import com.android.purebilibili.data.model.response.ReplyData
 import com.android.purebilibili.data.model.response.ReplyControl
 import com.android.purebilibili.data.model.response.ReplyItem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CommentReadAccessPolicyTest {
+
+    @Test
+    fun `grpc closed thread errors retain business status and block input`() {
+        for (code in listOf(12002, 12061)) {
+            val source = BiliGrpcException(200, "2", code.toString())
+            val failure = requireNotNull(resolveGrpcCommentReadRestriction(source))
+            assertEquals(code, failure.code)
+            assertTrue(failure.commentInputBlocked)
+            assertEquals(CommentReadException(code).message, failure.message)
+            assertSame(source, failure.cause)
+        }
+        for (source in listOf(
+            BiliGrpcException(200, "2", "-400"),
+            BiliGrpcException(200, "2", "-412"),
+            BiliGrpcException(503, "2", "12002"),
+            BiliGrpcException(200, "7", "12002"),
+            IllegalStateException("12002"),
+        )) {
+            assertNull(resolveGrpcCommentReadRestriction(source))
+        }
+    }
 
     @Test
     fun `closed comment codes preserve server explanation and prevent input`() {
@@ -26,10 +50,13 @@ class CommentReadAccessPolicyTest {
         assertFalse(CommentReadException(-101).commentInputBlocked)
     }
 
+
     @Test
-    fun `unknown comment error retains server message and diagnostic code`() {
-        assertEquals("评论暂不可见 (12345)", resolveCommentReadErrorMessage(12345, "评论暂不可见"))
-        assertEquals("加载评论失败 (12345)", resolveCommentReadErrorMessage(12345, "success"))
+    fun `unavailable reply preserves business code without blocking input`() {
+        val failure = CommentReadException(12006, "该评论已被删除")
+        assertEquals(12006, failure.code)
+        assertFalse(failure.commentInputBlocked)
+        assertFalse(shouldFallbackCommentRead(12006))
     }
 
     @Test

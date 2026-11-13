@@ -76,6 +76,8 @@ internal fun BiliPaiNavKey.toLegacyRoute(): String {
         BiliPaiNavKey.ProfileAccountEdit -> "profile_account_edit"
         is BiliPaiNavKey.AccountLedger -> ScreenRoutes.AccountLedger.createRoute(kind)
         is BiliPaiNavKey.AicuQuery -> ScreenRoutes.AicuQuery.createRoute(uid, category)
+        // 统计快照由类型化导航键持有，不通过字符串路由重建。
+        is BiliPaiNavKey.PersonalRecapUps -> "personal_recap_ups?window=${window.name}"
         BiliPaiNavKey.History -> ScreenRoutes.History.route
         is BiliPaiNavKey.HistorySearch -> "history_search?query=${encodeRouteValue(query)}"
         BiliPaiNavKey.Favorite -> ScreenRoutes.Favorite.route
@@ -143,6 +145,7 @@ internal fun BiliPaiNavKey.toLegacyRoute(): String {
         is BiliPaiNavKey.NativeMusic -> ScreenRoutes.NativeMusic.createRoute(title, bvid, cid)
         is BiliPaiNavKey.VideoDetail -> VideoRoute.createRoute(
             bvid = bvid,
+            title = title,
             cid = cid,
             coverUrl = coverUrl,
             startAudio = startAudio,
@@ -368,6 +371,7 @@ internal fun legacyRouteToBiliPaiNavKey(route: String?): BiliPaiNavKey {
         segments.firstOrNull() == VideoRoute.base && segments.size >= 2 -> {
             BiliPaiNavKey.VideoDetail(
                 bvid = decodeRouteValue(segments[1]),
+                title = query["title"].orEmpty(),
                 cid = query["cid"]?.toLongOrNull() ?: 0L,
                 coverUrl = query["cover"].orEmpty(),
                 startAudio = query["startAudio"]?.toBooleanStrictOrNull() ?: false,
@@ -386,6 +390,7 @@ internal fun legacyRouteToBiliPaiNavKey(route: String?): BiliPaiNavKey {
         segments.firstOrNull() == "video_player" && segments.size >= 2 -> {
             BiliPaiNavKey.VideoDetail(
                 bvid = decodeRouteValue(segments[1]),
+                title = query["title"].orEmpty(),
                 cid = query["cid"]?.toLongOrNull() ?: 0L,
                 coverUrl = query["cover"].orEmpty(),
                 commentRootRpid = query["commentRootRpid"]?.toLongOrNull() ?: 0L,

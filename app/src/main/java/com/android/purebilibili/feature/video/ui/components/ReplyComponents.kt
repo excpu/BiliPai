@@ -58,6 +58,8 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.LinkInteractionListener
@@ -1375,8 +1377,9 @@ fun ReplyItemView(
             }
         }
     }
-    val displayLocation = remember(location) {
-        resolveReplyLocationText(location)
+    val commentIpLocationEnabled = com.android.purebilibili.core.ui.LocalCommentIpLocationEnabled.current
+    val displayLocation = remember(location, commentIpLocationEnabled) {
+        if (commentIpLocationEnabled) resolveReplyLocationText(location) else null
     }
     val metadataText = remember(item.ctime, displayLocation, detailedCommentTimeEnabled) {
         buildString {
@@ -1530,7 +1533,7 @@ fun ReplyItemView(
     var hatedBodyExpanded by remember(item.rpid, isHated) { mutableStateOf(false) }
     val collapseHatedBody = isHated && !hatedBodyExpanded
     var hatePromptHandled by remember(item.rpid) { mutableStateOf(false) }
-    // 与仓库既有回弹手感一致（bouncyClickable 等使用的同组弹簧参数）
+    // 回复长按菜单沿用中等刚度回弹。
     val hateCollapseSpring: SpringSpec<androidx.compose.ui.unit.IntSize> = spring(
         dampingRatio = Spring.DampingRatioMediumBouncy,
         stiffness = Spring.StiffnessMedium
@@ -2025,6 +2028,7 @@ fun ReplyItemView(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .appActionClickable(enabled = onLikeClick != null) { onLikeClick?.invoke() }
+                            .semantics { selected = isLiked }
                             .padding(4.dp)
                     ) {
                         AppIcon(
@@ -2976,10 +2980,11 @@ internal fun FanGroupDecorationBadge(
                 )
                 AppText(
                     text = fanNumberText,
+                    fontFamily = com.android.purebilibili.core.ui.ClientDigitalIdFont,
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontSize = 8.sp,
                         lineHeight = 9.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Normal
                     ),
                     color = textColor,
                     maxLines = 1

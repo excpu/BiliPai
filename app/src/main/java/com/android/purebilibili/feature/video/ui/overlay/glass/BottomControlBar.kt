@@ -529,11 +529,11 @@ fun BottomControlBar(
     val nearbyHandoff = com.android.purebilibili.feature.nearby.LocalNearbyHandoff.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val hideCenterPlayback = rememberHideGlassCenterPlayback()
+    val hideCenterPlayback = rememberHideCenterPlayback()
     val toggleCenterPlayback: () -> Unit = {
         scope.launch {
             com.android.purebilibili.core.store.player.PlayerSettingsStore
-                .setHideGlassCenterPlayback(context, !hideCenterPlayback)
+                .setHideCenterPlayback(context, !hideCenterPlayback)
         }
     }
     val configuration = LocalConfiguration.current
@@ -617,10 +617,6 @@ fun BottomControlBar(
         resolveVideoProgressBarLayoutPolicy(
             widthDp = uiLayoutWidthDp
         )
-    }
-    val fullscreenToggleTouchTargetDp = remember(layoutPolicy.fullscreenIconSizeDp, isFullscreen) {
-        if (isFullscreen) PlayerChromeLayout.CircularButtonSizeDp
-        else resolveFullscreenToggleTouchTargetDp(iconSizeDp = layoutPolicy.fullscreenIconSizeDp)
     }
     val showEpisodeButton = remember(isFullscreen, hasEpisodeEntry, uiLayoutWidthDp) {
         shouldShowEpisodeButtonInControlBar(
@@ -774,7 +770,8 @@ fun BottomControlBar(
     // 内嵌控制行与原生底栏共用同一高度常量；横屏仍按圆形按钮尺寸收口。
     val inlineRowHeightDp = GLASS_INLINE_CONTROL_ROW_HEIGHT_DP.dp
     // 玻璃内嵌圆钮与文字胶囊同高，整行因此收口到同一几何；横屏保留圆形按钮尺寸。
-    val inlineCircularButtonSizeDp = minOf(fullscreenToggleTouchTargetDp, layoutPolicy.playButtonSizeDp, GLASS_INLINE_CONTROL_ROW_HEIGHT_DP)
+    val fullscreenToggleTargetDp = resolveFullscreenToggleTouchTargetDp(layoutPolicy.fullscreenIconSizeDp)
+    val inlineCircularButtonSizeDp = minOf(fullscreenToggleTargetDp, layoutPolicy.playButtonSizeDp, GLASS_INLINE_CONTROL_ROW_HEIGHT_DP)
     // 独立胶囊的触控下限：玻璃跟随控制行高度，原生保留 48dp 无障碍标准。
     val inlineActionMinHeightDp = if (liquidGlassEnabled) inlineRowHeightDp else 48.dp
     val controlRowDensity = remember(chromeDensity, isFullscreen) {
@@ -875,6 +872,7 @@ fun BottomControlBar(
             progressBarContent()
             PlayerControlViewPointSegments(
                 progressProvider = progressProvider,
+                    positionProvider = displayedPositionProvider,
                 viewPoints = visibleViewPoints,
                 onSeek = onSeek,
                 spacing = layoutPolicy.progressSpacingDp.dp,
@@ -1983,22 +1981,24 @@ fun BottomControlBar(
                     }
                 }
             }
-            Spacer(modifier = Modifier.width(if (isFullscreen) 8.dp else layoutPolicy.rightActionSpacingDp.dp))
-            // Fullscreen
-            PlayerControlGlassDock(enabled = true, shape = androidx.compose.foundation.shape.CircleShape) {
-                Box(
-                    modifier = Modifier
-                        .size(if (isFullscreen) fullscreenToggleTouchTargetDp.dp else inlineCircularButtonSizeDp.dp)
-                        .testTag("player_fullscreen_toggle")
-                        .consumeTap(onToggleFullscreen),
-                    contentAlignment = Alignment.Center
-                ) {
-                    AppIcon(
-                        imageVector = if (isFullscreen) Icons.Outlined.FullscreenExit else Icons.Outlined.Fullscreen,
-                        contentDescription = if (isFullscreen) "退出横屏" else "横屏",
-                        tint = Color.White,
-                        modifier = Modifier.size(layoutPolicy.fullscreenIconSizeDp.dp)
-                    )
+            if (!isFullscreen || configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
+                Spacer(modifier = Modifier.width(if (isFullscreen) 8.dp else layoutPolicy.rightActionSpacingDp.dp))
+                // Fullscreen
+                PlayerControlGlassDock(enabled = true, shape = androidx.compose.foundation.shape.CircleShape) {
+                    Box(
+                        modifier = Modifier
+                            .size(if (isFullscreen) fullscreenToggleTargetDp.dp else inlineCircularButtonSizeDp.dp)
+                            .testTag("player_fullscreen_toggle")
+                            .consumeTap(onToggleFullscreen),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AppIcon(
+                            imageVector = if (isFullscreen) Icons.Outlined.FullscreenExit else Icons.Outlined.Fullscreen,
+                            contentDescription = if (isFullscreen) "退出全屏" else "横屏",
+                            tint = Color.White,
+                            modifier = Modifier.size(layoutPolicy.fullscreenIconSizeDp.dp)
+                        )
+                    }
                 }
             }
         }

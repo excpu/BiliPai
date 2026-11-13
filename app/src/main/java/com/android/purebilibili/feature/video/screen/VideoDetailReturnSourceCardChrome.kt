@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -53,6 +54,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlin.math.roundToInt
@@ -89,10 +91,28 @@ import com.android.purebilibili.core.theme.BiliPink
 import com.android.purebilibili.core.theme.withDensityScale
 import com.android.purebilibili.data.model.response.ViewInfo
 import com.android.purebilibili.feature.home.resolveHomeCardInfoSurfaceAppearance
+import com.android.purebilibili.feature.home.components.cards.VideoCardCoverMetadataLayout
+import com.android.purebilibili.feature.home.components.cards.resolveVideoCardCoverOverlayBottomLayout
 import com.android.purebilibili.feature.home.components.cards.HorizontalVideoStatRow
 import com.android.purebilibili.feature.home.components.cards.resolveVideoCardCoverOverlayTextShadow
-import com.android.purebilibili.feature.home.components.cards.resolveVideoCardPrimaryStatBadgeMinWidthDp
-import com.android.purebilibili.feature.home.components.cards.resolveVideoCardSecondaryStatBadgeMinWidthDp
+
+/** 屏幕几何仅用于落点；裁原生图层必须先换回录制像素，优先使用点击时的局部实测。 */
+internal fun resolveVideoDetailNativeInfoCrop(
+    sourceInfoRect: Rect,
+    sourceCardSize: Size,
+    layerSize: IntSize,
+    recordedInfoBounds: Rect?,
+): Rect {
+    if (recordedInfoBounds != null) return recordedInfoBounds
+    val scaleX = layerSize.width / sourceCardSize.width
+    val scaleY = layerSize.height / sourceCardSize.height
+    return Rect(
+        sourceInfoRect.left * scaleX,
+        sourceInfoRect.top * scaleY,
+        sourceInfoRect.right * scaleX,
+        sourceInfoRect.bottom * scaleY,
+    )
+}
 
 /** Click-time card text rendered inside the Miuix flying detail entry. */
 internal data class VideoDetailReturnSourceCardChromeModel(
@@ -196,7 +216,6 @@ internal fun resolveVideoDetailFlyingSourceChromeAlpha(
     sourceLayout: VideoCardSourceLayout,
     detailContentLoading: Boolean = false,
     isNowPlayingBar: Boolean = false,
-    followProgressEnabled: Boolean = true,
     /**
      * 卡片返回是否**已提交**（`markReturning` / 用户点返回）。
      *
@@ -217,9 +236,6 @@ internal fun resolveVideoDetailFlyingSourceChromeAlpha(
     ) {
         return 0f
     }
-    if (!followProgressEnabled && morphDepthProgress > 0f &&
-        isVideoCardReturnContentYieldActive(phase, isReturnGestureInProgress, morphDepthProgress)
-    ) return 0f
     // The complete bar bitmap must use the same narrow window in both directions.
     // Ordinary opening chrome stays visible until depth 0.72, which stretches the
     // short capsule into large text before the real player has taken over.
@@ -296,7 +312,6 @@ internal fun BoxScope.VideoDetailReturnSourceCardChrome(
         VideoCardTransitionBackgroundPhase.RETURNING
     },
     isReturnGestureInProgressProvider: () -> Boolean = { true },
-    followProgressEnabledProvider: () -> Boolean = { true },
     horizontalMediaHandoffEnabled: Boolean = true,
     mediaFrameProvider: () -> VideoDetailReturnMediaLayoutFrame? = { null },
     /** 返回是否已提交；IDLE 时重建壳必须与详情 chrome 同时归零。见 [resolveVideoDetailFlyingSourceChromeAlpha]。 */
@@ -357,7 +372,6 @@ internal fun BoxScope.VideoDetailReturnSourceCardChrome(
             isReturnGestureInProgress = isReturnGestureInProgressProvider(),
             sourceLayout = layout.layout,
             detailContentLoading = detailContentLoading,
-            followProgressEnabled = followProgressEnabledProvider(),
             isCommittedCardReturn = isCommittedCardReturn,
             preserveNativeViewport = preserveNativeViewport,
         )
@@ -415,7 +429,6 @@ internal fun BoxScope.VideoDetailReturnSourceCardChrome(
             sourceLayout = layout.layout,
             detailContentLoading = detailContentLoading,
             isNowPlayingBar = isNowPlayingBar,
-            followProgressEnabled = followProgressEnabledProvider(),
             isCommittedCardReturn = isCommittedCardReturn,
             preserveNativeViewport = preserveNativeViewport,
         )
@@ -430,45 +443,51 @@ internal fun BoxScope.VideoDetailReturnSourceCardChrome(
             heightPx: Float,
             cropXPx: Float,
             cropYPx: Float,
-        ): Modifier = offset {
-            val inverse = sourcePixelInverseScale
-            IntOffset(
-                x = (frozenInfoAnchorXPx * inverse.scaleX).roundToInt(),
-                y = infoTopPx(inverse),
+        ): Modifier {
+            val crop = resolveVideoDetailNativeInfoCrop(
+                sourceInfoRect = Rect(cropXPx, cropYPx, cropXPx + widthPx, cropYPx + heightPx),
+                sourceCardSize = Size(layout.cardWidthPx, layout.cardHeightPx),
+                layerSize = nativeCardLayer.size,
+                recordedInfoBounds = sourceChromeSnapshot?.nativeInfoBounds,
             )
-        }.layout { measurable, _ ->
-            val inverse = sourcePixelInverseScale
-            val w = (widthPx * inverse.scaleX).roundToInt().coerceAtLeast(1)
-            val h = (heightPx * inverse.scaleY).roundToInt().coerceAtLeast(1)
-            val placeable = measurable.measure(Constraints.fixed(w, h))
-            layout(w, h) { placeable.place(0, 0) }
-        }.clipToBounds().graphicsLayer {
-            val phase = phaseProvider()
-            val isReturnGestureInProgress = isReturnGestureInProgressProvider()
-            alpha = resolveVideoDetailFlyingSourceChromeAlpha(
-                morphDepthProgress = morphDepthProgressProvider(),
-                phase = phase,
-                isReturnGestureInProgress = isReturnGestureInProgress,
-                sourceLayout = layout.layout,
-                detailContentLoading = detailContentLoading,
-                isNowPlayingBar = isNowPlayingBar,
-                followProgressEnabled = followProgressEnabledProvider(),
-                isCommittedCardReturn = isCommittedCardReturn,
-                preserveNativeViewport = preserveNativeViewport,
-            )
-        }.drawWithContent {
-            if (CardPositionManager.nativeVideoCardLayerFor(sourceChromeSnapshot) !== nativeCardLayer) {
-                return@drawWithContent
-            }
-            val inverse = sourcePixelInverseScale
-            clipRect(left = horizontalInfoClipLeftPx().coerceAtMost(size.width)) {
-                scale(
-                    scaleX = inverse.scaleX,
-                    scaleY = inverse.scaleY,
-                    pivot = Offset.Zero,
-                ) {
-                    translate(-cropXPx, -cropYPx) {
-                        drawLayer(nativeCardLayer)
+            return offset {
+                val inverse = sourcePixelInverseScale
+                IntOffset(
+                    x = (frozenInfoAnchorXPx * inverse.scaleX).roundToInt(),
+                    y = infoTopPx(inverse),
+                )
+            }.layout { measurable, _ ->
+                val inverse = sourcePixelInverseScale
+                val w = (widthPx * inverse.scaleX).roundToInt().coerceAtLeast(1)
+                val h = (heightPx * inverse.scaleY).roundToInt().coerceAtLeast(1)
+                val placeable = measurable.measure(Constraints.fixed(w, h))
+                layout(w, h) { placeable.place(0, 0) }
+            }.clipToBounds().graphicsLayer {
+                val phase = phaseProvider()
+                val isReturnGestureInProgress = isReturnGestureInProgressProvider()
+                alpha = resolveVideoDetailFlyingSourceChromeAlpha(
+                    morphDepthProgress = morphDepthProgressProvider(),
+                    phase = phase,
+                    isReturnGestureInProgress = isReturnGestureInProgress,
+                    sourceLayout = layout.layout,
+                    detailContentLoading = detailContentLoading,
+                    isNowPlayingBar = isNowPlayingBar,
+                    isCommittedCardReturn = isCommittedCardReturn,
+                    preserveNativeViewport = preserveNativeViewport,
+                )
+            }.drawWithContent {
+                if (CardPositionManager.nativeVideoCardLayerFor(sourceChromeSnapshot) !== nativeCardLayer) {
+                    return@drawWithContent
+                }
+                clipRect(left = horizontalInfoClipLeftPx().coerceAtMost(size.width)) {
+                    scale(
+                        scaleX = size.width / crop.width,
+                        scaleY = size.height / crop.height,
+                        pivot = Offset.Zero,
+                    ) {
+                        translate(-crop.left, -crop.top) {
+                            drawLayer(nativeCardLayer)
+                        }
                     }
                 }
             }
@@ -792,11 +811,9 @@ private fun BoxScope.LandingCoverChrome(
         )
     }
 
-    val progressBottomPadding = if (presentation.showHistoryProgressBar) {
-        AppSpacingTokens.ExtraSmall
-    } else {
-        AppSpacingTokens.None
-    }
+    val coverOverlayBottomLayout = resolveVideoCardCoverOverlayBottomLayout(
+        presentation.showHistoryProgressBar,
+    )
     if (presentation.showHistoryProgressBar) {
         Box(
             modifier = Modifier
@@ -817,57 +834,52 @@ private fun BoxScope.LandingCoverChrome(
     }
 
     if (presentation.showStatsOnCover) {
-        Box(
+        VideoCardCoverMetadataLayout(
+            durationAtEnd = presentation.showDurationOnCover,
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .fillMaxWidth()
                 .padding(
                     start = AppSpacingTokens.Small,
                     end = AppSpacingTokens.Small,
-                    bottom = AppSpacingTokens.ExtraSmall + progressBottomPadding,
+                    bottom = coverOverlayBottomLayout.compactStatsBottomPaddingDp.dp,
                 ),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        end = if (presentation.showDurationOnCover) {
-                            AppSpacingTokens.TripleExtraLarge
-                        } else {
-                            AppSpacingTokens.None
-                        },
+            stats = {
+                Row(
+                    modifier = Modifier,
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(
+                        AppSpacingTokens.ExtraSmall + AppSpacingTokens.Micro,
                     ),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(
-                    AppSpacingTokens.ExtraSmall + AppSpacingTokens.Micro,
-                ),
-            ) {
-                LandingCoverStat(
-                    icon = Icons.Outlined.PlayCircle,
-                    text = model.viewText,
-                    minWidth = resolveVideoCardPrimaryStatBadgeMinWidthDp(model.viewText).dp,
-                    useGlass = presentation.useGlassStats,
-                    textStyle = overlayStyle,
-                )
-                if (presentation.showSecondaryStatOnCover && model.danmakuText.isNotBlank()) {
+                ) {
                     LandingCoverStat(
-                        icon = Icons.Outlined.Subtitles,
-                        text = model.danmakuText,
-                        minWidth = resolveVideoCardSecondaryStatBadgeMinWidthDp(
-                            model.danmakuText,
-                        ).dp,
+                        icon = Icons.Outlined.PlayCircle,
+                        text = model.viewText,
+                        modifier = Modifier.weight(1f, fill = false),
                         useGlass = presentation.useGlassStats,
                         textStyle = overlayStyle,
                     )
+                    if (presentation.showSecondaryStatOnCover && model.danmakuText.isNotBlank()) {
+                        LandingCoverStat(
+                            icon = Icons.Outlined.Subtitles,
+                            text = model.danmakuText,
+                            modifier = Modifier.weight(1f, fill = false),
+                            useGlass = presentation.useGlassStats,
+                            textStyle = overlayStyle,
+                        )
+                    }
+                    if (presentation.showOnlineCountOnCover) {
+                        LandingCoverStat(
+                            icon = Icons.Outlined.Visibility,
+                            text = presentation.onlineCountText,
+                            modifier = Modifier.weight(1f, fill = false),
+                            useGlass = presentation.useGlassStats,
+                            textStyle = overlayStyle,
+                        )
+                    }
                 }
-                if (presentation.showOnlineCountOnCover) {
-                    LandingCoverStat(
-                        icon = Icons.Outlined.Visibility,
-                        text = presentation.onlineCountText,
-                        useGlass = presentation.useGlassStats,
-                        textStyle = overlayStyle,
-                    )
-                }
+            },
+            duration = {
                 if (presentation.showDurationAsStat && model.durationText.isNotBlank()) {
                     LandingCoverStat(
                         icon = Icons.Outlined.Alarm,
@@ -876,18 +888,18 @@ private fun BoxScope.LandingCoverChrome(
                         textStyle = overlayStyle,
                     )
                 }
-            }
-            if (presentation.showDurationOnCover && model.durationText.isNotBlank()) {
-                AppText(
-                    text = model.durationText,
-                    color = MediaContrastPalette.Foreground,
-                    style = MaterialTheme.typography.labelSmall.merge(overlayStyle),
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.align(Alignment.BottomEnd),
-                    maxLines = 1,
-                )
-            }
-        }
+                if (presentation.showDurationOnCover && model.durationText.isNotBlank()) {
+                    AppText(
+                        text = model.durationText,
+                        color = MediaContrastPalette.Foreground,
+                        style = MaterialTheme.typography.labelSmall.merge(overlayStyle),
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier,
+                        maxLines = 1,
+                    )
+                }
+            },
+        )
     } else if (presentation.showDurationOnCover && model.durationText.isNotBlank()) {
         AppText(
             text = model.durationText,
@@ -898,8 +910,8 @@ private fun BoxScope.LandingCoverChrome(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(
-                    end = AppSpacingTokens.Small + AppSpacingTokens.Micro,
-                    bottom = AppSpacingTokens.Small + progressBottomPadding,
+                    end = AppSpacingTokens.Small - AppSpacingTokens.Micro,
+                    bottom = coverOverlayBottomLayout.floatingDurationBottomPaddingDp.dp,
                 ),
         )
     }
@@ -912,7 +924,6 @@ private fun LandingCoverStat(
     useGlass: Boolean,
     textStyle: TextStyle,
     modifier: Modifier = Modifier,
-    minWidth: Dp = 0.dp,
 ) {
     if (text.isBlank()) return
     val pillShape = AppShapes.container(ContainerLevel.Pill)
@@ -933,9 +944,7 @@ private fun LandingCoverStat(
         Modifier
     }
     Row(
-        modifier = modifier
-            .widthIn(min = minWidth)
-            .then(pillDecoration),
+        modifier = modifier.then(pillDecoration),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(AppSpacingTokens.Micro),
     ) {
@@ -947,12 +956,13 @@ private fun LandingCoverStat(
         )
         AppText(
             text = text,
+            modifier = Modifier.weight(1f, fill = false),
             color = MediaContrastPalette.Foreground.copy(alpha = 0.94f),
             style = MaterialTheme.typography.labelSmall.merge(textStyle),
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             softWrap = false,
-            overflow = TextOverflow.Visible,
+            overflow = TextOverflow.Clip,
         )
     }
 }

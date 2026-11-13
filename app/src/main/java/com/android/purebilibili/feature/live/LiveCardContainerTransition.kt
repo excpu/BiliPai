@@ -22,6 +22,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import com.android.purebilibili.core.ui.LocalVideoDetailNavigationTransitionScope
+import com.android.purebilibili.core.ui.transition.videoCardSourceAnchor
+import com.android.purebilibili.core.ui.transition.LocalVideoCardSourceTrackingEnabled
 import com.android.purebilibili.feature.settings.SettingsContainerAnchor
 import com.android.purebilibili.feature.settings.SettingsContainerCompanion
 import com.android.purebilibili.feature.settings.SettingsContainerSources
@@ -85,10 +87,35 @@ internal fun rememberLiveCardContainerTransition(
     val sources = LocalLiveCardContainerSources.current
     val owner = LocalLiveCardContainerOwner.current
     if (!enabled || sources == null || owner == null || (roomId <= 0 && containerTarget == null)) {
-        return LiveCardContainerTransition(Modifier, onClick)
+        if (!LocalVideoCardSourceTrackingEnabled.current) return LiveCardContainerTransition(Modifier, onClick)
+        val disabledTarget = containerTarget
+            ?: BiliPaiNavKey.Live(roomId = roomId.toString(), title = title, uname = hostName)
+        val disabledSystemSource = com.android.purebilibili.navigation3.rememberSystemWindowCardSource(disabledTarget)
+            ?: return LiveCardContainerTransition(Modifier, onClick)
+        val disabledRadiusPx = with(LocalDensity.current) { cornerRadius.toPx() }
+        val disabledLayer = rememberGraphicsLayer()
+        // 容器形变关闭时仍登记系统窗口来源，系统一镜到底不受直播容器开关影响。
+        return LiveCardContainerTransition(
+            modifier = Modifier
+                .onGloballyPositioned { disabledSystemSource.coordinates = it }
+                .videoCardSourceAnchor(
+                    disabledSystemSource.identity,
+                    androidx.compose.foundation.shape.RoundedCornerShape(cornerRadius),
+                )
+                .drawWithContent {
+                    disabledLayer.record { this@drawWithContent.drawContent() }
+                    drawLayer(disabledLayer)
+                },
+            onClick = {
+                disabledSystemSource.record(disabledRadiusPx, disabledLayer)
+                onClick()
+            },
+        )
     }
     val target = containerTarget ?: BiliPaiNavKey.Live(roomId = roomId.toString(), title = title, uname = hostName)
-    val anchor = remember(target, sources, owner) { SettingsContainerAnchor() }
+    val systemWindowSource = com.android.purebilibili.navigation3.rememberSystemWindowCardSource(target)
+    // 内容卡片可从视口内的可见部分点击，飞行和返回始终使用完整布局边界。
+    val anchor = remember(target, sources, owner) { SettingsContainerAnchor(allowPartial = true) }
     var selected by remember(anchor) { mutableStateOf(false) }
     val navigationScope by rememberUpdatedState(LocalVideoDetailNavigationTransitionScope.current)
     val nameCapture = if (includeAvatarCompanions) rememberLiveAvatarCompanionCapture() else null
@@ -113,7 +140,18 @@ internal fun rememberLiveCardContainerTransition(
     }
     return LiveCardContainerTransition(
         modifier = Modifier
-            .onGloballyPositioned(anchor::update)
+            .onGloballyPositioned {
+                anchor.update(it)
+                systemWindowSource?.coordinates = it
+            }
+            .then(
+                if (systemWindowSource != null) {
+                    Modifier.videoCardSourceAnchor(
+                        systemWindowSource.identity,
+                        androidx.compose.foundation.shape.RoundedCornerShape(cornerRadius),
+                    )
+                } else Modifier
+            )
             .drawWithContent {
                 // 头像飞行期间复用点击时的图层，并隐藏原位头像，避免两份头像同时出现。
                 // 封面卡片继续使用原来的绘制策略；音柱本身仍受页面/视口等可见性门控。
@@ -130,7 +168,9 @@ internal fun rememberLiveCardContainerTransition(
                 }
             },
         onClick = {
-            // 捕获失败时清除旧落点，深链或未完整显示的卡片回退普通导航。
+            // 系统一镜到底来源先于容器捕获登记；未登记成功时保持纯容器路径。
+            systemWindowSource?.record(radiusPx, layer)
+            // 捕获失败时清除旧落点；未录制或已卸载的来源保持普通导航。
             sources.sources.remove(target)
             sources.capture(
                 target, owner, anchor, layer, color, radiusPx, radiusPx,

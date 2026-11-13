@@ -21,6 +21,10 @@ import com.android.purebilibili.core.ui.AppThemeConfig
 import com.android.purebilibili.core.ui.LocalAppThemeConfig
 import com.android.purebilibili.feature.video.ui.overlay.BottomControlBar
 import com.android.purebilibili.feature.video.ui.overlay.PlayerProgress
+import com.android.purebilibili.feature.video.screen.ContinuousPlayerOrientationRequest
+import com.android.purebilibili.feature.video.screen.ContinuousPlayerTransitionEvent
+import com.android.purebilibili.feature.video.screen.ContinuousPlayerTransitionPhase
+import com.android.purebilibili.feature.video.screen.reduceContinuousPlayerTransition
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -31,6 +35,55 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 @RunWith(AndroidJUnit4::class)
 class BottomControlBarUiRegressionTest {
     @get:Rule val rule = createComposeRule()
+
+    @Test
+    fun replacementPlaybackButtonTogglesAndDisappearsWhenCenterControlIsRestored() {
+        val playing = mutableStateOf(false)
+        val showReplacement = mutableStateOf(true)
+        val landscape = mutableStateOf(false)
+        val glass = mutableStateOf(false)
+        val style = mutableStateOf(AppUiStyle.MATERIAL3)
+        rule.setContent {
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val density = LocalDensity.current.density * maxWidth.value / 900f
+                CompositionLocalProvider(
+                    LocalDensity provides Density(density, 1f),
+                    LocalAppUiStyle provides style.value,
+                    LocalAppThemeConfig provides AppThemeConfig(liquidGlassEnabled = glass.value),
+                ) {
+                    MaterialTheme { MiuixTheme {
+                        BottomControlBar(
+                            modifier = Modifier.width(if (landscape.value) 840.dp else 320.dp),
+                            isFullscreen = landscape.value,
+                            viewportIsLandscape = landscape.value,
+                            viewportWidthDpOverride = if (landscape.value) 840 else 320,
+                            showPlayPauseButton = showReplacement.value,
+                            isPlaying = playing.value,
+                            onPlayPauseClick = { playing.value = !playing.value },
+                            onSeek = {}, onToggleFullscreen = {},
+                        )
+                    } }
+                }
+            }
+        }
+        for (uiStyle in AppUiStyle.entries) {
+            for (wide in listOf(false, true)) {
+                for (useGlass in listOf(false, true)) {
+                    rule.runOnIdle {
+                        style.value = uiStyle
+                        landscape.value = wide
+                        glass.value = useGlass
+                        playing.value = false
+                        showReplacement.value = true
+                    }
+                    rule.onNodeWithContentDescription("开始播放").assertIsDisplayed().performClick()
+                    rule.onNodeWithContentDescription("暂停播放").assertIsDisplayed().performClick()
+                    rule.runOnIdle { assertTrue(!playing.value); showReplacement.value = false }
+                    rule.onNodeWithTag("player_play_pause").assertDoesNotExist()
+                }
+            }
+        }
+    }
 
     @Test
     fun seekPreviewStaysAboveTrackWithoutMovingControlsAcrossOrientationsAndMaterials() {
@@ -173,6 +226,62 @@ class BottomControlBarUiRegressionTest {
                         rule.onNodeWithTag("player_episode_action").assertDoesNotExist()
                     }
                 }
+            }
+        }
+    }
+
+    @Test
+    fun portraitAndLandscapeActionsRemainClickableAcrossRepeatedRoundTrips() {
+        val phase = mutableStateOf(ContinuousPlayerTransitionPhase.Inline)
+        val portrait = mutableStateOf(false)
+        val requestedOrientation = mutableStateOf(ContinuousPlayerOrientationRequest.None)
+        fun dispatch(event: ContinuousPlayerTransitionEvent) {
+            val decision = reduceContinuousPlayerTransition(phase.value, event)
+            phase.value = decision.phase
+            requestedOrientation.value = decision.orientationRequest
+        }
+        rule.setContent {
+            MaterialTheme {
+                BottomControlBar(
+                    progress = PlayerProgress(500, 3000),
+                    isFullscreen = phase.value == ContinuousPlayerTransitionPhase.Fullscreen,
+                    viewportWidthDpOverride = 320,
+                    onSeek = {},
+                    onPortraitFullscreen = {
+                        portrait.value = true
+                        dispatch(ContinuousPlayerTransitionEvent.EnterPortraitFullscreen)
+                    },
+                    onToggleFullscreen = {
+                        if (portrait.value) {
+                            portrait.value = false
+                            dispatch(ContinuousPlayerTransitionEvent.EnterFullscreen)
+                        } else {
+                            dispatch(ContinuousPlayerTransitionEvent.Toggle)
+                        }
+                    },
+                )
+            }
+        }
+        repeat(2) {
+            rule.onNodeWithTag("player_portrait_fullscreen").assertIsDisplayed().performClick()
+            rule.runOnIdle {
+                assertTrue(portrait.value)
+                assertEquals(ContinuousPlayerOrientationRequest.Portrait, requestedOrientation.value)
+            }
+            // Click before portrait Configuration has arrived: this must enter, not toggle
+            // the old landscape exit phase into another portrait request.
+            rule.onNodeWithTag("player_fullscreen_toggle").assertIsDisplayed().performClick()
+            rule.runOnIdle {
+                assertTrue(!portrait.value)
+                assertEquals(ContinuousPlayerOrientationRequest.Landscape, requestedOrientation.value)
+                dispatch(ContinuousPlayerTransitionEvent.OrientationChanged(true))
+            }
+            rule.onNodeWithTag("player_fullscreen_toggle").assertIsDisplayed().performClick()
+            rule.runOnIdle {
+                assertEquals(ContinuousPlayerOrientationRequest.Portrait, requestedOrientation.value)
+                dispatch(ContinuousPlayerTransitionEvent.OrientationChanged(false))
+                dispatch(ContinuousPlayerTransitionEvent.CollapseFinished)
+                assertEquals(ContinuousPlayerTransitionPhase.Inline, phase.value)
             }
         }
     }

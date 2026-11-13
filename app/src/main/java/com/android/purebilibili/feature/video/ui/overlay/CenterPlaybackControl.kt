@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,17 +31,13 @@ import com.android.purebilibili.core.ui.components.AppIconButton
 import com.android.purebilibili.core.ui.components.AppSurface
 import com.android.purebilibili.core.ui.motion.continuityTween
 
-/**
- * 用户是否要求隐藏画面中央的播放/暂停按钮。
- *
- * 存储键沿用早期的 `hide_glass_center_playback`，因此设置对玻璃与原生两套材质同时生效，
- * 老用户的既有偏好也不会丢失。
- */
+/** 横竖屏和各材质读取同一份选择；设置未到达时也默认隐藏中央按钮。 */
 @Composable
-internal fun hideCenterPlayback(): Boolean {
+internal fun rememberHideCenterPlayback(): Boolean {
     val context = LocalContext.current
-    val hidden by PlayerSettingsStore.getHideGlassCenterPlayback(context)
-        .collectAsStateWithLifecycle(initialValue = false)
+    val hidden by remember(context) {
+        com.android.purebilibili.core.store.player.PlayerSettingsStore.getHideCenterPlayback(context)
+    }.collectAsStateWithLifecycle(initialValue = true)
     return hidden
 }
 

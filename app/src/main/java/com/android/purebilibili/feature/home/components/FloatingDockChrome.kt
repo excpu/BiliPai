@@ -174,6 +174,7 @@ internal fun Modifier.biliPaiFloatingDockShell(
 ): Modifier {
     val isDark = darkTheme ?: com.android.purebilibili.core.ui.isAppInDarkTheme()
     val density = LocalDensity.current
+    val materialBlur = rememberMaterialBackdropBlur(liquidGlassTuning)
     // 玻璃专属：嵌套外壳采样最近的材质层，原生磨砂路径继续使用调用方的背景。
     val parentGlass = com.android.purebilibili.core.ui.blur.LocalAppGlassContainer.current
         .takeIf { enabled && com.android.purebilibili.core.ui.LocalAppThemeConfig.current.liquidGlassEnabled }
@@ -231,6 +232,7 @@ internal fun Modifier.biliPaiFloatingDockShell(
             refractionAmountPx = refractionAmountPx,
             chromaticAberration = liquidGlassTuning.shellChromaticAberrationAmount,
             effectPaddingPx = effectPaddingPx,
+            materialBlur = materialBlur,
         )
         val highlightBlock = remember(baseHighlight, highlightAlpha) {
             val block: BackdropEffectScope.() -> Highlight? = {
@@ -341,6 +343,7 @@ internal fun Modifier.biliPaiFloatingDockCaptureSurface(
     }
     val scrimAlpha = liquidGlassTuning.contentReadabilityScrimAlpha
     val shapeBlock = remember(shape) { { shape } }
+    val materialBlur = rememberMaterialBackdropBlur(liquidGlassTuning)
     val effects = rememberFloatingDockBackdropEffects(
         blurRadiusPx = blurRadiusPx,
         saturation = liquidGlassTuning.saturation,
@@ -349,6 +352,7 @@ internal fun Modifier.biliPaiFloatingDockCaptureSurface(
         refractionAmountPx = refractionAmountPx,
         chromaticAberration = liquidGlassTuning.shellChromaticAberrationAmount,
         effectPaddingPx = 0f,
+        materialBlur = materialBlur,
     )
     val onDrawSurface = remember(surfaceColor, readabilityScrimColor, scrimAlpha) {
         val block: DrawScope.() -> Unit = {
@@ -378,6 +382,7 @@ private fun rememberFloatingDockBackdropEffects(
     refractionAmountPx: Float,
     chromaticAberration: Float,
     effectPaddingPx: Float,
+    materialBlur: BackdropEffectScope.(Float) -> Unit,
 ): BackdropEffectScope.() -> Unit = remember(
     blurRadiusPx,
     saturation,
@@ -386,6 +391,7 @@ private fun rememberFloatingDockBackdropEffects(
     refractionAmountPx,
     chromaticAberration,
     effectPaddingPx,
+    materialBlur,
 ) {
     {
         if (effectPaddingPx > 0f) {
@@ -398,7 +404,7 @@ private fun rememberFloatingDockBackdropEffects(
             padding = maxOf(padding, refractionAmountPx)
         }
         vibrancy(saturation)
-        blur(blurRadiusPx, blurRadiusPx)
+        materialBlur(blurRadiusPx)
         if (shouldDrawLens) {
             lens(
                 refractionHeight = refractionHeightPx,
@@ -421,6 +427,7 @@ internal fun BackdropEffectScope.homeIndicatorLens(
     indicatorScaleY: Float = 1f,
     shellScaleY: Float = 1f,
     chromaticBandHorizontal: Boolean = false,
+    gapOnlyDispersion: Boolean = true,
 ) {
     val gapBandDp = resolveFloatingDockChromaticGapBand(
         indicatorHeight = restHeightDp,
@@ -434,7 +441,7 @@ internal fun BackdropEffectScope.homeIndicatorLens(
         refractionAmount = 14.dp.toPx() * reach * tuning.indicatorEdgeWarpBoost * tuning.contentDistortionScale,
         depthEffect = true,
         chromaticAberration = resolveLiquidGlassIndicatorChromaticAberration(tuning),
-        chromaticEdgeBand = gapBandDp.dp.toPx(),
+        chromaticEdgeBand = if (gapOnlyDispersion) gapBandDp.dp.toPx() else null,
         chromaticBandHorizontal = chromaticBandHorizontal,
     )
 }
@@ -469,6 +476,8 @@ internal fun Modifier.floatingDockIndicatorOptics(
     vertical: Boolean = false,
     shellScaleProvider: () -> Float = { 1f },
     idleColor: Color? = null,
+    // 玻璃入口显式关闭缝隙遮罩；共享默认值保留原生调用行为。
+    gapOnlyDispersion: Boolean = true,
 ): Modifier {
     val thickness = if (vertical) width.value else height.value
     return drawBackdrop(
@@ -483,6 +492,7 @@ internal fun Modifier.floatingDockIndicatorOptics(
                 indicatorScaleY = if (vertical) scaleXProvider() else scaleYProvider(),
                 shellScaleY = shellScaleProvider(),
                 chromaticBandHorizontal = vertical,
+                gapOnlyDispersion = gapOnlyDispersion,
             )
         },
         highlight = { highlightProvider() },
@@ -513,6 +523,7 @@ internal fun BoxScope.BiliPaiFloatingDockIndicator(
     width: Dp,
     height: Dp,
     dockHeight: Dp = height * 64f / 56f,
+    gapOnlyDispersion: Boolean = true,
     combinedBackdrop: Backdrop?,
     pressProgress: Float,
     scaleX: Float,
@@ -580,6 +591,7 @@ internal fun BoxScope.BiliPaiFloatingDockIndicator(
                                     progress = progress,
                                     tuning = liquidGlassTuning,
                                     shellHeightDp = dockHeight.value,
+                                    gapOnlyDispersion = gapOnlyDispersion,
                                     // Match the exact layer transform used below, including
                                     // velocity compression, so the rim follows the visible pill.
                                     indicatorScaleY = liquidWobbleScaleY(

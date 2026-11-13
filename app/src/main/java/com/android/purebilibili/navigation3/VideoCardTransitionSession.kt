@@ -35,12 +35,40 @@ internal data class VideoCardTransitionSession(
     /** Navigation-host origin frozen at click, so the landing rect stays in one coordinate space. */
     val hostOriginInRoot: Offset = Offset.Zero,
     val sourcePixelOwner: VideoCardPixelOwner? = null,
+    val sourceAnchor: com.android.purebilibili.core.ui.transition.VideoCardSourceAnchor? = null,
+    val hasCompleteSourcePixels: Boolean = false,
 ) {
     val sourceInstanceId: Long?
         get() = sourcePixelOwner?.sourceInstanceId
 
     val hasUsableSourceGeometry: Boolean
-        get() = cardBounds != null && cardFullyVisible
+        get() = cardBounds != null && (cardFullyVisible || hasCompleteSourcePixels)
+
+    fun refreshedForReturn(): VideoCardTransitionSession {
+        val anchor = sourceAnchor ?: return this
+        val fullyVisibleBounds = anchor.boundsInRoot()
+        // 与进入共用部分可见策略；落位不会使已经完整捕获的整卡像素变成局部截图。
+        val currentBounds = fullyVisibleBounds ?: anchor.boundsInRoot(allowPartial = hasCompleteSourcePixels)
+        return withReturnBounds(currentBounds, fullyVisible = fullyVisibleBounds != null).copy(
+            sourceCornerDp = anchor.cornerRadiusDp() ?: sourceCornerDp,
+        )
+    }
+
+    /** 封面和信息面保持卡片内的实测相对位置，不重新按宽高比猜测布局。 */
+    internal fun withReturnBounds(current: Rect?, fullyVisible: Boolean = true): VideoCardTransitionSession {
+        val original = cardBounds
+        if (current == null || original == null || original.width <= 0f || original.height <= 0f) {
+            return copy(cardBounds = null, coverBounds = null, infoBounds = null, cardFullyVisible = false)
+        }
+        fun Rect.relocate() = Rect(
+            current.left + (left - original.left) * current.width / original.width,
+            current.top + (top - original.top) * current.height / original.height,
+            current.left + (right - original.left) * current.width / original.width,
+            current.top + (bottom - original.top) * current.height / original.height,
+        )
+        return copy(cardBounds = current, coverBounds = coverBounds?.relocate(),
+            infoBounds = infoBounds?.relocate(), cardFullyVisible = fullyVisible)
+    }
 
     companion object {
         fun create(
@@ -59,6 +87,8 @@ internal data class VideoCardTransitionSession(
             sourceChromeSnapshot: VideoCardSourceChromeSnapshot? = null,
             hostOriginInRoot: Offset = Offset.Zero,
             sourcePixelOwner: VideoCardPixelOwner? = null,
+            sourceAnchor: com.android.purebilibili.core.ui.transition.VideoCardSourceAnchor? = null,
+            hasCompleteSourcePixels: Boolean = false,
         ): VideoCardTransitionSession {
             val normalizedBvid = bvid.trim()
             val sourceBvid = source.key
@@ -69,6 +99,8 @@ internal data class VideoCardTransitionSession(
                 source.key != null && source.key == recordedSourceKey
             return VideoCardTransitionSession(
                 bvid = normalizedBvid,
+                sourceAnchor = sourceAnchor,
+                hasCompleteSourcePixels = ownsRecordedGeometry && hasCompleteSourcePixels,
                 sourceRoute = normalizeBiliPaiVideoSourceRoute(source.route),
                 sourceKey = source.key?.trim()?.takeIf(String::isNotEmpty),
                 cardBounds = cardBounds?.takeIf { ownsRecordedGeometry }?.let {

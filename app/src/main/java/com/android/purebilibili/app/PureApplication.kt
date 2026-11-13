@@ -38,7 +38,8 @@ import com.android.purebilibili.core.lifecycle.BackgroundManager
 import com.android.purebilibili.core.lifecycle.BACKGROUND_COVER_COLOR_CACHE_MAX_ENTRIES
 import com.android.purebilibili.core.lifecycle.BACKGROUND_IMAGE_CACHE_MAX_BYTES
 import com.android.purebilibili.core.lifecycle.BACKGROUND_IMAGE_TRIM_DELAY_MS
-import com.android.purebilibili.core.lifecycle.resolveBackgroundImageCacheTrimTargetBytes
+import com.android.purebilibili.core.ui.components.AppPageImageMemory
+import com.android.purebilibili.core.lifecycle.BackgroundImageCacheBudget
 import com.android.purebilibili.core.lifecycle.shouldTrimImageCacheAfterBackgroundDelay
 import com.android.purebilibili.core.network.NetworkModule
 import com.android.purebilibili.core.network.WbiKeyManager
@@ -98,6 +99,8 @@ class PureApplication : Application(), SingletonImageLoader.Factory, ComponentCa
 
     //  保存 ImageLoader 引用以便在 onTrimMemory 中使用
     private var _imageLoader: ImageLoader? = null
+    private var imageMemoryBudget: BackgroundImageCacheBudget? = null
+    private var fairMemoryTrimReceiver: android.content.BroadcastReceiver? = null
     private var launcherIconUiModeSnapshot: Int? = null
 
     private val backgroundImageTrimHandler by lazy { Handler(Looper.getMainLooper()) }
@@ -110,16 +113,9 @@ class PureApplication : Application(), SingletonImageLoader.Factory, ComponentCa
                 backgroundElapsedMs = SystemClock.elapsedRealtime() - enteredBackgroundForImageTrimAtMs,
             )
         ) {
-            // Keep a warm cache for return-to-home: covers must stay decodable without a
-            // disk round-trip, otherwise the first bottom-tab switch after resume competes
-            // with a decode storm. This never stops playback or clears a video surface.
-            // 封面代表色表与壁纸调色板只占几 KB，重建代价却是「解码 + Palette 聚类」，
-            // 因此不在这里清理。
-            _imageLoader?.memoryCache?.apply {
-                trimToSize(resolveBackgroundImageCacheTrimTargetBytes(size, BACKGROUND_IMAGE_TRIM_DELAY_MS))
-            }
-            // Raw bytes are reconstructible; active sessions retain their parsed playback window.
-            // Run on sustained background as modern Android may not send pressure callbacks.
+            // 页面引用与缓存分别释放；音频通知封面由播放会话独立持有，画中画在上方豁免。
+            AppPageImageMemory.release()
+            applyBackgroundImageCacheBudget(BACKGROUND_IMAGE_TRIM_DELAY_MS)
             com.android.purebilibili.data.repository.DanmakuContentRepository.clearCache()
             Logger.d(
                 PureApplicationRuntimeConfig.TAG,
@@ -136,15 +132,29 @@ class PureApplication : Application(), SingletonImageLoader.Factory, ComponentCa
             // the light budget synchronously while the process is still running.
             val miniPlayer = com.android.purebilibili.feature.video.player.MiniPlayerManager.getInstanceOrNull()
             if (!StartupRecovery.isRecoveryMode && miniPlayer?.shouldKeepPlaybackForPipTransition() != true) {
-                _imageLoader?.memoryCache?.apply {
-                    trimToSize(resolveBackgroundImageCacheTrimTargetBytes(size, 0L))
-                }
+                applyBackgroundImageCacheBudget(0L)
             }
             backgroundImageTrimHandler.postDelayed(delayedBackgroundImageTrim, BACKGROUND_IMAGE_TRIM_DELAY_MS)
         }
 
         override fun onEnterForeground() {
             backgroundImageTrimHandler.removeCallbacks(delayedBackgroundImageTrim)
+            imageMemoryBudget?.foreground()
+            AppPageImageMemory.resume()
+        }
+    }
+
+    private fun applyBackgroundImageCacheBudget(elapsedMs: Long) {
+        imageMemoryBudget?.background(elapsedMs)
+    }
+
+    private fun releaseBackgroundPageImages() {
+        if (BackgroundManager.isInBackground &&
+            com.android.purebilibili.feature.video.player.MiniPlayerManager.getInstanceOrNull()
+                ?.shouldKeepPlaybackForPipTransition() != true
+        ) {
+            AppPageImageMemory.release()
+            applyBackgroundImageCacheBudget(BACKGROUND_IMAGE_TRIM_DELAY_MS)
         }
     }
 
@@ -162,14 +172,12 @@ class PureApplication : Application(), SingletonImageLoader.Factory, ComponentCa
             isLowRamDevice = activityManager.isLowRamDevice
         )
         val diskCacheBytes = 100L * 1024 * 1024
-        // 图片请求集中在 i0/i1/i2.hdslb.com，默认每 host 只允许 5 个并发，
-        // 一屏几十张封面会排成几十批。这里不限制 per-host 并发，
-        // 交给 HTTP/2 多路复用自己调度（和 PiliPlus 的表现对齐）。
+        // 图片使用独立调度预算；离屏预加载另行串行让位，避免大量图片同时争用带宽。
         val imageCallFactory = NetworkModule.okHttpClient.newBuilder()
             .dispatcher(
                 okhttp3.Dispatcher().apply {
-                    maxRequests = 128
-                    maxRequestsPerHost = 128
+                    maxRequests = 32
+                    maxRequestsPerHost = 16
                 }
             )
             .build()
@@ -212,7 +220,18 @@ class PureApplication : Application(), SingletonImageLoader.Factory, ComponentCa
             .allowRgb565(false)
             .crossfade(true)
             .build()
-            .also { _imageLoader = it }  // 保存引用
+            .also {
+                _imageLoader = it
+                imageMemoryBudget = it.memoryCache?.let(::BackgroundImageCacheBudget)
+                if (BackgroundManager.isInBackground &&
+                    com.android.purebilibili.feature.video.player.MiniPlayerManager.getInstanceOrNull()
+                        ?.shouldKeepPlaybackForPipTransition() != true
+                ) {
+                    applyBackgroundImageCacheBudget(
+                        SystemClock.elapsedRealtime() - enteredBackgroundForImageTrimAtMs
+                    )
+                }
+            }
     }
     
     @OptIn(ExperimentalFoundationApi::class, dev.chrisbanes.haze.ExperimentalHazeApi::class)
@@ -320,6 +339,41 @@ class PureApplication : Application(), SingletonImageLoader.Factory, ComponentCa
     }
 
     private fun initializeNormalRuntime() {
+        fairMemoryTrimReceiver?.let { unregisterReceiver(it) }
+        fairMemoryTrimReceiver = com.android.purebilibili.core.lifecycle.registerFairMemoryReceiver(
+            context = this,
+            scope = AppScope.ioScope,
+            trim = {
+                kotlinx.coroutines.withContext(Dispatchers.Main.immediate) {
+                    releaseBackgroundPageImages()
+                    _imageLoader?.memoryCache?.clear()
+                }
+                releaseRebuildableMemoryCaches()
+                // 预警只清可重建缓存，不重置播放器、音频会话、画中画或活跃网络连接。
+            },
+            checkpoint = {
+                val (navigation, playback, accountMid) = kotlinx.coroutines.withContext(Dispatchers.Main.immediate) {
+                    val playback = com.android.purebilibili.feature.video.player.MiniPlayerManager.getInstanceOrNull()
+                        ?.captureForMemoryTermination()
+                    val episodeId = com.android.purebilibili.feature.video.player.PlaylistManager.getCurrentItem()
+                        ?.takeIf { it.bvid == playback?.bvid && it.cid == playback?.cid }?.epId
+                    Triple(
+                        com.android.purebilibili.core.lifecycle.FairMemoryNavigationRegistry.capture()?.let {
+                            com.android.purebilibili.core.lifecycle.withFairMemoryPlaybackPosition(it, playback, episodeId)
+                        },
+                        playback,
+                        TokenManager.midCache ?: 0L,
+                    )
+                }
+                com.android.purebilibili.feature.video.player.PlaylistManager.checkpointForMemoryTermination()
+                if (playback != null) {
+                    com.android.purebilibili.core.store.AudioPlaybackProgressStore.save(this, playback)
+                }
+                com.android.purebilibili.core.lifecycle.FairMemoryRecoveryStore.save(
+                    this, navigation, accountMid, NetworkModule.playbackAccount()?.mid ?: accountMid,
+                )
+            },
+        )
         AppScope.ioScope.launch {
             com.android.purebilibili.feature.audio.player.SystemMediaPreferences.observe(this@PureApplication)
         }
@@ -582,6 +636,7 @@ class PureApplication : Application(), SingletonImageLoader.Factory, ComponentCa
         if (com.android.purebilibili.feature.message.notification.isLightweightServiceProcess(this)) return
         if (StartupRecovery.isRecoveryMode) return
         val plan = PureApplicationRuntimeConfig.resolveBackgroundMemoryTrimPlan(level)
+        if (plan.clearImageMemoryCache) releaseBackgroundPageImages()
         if (plan.imageCacheTrimLevel != null) {
             _imageLoader?.memoryCache?.apply {
                 if (plan.clearImageMemoryCache) clear() else trimToSize(size / 2)
@@ -605,12 +660,7 @@ class PureApplication : Application(), SingletonImageLoader.Factory, ComponentCa
         // （BACKGROUND / MODERATE / COMPLETE）或前台临界（RUNNING_CRITICAL）时执行。
         // 壁纸调色板与封面代表色表体积可忽略，重建代价却是「解码 + Palette 聚类」，故不清理。
         if (plan.releaseDerivedCaches) {
-            com.android.purebilibili.data.repository.DanmakuContentRepository.clearCache()
-            com.android.purebilibili.feature.home.components.cards.VideoCardCoverColorStore
-                .trimToSize(BACKGROUND_COVER_COLOR_CACHE_MAX_ENTRIES)
-            com.android.purebilibili.core.cache.PlayUrlCache.clear()
-            com.android.purebilibili.data.repository.VideoRepository.clearVideoDetailCaches()
-            com.android.purebilibili.data.repository.VideoRepository.clearSubtitleCueCache()
+            releaseRebuildableMemoryCaches()
         }
 
         // 释放 OkHttp 空闲连接与 socket 缓冲；没有活跃的后台音频播放时才做。
@@ -624,6 +674,15 @@ class PureApplication : Application(), SingletonImageLoader.Factory, ComponentCa
         }
     }
     
+    private fun releaseRebuildableMemoryCaches() {
+        com.android.purebilibili.data.repository.DanmakuContentRepository.clearCache()
+        com.android.purebilibili.feature.home.components.cards.VideoCardCoverColorStore
+            .trimToSize(BACKGROUND_COVER_COLOR_CACHE_MAX_ENTRIES)
+        com.android.purebilibili.core.cache.PlayUrlCache.clear()
+        com.android.purebilibili.data.repository.VideoRepository.clearVideoDetailCaches()
+        com.android.purebilibili.data.repository.VideoRepository.clearSubtitleCueCache()
+    }
+
     override fun onLowMemory() {
         super.onLowMemory()
         if (com.android.purebilibili.feature.message.notification.isLightweightServiceProcess(this)) return
@@ -631,6 +690,7 @@ class PureApplication : Application(), SingletonImageLoader.Factory, ComponentCa
         val plan = PureApplicationRuntimeConfig.resolveBackgroundMemoryTrimPlan(
             ComponentCallbacks2.TRIM_MEMORY_COMPLETE
         )
+        releaseBackgroundPageImages()
         _imageLoader?.memoryCache?.clear()
         com.android.purebilibili.data.repository.DanmakuContentRepository.clearCache()
         if (plan.notifyPlayerHeavyOptimization) {
@@ -719,11 +779,6 @@ class PureApplication : Application(), SingletonImageLoader.Factory, ComponentCa
                     SettingsManager.getAppIcon(this@PureApplication).first()
                 )
                 val appearance = SettingsManager.getAppIconAppearance(this@PureApplication).first()
-                val defaultLauncherAlias = resolveAppIconLauncherAlias(
-                    packageName = packageName,
-                    rawKey = DEFAULT_APP_ICON_KEY,
-                    appearance = appearance
-                )
                 val splashIconVisible = SettingsManager.isSplashIconAnimationEnabledSync(this@PureApplication)
                 val cacheSynced = this@PureApplication
                     .getSharedPreferences("app_icon_cache", Context.MODE_PRIVATE)
@@ -733,70 +788,34 @@ class PureApplication : Application(), SingletonImageLoader.Factory, ComponentCa
                     .commit()
                 Logger.d(PureApplicationRuntimeConfig.TAG, " Synced app icon cache from DataStore: $currentIcon (success=$cacheSynced)")
 
-                val allUniqueAliases = allManagedAppIconLauncherAliases(packageName)
                 val targetAlias = resolveAppIconLauncherAlias(
                     packageName = packageName,
                     rawKey = currentIcon,
                     splashIconVisible = splashIconVisible,
-                    appearance = appearance
+                    appearance = appearance,
+                    themeIconIndex = com.android.purebilibili.core.store.getBiliPaiThemeIconIndexSync(this@PureApplication),
                 )
                 
                 val targetAliasComponent = android.content.ComponentName(packageName, targetAlias)
                 val targetState = pm.getComponentEnabledSetting(targetAliasComponent)
 
-                // 如果目标 alias 是 disabled（说明之前被禁用了，可能是重装），强制重置为默认图标。
-                if (currentIcon != DEFAULT_APP_ICON_KEY && targetState == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED) {
+                // 主题色切换会选择原先禁用的色板入口，不能将其作为重装依据。
+                // 其他固定图标沿用既有重装恢复规则。
+                if (currentIcon != DEFAULT_APP_ICON_KEY && currentIcon != com.android.purebilibili.core.store.BILIPAI_THEME_ICON_KEY && targetState == android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED) {
                     Logger.d(PureApplicationRuntimeConfig.TAG, " Detected reinstall: target icon '$currentIcon' is disabled, resetting to '$DEFAULT_APP_ICON_KEY'")
                     
                     SettingsManager.setAppIcon(this@PureApplication, DEFAULT_APP_ICON_KEY)
                     
-                    // 确保默认图标被启用
-                    val aliasDefault = android.content.ComponentName(packageName, defaultLauncherAlias)
-                    pm.setComponentEnabledSetting(
-                        aliasDefault,
-                        android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-                        android.content.pm.PackageManager.DONT_KILL_APP
-                    )
-                    // 禁用其他所有alias
-                    allUniqueAliases.filter { it != defaultLauncherAlias }.forEach { aliasFullName ->
-                        pm.setComponentEnabledSetting(
-                            android.content.ComponentName(packageName, aliasFullName),
-                            android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                            android.content.pm.PackageManager.DONT_KILL_APP
-                        )
-                    }
+                    com.android.purebilibili.core.store.syncAppLauncherIcon(this@PureApplication)
                     Logger.d(PureApplicationRuntimeConfig.TAG, " Reset to default icon: $DEFAULT_APP_ICON_KEY")
                     return@launch
                 }
                 
-                // 同步所有 alias 状态：只有目标启用，其他禁用
-                allUniqueAliases.forEach { aliasFullName ->
-                    try {
-                        val currentState = pm.getComponentEnabledSetting(
-                            android.content.ComponentName(packageName, aliasFullName)
-                        )
-                        val shouldBeEnabled = aliasFullName == targetAlias
-                        val targetState = if (shouldBeEnabled) {
-                            android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-                        } else {
-                            android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-                        }
-                        
-                        // 只在状态不一致时修改，减少不必要的操作
-                        if (currentState != targetState) {
-                            pm.setComponentEnabledSetting(
-                                android.content.ComponentName(packageName, aliasFullName),
-                                targetState,
-                                android.content.pm.PackageManager.DONT_KILL_APP
-                            )
-                        }
-                    } catch (e: Exception) {
-                        //  [容错] 忽略不存在的组件，防止崩溃
-                        Logger.d(PureApplicationRuntimeConfig.TAG, "⚠️ Component $aliasFullName not found, skipping")
-                    }
-                }
-                
+                com.android.purebilibili.core.store.syncAppLauncherIcon(this@PureApplication)
+
                 Logger.d(PureApplicationRuntimeConfig.TAG, " Synced app icon state: $currentIcon")
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
                 android.util.Log.e(PureApplicationRuntimeConfig.TAG, "Failed to sync app icon state", e)
             }

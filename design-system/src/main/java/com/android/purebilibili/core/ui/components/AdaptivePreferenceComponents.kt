@@ -9,6 +9,9 @@ import com.android.purebilibili.core.ui.LocalAppEntryIconColorCursor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -203,12 +206,12 @@ private fun rememberAdaptiveListRowVisualSpec(): AdaptiveListRowVisualSpec {
 internal fun resolveAdaptiveListRowVisualSpec(
     uiStyle: AppUiStyle,
 ): AdaptiveListRowVisualSpec {
-    // Shared app-authored rows use compact spacing in either material and theme.
+    // Miuix rows use native internal spacing under either material; MD3 keeps its app spacing.
     // Native renderers retain their intrinsic content height; long text can grow the row.
     return if (uiStyle == AppUiStyle.MIUIX) {
         AdaptiveListRowVisualSpec(
             insideHorizontalPaddingDp = 16,
-            insideVerticalPaddingDp = AppChromeSizeTokens.PreferenceVerticalPaddingDp,
+            insideVerticalPaddingDp = 16,
             trailingIconSizeDp = 14,
             trailingSpacingDp = 6,
             minTouchTargetHeightDp = AppChromeSizeTokens.CompactRowMinHeightDp
@@ -700,6 +703,7 @@ private fun AdaptiveSwitchPreferenceBody(
                     checked = checked,
                     onCheckedChange = onCheckedChange,
                     enabled = enabled,
+                    modifier = Modifier.clearAndSetSemantics { },
                 )
             },
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
@@ -707,11 +711,11 @@ private fun AdaptiveSwitchPreferenceBody(
                 .fillMaxWidth()
                 .alpha(if (enabled) 1f else 0.6f)
                 .heightIn(min = rowSpec.minTouchTargetHeightDp.dp)
-                .clickable(enabled = enabled) {
+                .toggleable(value = checked, enabled = enabled, role = Role.Switch) { next ->
                     if (hapticsEnabled) {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     }
-                    onCheckedChange(!checked)
+                    onCheckedChange(next)
                 },
         )
         return
@@ -724,9 +728,9 @@ private fun AdaptiveSwitchPreferenceBody(
             .fillMaxWidth()
             .heightIn(min = rowSpec.minTouchTargetHeightDp.dp)
             .alpha(if (enabled) 1f else 0.6f)
-            .clickable(enabled = enabled) {
+            .toggleable(value = checked, enabled = enabled, role = Role.Switch) { next ->
                 if (hapticsEnabled) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                onCheckedChange(!checked)
+                onCheckedChange(next)
             }
             .padding(
                 horizontal = rowSpec.insideHorizontalPaddingDp.dp,
@@ -772,7 +776,9 @@ private fun AdaptiveSwitchPreferenceBody(
         AppAdaptiveSwitch(
             checked = checked,
             onCheckedChange = onCheckedChange,
-            enabled = enabled
+            enabled = enabled,
+            // 整行提供名称与状态；内部开关保留触摸和滑动操作。
+            modifier = Modifier.clearAndSetSemantics { },
         )
     }
 }
@@ -1584,6 +1590,7 @@ fun AppSearchEntry(
     containerColor: Color = Color.Unspecified,
     centeredContent: Boolean = false,
     openOnFocus: Boolean = true,
+    showPlaceholder: Boolean = true,
 ) {
     val uiStyle = LocalAppUiStyle.current
     val hintColor = AppContentColors.secondaryText()
@@ -1602,10 +1609,13 @@ fun AppSearchEntry(
         horizontalArrangement = if (centeredContent) Arrangement.Center else Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AppIcon(Icons.Default.Search, contentDescription = null, tint = hintColor, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.width(8.dp))
-        AppText(placeholder, color = hintColor, style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        AppIcon(Icons.Default.Search, contentDescription = if (showPlaceholder) null else "搜索",
+            tint = hintColor, modifier = Modifier.size(22.dp))
+        if (showPlaceholder) {
+            Spacer(Modifier.width(8.dp))
+            AppText(placeholder, color = hintColor, style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        }
     }
 }
 

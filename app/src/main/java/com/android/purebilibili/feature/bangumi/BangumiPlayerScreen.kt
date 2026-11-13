@@ -1514,6 +1514,7 @@ fun BangumiPlayerScreen(
         onDismiss = { if (!sendingDanmaku) showDanmakuSend = false },
         isSending = sendingDanmaku,
         attentionCommandAvailable = false,
+        vipColorAvailable = successState?.isVip == true,
         onSend = { message, color, mode, fontSize, attentionCommand ->
             if (!sendingDanmaku) {
                 if (attentionCommand) {

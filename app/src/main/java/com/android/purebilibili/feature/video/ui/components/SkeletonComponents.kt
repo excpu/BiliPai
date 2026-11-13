@@ -34,6 +34,8 @@ import com.android.purebilibili.core.ui.ContainerLevel
  *  骨架屏组件 - iOS 风格加载占位
  */
 
+internal val LocalVideoDetailLoadingTitle = staticCompositionLocalOf { "" }
+
 private val LocalVideoSkeletonPulse = staticCompositionLocalOf<androidx.compose.runtime.State<Float>?> { null }
 private val LocalVideoSkeletonAnimationAllowed = staticCompositionLocalOf { true }
 
@@ -42,11 +44,17 @@ private val LocalVideoSkeletonAnimationAllowed = staticCompositionLocalOf { true
 fun ShimmerContainer(
     modifier: Modifier = Modifier,
     animated: Boolean = true,
+    sharedPulse: androidx.compose.runtime.State<Float>? = null,
     content: @Composable () -> Unit
 ) {
+    val animationGate = com.android.purebilibili.core.ui.rememberDecorativeAnimationGate(
+        respectComponentMotion = false,
+    )
     val animationAllowed = animated && LocalVideoSkeletonAnimationAllowed.current
     val pulse = if (animationAllowed) {
-        LocalVideoSkeletonPulse.current ?: rememberVideoSkeletonPulse()
+        sharedPulse ?: LocalVideoSkeletonPulse.current ?: com.android.purebilibili.core.ui.skeleton.rememberSkeletonSweepState(
+            animated = animationGate.active,
+        )
     } else {
         androidx.compose.runtime.rememberUpdatedState(Float.NaN)
     }
@@ -54,7 +62,7 @@ fun ShimmerContainer(
         LocalVideoSkeletonPulse provides pulse,
         LocalVideoSkeletonAnimationAllowed provides animationAllowed,
     ) {
-        Box(modifier = modifier) {
+        Box(modifier = modifier.then(animationGate.modifier)) {
             content()
         }
     }
@@ -83,10 +91,14 @@ fun SkeletonCircle(size: Dp = 48.dp) {
  *  视频详情页内容骨架屏（不包含播放器区域）
  */
 @Composable
-fun VideoDetailSkeleton(animated: Boolean = true) {
+fun VideoDetailSkeleton(
+    animated: Boolean = true,
+    sharedPulse: androidx.compose.runtime.State<Float>? = null,
+) {
     ShimmerContainer(
         modifier = Modifier.fillMaxSize(),
         animated = animated,
+        sharedPulse = sharedPulse,
     ) {
         Column(
             modifier = Modifier
@@ -217,11 +229,23 @@ private fun VideoDetailTitleInfoSkeleton() {
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Top
         ) {
-            SkeletonBox(
-                modifier = Modifier.weight(1f),
-                height = 18.dp,
-                cornerRadius = 9.dp
-            )
+            val loadingTitle = LocalVideoDetailLoadingTitle.current
+            if (loadingTitle.isNotBlank()) {
+                com.android.purebilibili.core.ui.components.AppText(
+                    text = loadingTitle,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = AppContentColors.primaryText(),
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            } else {
+                SkeletonBox(
+                    modifier = Modifier.weight(1f),
+                    height = 18.dp,
+                    cornerRadius = 9.dp
+                )
+            }
             Spacer(Modifier.width(8.dp))
             SkeletonBox(
                 modifier = Modifier.size(20.dp),
@@ -403,10 +427,6 @@ private fun SkeletonBlock(
             .skeletonBackground(rememberVideoSkeletonBlockColor())
     )
 }
-
-@Composable
-private fun rememberVideoSkeletonPulse(): androidx.compose.runtime.State<Float> =
-    com.android.purebilibili.core.ui.skeleton.rememberSkeletonSweepState()
 
 @Composable
 private fun rememberVideoSkeletonBlockColor(): () -> Color {

@@ -370,11 +370,18 @@ fun DynamicCardV2(
             onLiveClick = onLiveClick,
         )
     }
-    val articleContainer = if (!isDetail && onPrimaryClickOverride == null &&
-        onArticleClick != null && cardClickAction is DynamicCardPrimaryAction.OpenArticle
-    ) {
+    val primaryContainerTarget = when (val action = cardClickAction) {
+        is DynamicCardPrimaryAction.OpenArticle -> if (onArticleClick != null) {
+            com.android.purebilibili.navigation3.BiliPaiNavKey.ArticleDetail(action.articleId, action.title)
+        } else null
+        is DynamicCardPrimaryAction.OpenDynamicDetail -> if (openDynamicDetail != null) {
+            com.android.purebilibili.navigation3.BiliPaiNavKey.DynamicDetail(action.dynamicId)
+        } else null
+        else -> null
+    }
+    val primaryContainer = if (!isDetail && onPrimaryClickOverride == null && primaryContainerTarget != null) {
         com.android.purebilibili.core.ui.rememberNativeCardContainerTransition(
-            com.android.purebilibili.navigation3.BiliPaiNavKey.ArticleDetail(cardClickAction.articleId, cardClickAction.title),
+            primaryContainerTarget,
             openPrimaryArticle,
         )
     } else null
@@ -530,9 +537,14 @@ fun DynamicCardV2(
                     top = if (isDetail) AppSpacingTokens.Medium else AppSpacingTokens.ExtraSmall,
                     bottom = if (isDetail) AppSpacingTokens.None else AppSpacingTokens.ExtraSmall,
                 )
-                .then(articleContainer?.modifier ?: Modifier)
+                .then(primaryContainer?.modifier ?: Modifier)
                 .appActionClickable(enabled = isPrimaryClickEnabled) {
-                    if (articleContainer != null) articleContainer.onClick() else openPrimaryArticle()
+                    if (primaryContainer != null) {
+                        if (primaryContainerTarget is com.android.purebilibili.navigation3.BiliPaiNavKey.DynamicDetail) {
+                            DynamicRepository.rememberDynamicDetailSeed(item)
+                        }
+                        primaryContainer.onClick()
+                    } else openPrimaryArticle()
                 }
         ) {
         val context = LocalContext.current
@@ -594,26 +606,17 @@ fun DynamicCardV2(
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         AppText(
-                            authorTimeText,
+                            text = authorTimeText + author.pub_action.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty(),
                             fontSize = MaterialTheme.typography.labelSmall.fontSize,
-                            color = AppContentColors.secondaryText().copy(0.6f)
+                            color = AppContentColors.secondaryText().copy(0.6f),
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
                         )
-                        if (author.pub_action.isNotBlank()) {
-                            AppText(
-                                " · ${author.pub_action}",
-                                fontSize = MaterialTheme.typography.labelSmall.fontSize,
-                                color = AppContentColors.secondaryText().copy(0.6f)
-                            )
-                        }
-                        // 粉丝装扮牌（作者行时间旁的小徽章）
-                        author.decorate?.card_url?.takeIf { it.isNotBlank() }?.let { badgeUrl ->
-                            PageAwareAsyncImage(
-                                model = badgeUrl,
-                                contentDescription = author.decorate?.name,
-                                modifier = Modifier
-                                    .padding(start = AppSpacingTokens.ExtraSmall)
-                                    .height(14.dp),
-                                contentScale = ContentScale.FillHeight
+                        author.decorate?.let { decorate ->
+                            DynamicAuthorDecoration(
+                                decorate = decorate,
+                                modifier = Modifier.padding(start = AppSpacingTokens.ExtraSmall),
                             )
                         }
                     }
@@ -1207,6 +1210,7 @@ fun DynamicCardV2(
             val bangumiTarget = resolveArchiveBangumiTarget(pgc)
             VideoCardLarge(
                 archive = pgc,
+                sourceIdentity = bangumiTarget?.let { "bangumi_${it.seasonId}" } ?: pgc.bvid,
                 publishTs = author?.pub_ts ?: 0L,
                 cornerBadgeText = "番剧",
                 onClick = {

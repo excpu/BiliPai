@@ -2,9 +2,8 @@
 
 package com.android.purebilibili.feature.home.components
 
+import com.android.purebilibili.core.ui.transition.videoCardSourceAnchor
 import coil3.request.crossfade
-import coil3.compose.asPainter
-import coil3.Image
 
 import com.android.purebilibili.core.ui.AppSpacingTokens
 
@@ -57,23 +56,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.boundsInRoot
+import com.android.purebilibili.core.ui.transition.videoCardSourceBoundsInRoot
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -104,7 +96,6 @@ import com.android.purebilibili.core.ui.transition.VideoCardSourceChromeSnapshot
 import com.android.purebilibili.core.ui.transition.VideoCardSourceLayout
 import com.android.purebilibili.core.ui.transition.recordNativeVideoCardLayer
 import com.android.purebilibili.core.ui.transition.resolveVideoCardSharedTransitionMotionSpec
-import com.android.purebilibili.core.ui.transition.videoCardShellSharedBoundsOrEmpty
 import com.android.purebilibili.feature.home.components.cards.RegisterVisibleHomeCover
 import com.android.purebilibili.feature.home.components.cards.videoCardShellReturnChromeAlpha
 import com.android.purebilibili.feature.home.components.cards.isVideoCardSharedSourceInstanceOwner
@@ -182,8 +173,6 @@ internal fun HomeHeroCarousel(
         val carouselHeight = carouselWidth / aspectRatio
         // 封面流布局：pager 占满整行，用 contentPadding 让两侧邻卡露边折向中心。
         val horizontalPeekPadding = ((maxWidth - carouselWidth) / 2).coerceAtLeast(0.dp)
-        // 卡片下方镜面倒影高度（真实封面镜像，随距离渐隐）。
-        val reflectionHeight = carouselHeight * 0.10f
         HorizontalPager(
             state = pagerState,
             key = { page ->
@@ -195,7 +184,7 @@ internal fun HomeHeroCarousel(
             contentPadding = PaddingValues(horizontal = horizontalPeekPadding),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(carouselHeight + reflectionHeight)
+                .height(carouselHeight)
                 .align(Alignment.Center)
 
         ) { page ->
@@ -213,8 +202,6 @@ internal fun HomeHeroCarousel(
             }
             val activeForPlayback = autoplayEnabled && currentPage == page && settledNearCenter
             val isDissolving = video.bvid in dissolvingVideos
-            // 正图解码完成后由卡片回传，倒影直接复用同一 Image，不再二次解码。
-            var reflectionCoverImage by remember(video.bvid) { mutableStateOf<coil3.Image?>(null) }
             // 新横幅淡入：被消散移除后，下一条在原位轻柔浮现，避免硬切跳变。
             val entranceAlpha = remember(video.bvid) { androidx.compose.animation.core.Animatable(0f) }
             LaunchedEffect(video.bvid) {
@@ -232,67 +219,8 @@ internal fun HomeHeroCarousel(
                     onDissolveComplete = { onDissolveComplete(video.bvid) },
                     onLongPress = onLongPress,
                     onGetPreviewUrl = onGetPreviewUrl,
-                    onCoverImageDecoded = { reflectionCoverImage = it },
                 )
-                // 地面镜面倒影：镜像正图已解码的封面（同一 coil3.Image 复用，不发起第二个
-                // 图片请求/解码），向下渐隐（视频预览不参与，保持轻量）。
-                // 滑动渐隐在图层阶段直接读偏移（fraction 本身连续，无需再叠弹簧）；
-                // 弹簧只承担消散离场的离散淡出。
-                val reflectionContext = LocalContext.current
-                val reflectionPainter = remember(reflectionCoverImage, reflectionContext) {
-                    reflectionCoverImage?.asPainter(reflectionContext, FilterQuality.Low)
-                }
-                val dissolveFadeAlpha by animateFloatAsState(
-                    targetValue = if (isDissolving) 0f else 1f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioNoBouncy,
-                        stiffness = Spring.StiffnessMedium,
-                    ),
-                    label = "hero_reflection_alpha",
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(reflectionHeight)
-                        .graphicsLayer {
-                            scaleY = -1f
-                            val offset = pageOffsetProvider()
-                            val swipeAlpha =
-                                (1f - offset.absoluteValue * 0.5f).coerceIn(0f, 1f) * 0.9f
-                            alpha = swipeAlpha * dissolveFadeAlpha
-                            compositingStrategy = CompositingStrategy.Offscreen
-                        }
-                        .drawWithContent {
-                            val painter = reflectionPainter
-                            if (painter != null && painter.intrinsicSize.width >= 1f &&
-                                painter.intrinsicSize.height >= 1f
-                            ) {
-                                val srcWidth = painter.intrinsicSize.width
-                                val srcHeight = painter.intrinsicSize.height
-                                val cropScale = maxOf(size.width / srcWidth, size.height / srcHeight)
-                                val dstWidth = srcWidth * cropScale
-                                val dstHeight = srcHeight * cropScale
-                                clipRect {
-                                    translate(
-                                        (size.width - dstWidth) / 2f,
-                                        (size.height - dstHeight) / 2f,
-                                    ) {
-                                        with(painter) {
-                                            draw(Size(dstWidth, dstHeight), alpha = 0.30f)
-                                        }
-                                    }
-                                }
-                            }
-                            drawRect(
-                                brush = Brush.verticalGradient(
-                                    0f to Color.White.copy(alpha = 0.9f),
-                                    0.55f to Color.White.copy(alpha = 0.30f),
-                                    1f to Color.White.copy(alpha = 0.02f),
-                                ),
-                                blendMode = BlendMode.DstIn,
-                            )
-                        }
-                )
+
             }
         }
 
@@ -354,7 +282,6 @@ private fun HomeHeroCarouselCard(
     onDissolveComplete: () -> Unit,
     onLongPress: ((VideoItem) -> Unit)?,
     onGetPreviewUrl: suspend (String, Long) -> String?,
-    onCoverImageDecoded: (coil3.Image?) -> Unit = {},
 ) {
     val context = LocalContext.current
     var previewUrl by remember(video.bvid, video.cid) { mutableStateOf<String?>(null) }
@@ -472,7 +399,7 @@ private fun HomeHeroCarouselCard(
             // 防抖窗口内的点击注定被导航层拒绝；不得覆写在飞转场的全局记录与冻结像素。
             return@heroCardClick
         }
-        cardCoordsRef.value?.takeIf { it.isAttached }?.boundsInRoot()?.let { bounds ->
+        cardCoordsRef.value?.takeIf { it.isAttached }?.videoCardSourceBoundsInRoot()?.let { bounds ->
             CardPositionManager.recordVideoCardPosition(
                 bvid = video.bvid,
                 sourceRoute = sourceRoute,
@@ -514,7 +441,7 @@ private fun HomeHeroCarouselCard(
     val requestCardClick: () -> Unit = {
         if (!sourceEnabled) {
             clickAction()
-        } else if (sourceInteractionAllowed && !CardPositionManager.isVideoNavigationDebounceActive()) {
+        } else if (!isDissolving && !CardPositionManager.isVideoNavigationDebounceActive()) {
             sourceInteraction.requestClick()
         }
     }
@@ -561,15 +488,7 @@ private fun HomeHeroCarouselCard(
         modifier = Modifier
             .testTag("home_hero_video_card")
             .adaptiveCardHoverEffect(shape = cardShape, hoverShadowElevation = AppSpacingTokens.None)
-            .videoCardShellSharedBoundsOrEmpty(
-                enabled = useCardShellSharedBounds,
-                sharedTransitionScope = sharedTransitionScope,
-                animatedVisibilityScope = animatedVisibilityScope,
-                bvid = video.bvid,
-                sourceRoute = sourceRoute,
-                motionSpec = cardShellMotionSpec,
-                clipShape = cardShape
-            )
+            .videoCardSourceAnchor(video.bvid, cardShape)
             // 折角覆盖层差只有 0.01，层级按离散的当前页固定即可；
             // 连续 z 会导致滑动全程逐帧重建 zIndex 修饰符。
             .zIndex(if (isCenterPage) 1f else 0.99f)
@@ -618,7 +537,6 @@ private fun HomeHeroCarouselCard(
                     contentDescription = video.title,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
-                    onSuccess = { onCoverImageDecoded(it.result.image) },
                 )
                 if (activeForPlayback && previewUrl != null) {
                     MutedHeroVideoPlayer(url = previewUrl.orEmpty())

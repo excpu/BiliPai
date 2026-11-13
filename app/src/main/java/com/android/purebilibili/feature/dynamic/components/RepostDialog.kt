@@ -5,6 +5,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
@@ -35,14 +36,21 @@ fun RepostDialog(
             ShareRichTextTools(
                 contentKey = contentKey, enabled = !posting,
                 onAppend = { text = (text + it).take(2000) },
-                onMention = { user -> text = (text + "@${user.name} ").take(2000); mentions = mentions + (user.name to user.uid) },
+                onMentions = { selected ->
+                    val nextText = text + selected.joinToString(separator = "") { "@${it.name} " }
+                    if (nextText.length <= 2000) {
+                        text = nextText
+                        mentions = mentions + selected.associate { it.name to it.uid }
+                        true
+                    } else false
+                },
                 onTopic = { selected -> text = (text + "#${selected.name}# ").take(2000); topic = DynamicCreateTopic(selected.id, selected.name) },
             )
-            Row {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 AppCheckbox(checked = alsoComment, onCheckedChange = { if (!posting) alsoComment = it })
                 AppText("同时转发到评论区")
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 AppTextButton(onClick = onDismiss, enabled = !posting, modifier = Modifier.weight(1f)) { AppText("取消") }
                 AppButton(onClick = {
                     if (!posting) {

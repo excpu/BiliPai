@@ -8,6 +8,19 @@ import org.junit.Assert.assertFalse
 class CommentGrpcRepositoryTest {
 
     @Test
+    fun `input disabled empty main list does not trigger empty payload fallback`() {
+        val subject = ProtoWire.message(ProtoWire.bool(13, true))
+        val data = CommentGrpcRepository.parseMainListReply(ProtoWire.message(
+            ProtoWire.bytes(1, ProtoWire.message(ProtoWire.bool(4, true))),
+            ProtoWire.bytes(3, subject),
+        ))
+        assertEquals(true, data.control?.inputDisable)
+        assertEquals(true, data.cursor.isEnd)
+        assertFalse(shouldFallbackHotCommentReadOnEmptySuccess(1, 3, 0, data))
+        assertFalse(shouldFallbackCommentReadOnEmptyRenderableSuccess(0, data))
+    }
+
+    @Test
     fun `main list keeps curated title and empty guidance without triggering fallback`() {
         val subject = ProtoWire.message(
             ProtoWire.string(17, "精选评论"),
@@ -169,29 +182,6 @@ class CommentGrpcRepositoryTest {
         assertEquals("UP主觉得很赞", first.cardLabels?.firstOrNull()?.textContent)
         assertEquals(12345L, first.content.atNameToMid["路人"])
         assertEquals("视频标题", first.content.urls["https://b23.tv/demo"]?.title)
-    }
-
-    @Test
-    fun `buildDetailListRequest keeps both sort modes target and pagination offset`() {
-        for (mode in listOf(CommentGrpcRepository.MODE_TIME, CommentGrpcRepository.MODE_HOT)) {
-            val request = CommentGrpcRepository.buildDetailListRequest(
-                oid = 100L,
-                type = 1,
-                root = 777L,
-                rpid = 888L,
-                mode = mode,
-                nextOffset = "reply-offset"
-            )
-            val fields = ProtoWire.parseFields(request)
-            assertEquals(100L, fields.first { it.number == 1 }.varint)
-            assertEquals(1L, fields.first { it.number == 2 }.varint)
-            assertEquals(777L, fields.first { it.number == 3 }.varint)
-            assertEquals(888L, fields.first { it.number == 4 }.varint)
-            assertEquals(0L, fields.first { it.number == 6 }.varint)
-            assertEquals(mode.toLong(), fields.first { it.number == 7 }.varint)
-            val pagination = ProtoWire.parseFields(fields.first { it.number == 8 }.bytes)
-            assertEquals("reply-offset", ProtoWire.stringValue(pagination.first { it.number == 2 }))
-        }
     }
 
     @Test

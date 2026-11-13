@@ -29,7 +29,6 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
@@ -46,11 +45,10 @@ import com.android.purebilibili.core.ui.motion.BottomBarMotionSpec
 import com.android.purebilibili.core.ui.motion.continuityTween
 import com.android.purebilibili.core.ui.motion.emphasizedEnterTween
 import com.android.purebilibili.core.ui.motion.emphasizedExitTween
+import com.android.purebilibili.core.ui.motion.rememberSystemReduceMotion
 import com.android.purebilibili.core.ui.motion.softLandingSpring
 import dev.chrisbanes.haze.HazeState
 import top.yukonga.miuix.kmp.blur.Backdrop
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import com.android.purebilibili.core.ui.blur.currentUnifiedBlurIntensity
 
 internal enum class BottomBarLiquidOrientation {
@@ -313,6 +311,8 @@ internal fun BottomBarMatchedReusableLiquidDock(
      * Other chrome must leave this false.
      */
     reuseEnabled: Boolean = false,
+    // 独立场景由入口传入已包含总开关的结果；其余组件保留共享材质默认值。
+    materialEnabled: Boolean = LocalAppThemeConfig.current.liquidGlassEnabled,
     elasticFeedbackEnabled: Boolean = false,
     elasticFeedbackStrength: Float = 1f,
     allowConsumedDrag: () -> Boolean = { false },
@@ -327,7 +327,7 @@ internal fun BottomBarMatchedReusableLiquidDock(
     val elasticState = com.android.purebilibili.core.ui.components.rememberAppElasticPressState(
         feedbackStrength = elasticFeedbackStrength,
     )
-    val reuseAllowed = LocalAppThemeConfig.current.liquidGlassEnabled
+    val reuseAllowed = materialEnabled
     if (!reuseEnabled || !reuseAllowed || !liquidGlassEffectsEnabled) {
         val fallbackElasticFeedbackEnabled = elasticFeedbackEnabled &&
             !com.android.purebilibili.core.ui.isMiuixNonGlassEnabled()
@@ -357,8 +357,14 @@ internal fun BottomBarMatchedReusableLiquidDock(
     val parentGlass = com.android.purebilibili.core.ui.blur.LocalAppGlassContainer.current
         .takeIf { glassEnabled }
     val suppliedBackdrop = if (parentGlass != null) parentGlass.backdrop else backdrop
-    val localBackdrop = if (suppliedBackdrop == null) rememberLayerBackdrop() else null
-    val effectiveBackdrop = (suppliedBackdrop ?: localBackdrop)?.let {
+    // 纯色采样也必须实际录制；alpha(0) 会使隐藏层被跳过，折射读到空纹理。
+    val localBackdrop = if (suppliedBackdrop == null) {
+        com.android.purebilibili.core.ui.blur.rememberChromeBackdropSource(
+            drawContentToScreen = false,
+            recordingBackground = AppSurfaceTokens.background(),
+        )
+    } else null
+    val effectiveBackdrop = (suppliedBackdrop ?: localBackdrop?.takeIf { it.isReady }?.backdrop)?.let {
         com.android.purebilibili.feature.home.components.liquid.rememberStableBackdrop(it)
     }
     // 只录制外壳这一兄弟层，内部控件不得进入自身消费的背景源。
@@ -415,13 +421,7 @@ internal fun BottomBarMatchedReusableLiquidDock(
                     .then(if (drawShellLens) {
                         Modifier.bottomBarMatchedCaptureOverflow(captureSafeInset)
                     } else Modifier)
-                    .alpha(0f)
-                    .then(
-                        if (com.android.purebilibili.core.ui.blur.LocalChromeBackdropRecordingAllowed.current) {
-                            Modifier.layerBackdrop(localBackdrop)
-                        } else Modifier
-                    )
-                    .background(AppSurfaceTokens.background())
+                    .then(localBackdrop.modifier)
             )
         }
         BottomBarMatchedLiquidDock(
@@ -447,6 +447,7 @@ internal fun BottomBarMatchedReusableLiquidDock(
             ) {
                 com.android.purebilibili.core.ui.blur.AppGlassContainerContent(
                     enabled = glassEnabled,
+                    materialEnabled = materialEnabled,
                     backdrop = shellSource?.takeIf { it.isReady }?.backdrop ?: effectiveBackdrop,
                     ownsDeformation = elasticFeedbackEnabled,
                 ) { content(true) }
@@ -547,6 +548,7 @@ internal fun BottomBarMatchedDockVisibility(
     animateScale: Boolean = true,
     content: @Composable () -> Unit
 ) {
+    val reduceMotion = rememberSystemReduceMotion()
     val direction = if (edge == BottomBarMatchedDockEdge.BOTTOM) 1 else -1
     val transformOrigin = if (edge == BottomBarMatchedDockEdge.BOTTOM) {
         TransformOrigin(0.5f, 1f)
@@ -561,10 +563,14 @@ internal fun BottomBarMatchedDockVisibility(
         animationSpec = emphasizedExitTween(exitFadeDurationMillis),
         targetOffsetY = { height -> direction * height }
     ) + fadeOut(animationSpec = emphasizedExitTween(exitFadeDurationMillis))
+    // 一次显隐固定缩放策略，返回标记清除不能在动画中途重新加入缩放。
+    val scaleForTransition = remember(visible) { animateScale }
     AnimatedVisibility(
         visible = visible,
         modifier = modifier,
-        enter = if (animateScale) {
+        enter = if (reduceMotion) {
+            fadeIn(animationSpec = continuityTween(100))
+        } else if (scaleForTransition) {
             enterTransition + scaleIn(
                 animationSpec = softLandingSpring(),
                 initialScale = 0.96f,
@@ -573,7 +579,9 @@ internal fun BottomBarMatchedDockVisibility(
         } else {
             enterTransition
         },
-        exit = if (animateScale) {
+        exit = if (reduceMotion) {
+            fadeOut(animationSpec = continuityTween(100))
+        } else if (scaleForTransition) {
             exitTransition + scaleOut(
                 animationSpec = emphasizedExitTween(exitFadeDurationMillis),
                 targetScale = 0.92f,
@@ -596,6 +604,7 @@ internal fun BottomBarMatchedDockVisibility(
     animateScale: Boolean = true,
     content: @Composable () -> Unit
 ) {
+    val reduceMotion = rememberSystemReduceMotion()
     val direction = if (edge == BottomBarMatchedDockEdge.BOTTOM) 1 else -1
     val transformOrigin = if (edge == BottomBarMatchedDockEdge.BOTTOM) {
         TransformOrigin(0.5f, 1f)
@@ -610,10 +619,14 @@ internal fun BottomBarMatchedDockVisibility(
         animationSpec = emphasizedExitTween(exitFadeDurationMillis),
         targetOffsetY = { height -> direction * height }
     ) + fadeOut(animationSpec = emphasizedExitTween(exitFadeDurationMillis))
+    // 各材质共用显隐策略；只固定本次方向，不改变布局或材质参数。
+    val scaleForTransition = remember(visibleState.targetState) { animateScale }
     AnimatedVisibility(
         visibleState = visibleState,
         modifier = modifier,
-        enter = if (animateScale) {
+        enter = if (reduceMotion) {
+            fadeIn(animationSpec = continuityTween(100))
+        } else if (scaleForTransition) {
             enterTransition + scaleIn(
                 animationSpec = softLandingSpring(),
                 initialScale = 0.96f,
@@ -622,7 +635,9 @@ internal fun BottomBarMatchedDockVisibility(
         } else {
             enterTransition
         },
-        exit = if (animateScale) {
+        exit = if (reduceMotion) {
+            fadeOut(animationSpec = continuityTween(100))
+        } else if (scaleForTransition) {
             exitTransition + scaleOut(
                 animationSpec = emphasizedExitTween(exitFadeDurationMillis),
                 targetScale = 0.92f,

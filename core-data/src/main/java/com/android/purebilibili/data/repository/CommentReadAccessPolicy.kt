@@ -1,5 +1,6 @@
 package com.android.purebilibili.data.repository
 
+import com.android.purebilibili.core.network.grpc.BiliGrpcException
 import com.android.purebilibili.data.model.response.ReplyData
 import com.android.purebilibili.data.model.response.ReplyItem
 
@@ -32,12 +33,20 @@ internal fun shouldFallbackCommentRead(code: Int): Boolean {
     return code in setOf(-101, -111, -352, -403, -412)
 }
 
+/** 评论区限制是读取结果，不能被后续 REST 请求的错误覆盖。 */
+internal fun resolveGrpcCommentReadRestriction(failure: Throwable?): CommentReadException? {
+    val code = (failure as? BiliGrpcException)?.businessCode ?: return null
+    if (code != 12002 && code != 12061) return null
+    return CommentReadException(code).apply { initCause(failure) }
+}
+
 internal fun hasRenderableCommentPayload(data: ReplyData?): Boolean {
     if (data == null) return false
     return data.replies.orEmpty().isNotEmpty() ||
         data.hots.orEmpty().isNotEmpty() ||
         data.collectTopReplies().isNotEmpty() ||
         data.voteCard != null ||
+        data.control?.inputDisable == true ||
         !data.control?.sectionNotice().isNullOrBlank() ||
         !data.control?.emptyMessage().isNullOrBlank()
 }
@@ -119,6 +128,7 @@ internal fun resolveCommentReadErrorMessage(code: Int, serverMessage: String? = 
         -412 -> "请求被拦截，请稍后再试"
         12002 -> "评论区已关闭"
         12061 -> "评论区暂不可用"
+        12006 -> "评论不存在或暂不可见"
         12009 -> "评论内容不存在"
         else -> detail?.let { "$it ($code)" } ?: "加载评论失败 ($code)"
     }

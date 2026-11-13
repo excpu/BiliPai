@@ -120,7 +120,7 @@ fun CommentDetailScreen(
     }
 
     BackHandler(enabled = true) {
-        if (subReplyState.conversationAnchor != null) {
+        if (subReplyState.conversationAnchor != null && subReplyState.rootReply != null) {
             viewModel.closeConversation()
         } else {
             onBack()
@@ -159,7 +159,7 @@ fun CommentDetailScreen(
         ) {
             val rootReply = subReplyState.rootReply
             when {
-                subReplyState.isLoading && rootReply == null -> {
+                subReplyState.isLoading && rootReply == null && subReplyState.items.isEmpty() -> {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
@@ -167,7 +167,7 @@ fun CommentDetailScreen(
                         AdaptiveLoadingIndicator()
                     }
                 }
-                subReplyState.error != null && rootReply == null -> {
+                subReplyState.error != null && rootReply == null && subReplyState.items.isEmpty() -> {
                     MessageFeedError(
                         text = subReplyState.error ?: "加载失败",
                         onRetry = {
@@ -181,7 +181,7 @@ fun CommentDetailScreen(
                         modifier = Modifier.fillMaxSize()
                     )
                 }
-                rootReply != null -> {
+                rootReply != null || subReplyState.items.isNotEmpty() -> {
                     SubReplyDetailContent(
                         rootReply = rootReply,
                         subReplies = subReplyState.items,
@@ -197,7 +197,7 @@ fun CommentDetailScreen(
                         onSortModeChange = viewModel::setSortMode,
                         onDismiss = onBack,
                         applyStatusBarPadding = false,
-                        onRootCommentClick = { viewModel.showReplyInput(rootReply) },
+                        onRootCommentClick = rootReply?.let { root -> { viewModel.showReplyInput(root) } },
                         onReplyClick = { reply -> viewModel.showReplyInput(reply) },
                         onConversationClick = viewModel::openConversation,
                         onConversationBack = viewModel::closeConversation,

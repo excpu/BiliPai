@@ -148,11 +148,21 @@ enum class LiquidGlassMode(val value: Int, val label: String) {
     }
 }
 
+internal const val CLASSIC_FROSTED_GLASS_PROGRESS = 0.85f
+
+// 「清晰」预设锁定的材质进度：通透端玻璃，选中预设时随参数一并提交。
+internal const val READABLE_GLASS_PRESET_PROGRESS = 0.17561252f
+
+// 「均衡」预设锁定的材质进度：中点材质对应迁移前底栏玻璃的原始配方
+// （blur 4dp、底色 alpha 0.4、vibrancy 1.5、lens 24/24、色散 0.56、形变 1x）。
+internal const val BALANCED_GLASS_PRESET_PROGRESS = 0.5f
+
 enum class LiquidGlassAdvancedPreset(val value: Int, val label: String) {
     READABLE(0, "清晰"),
     BALANCED(1, "均衡"),
     PRISM(2, "棱镜"),
-    CUSTOM(3, "自定");
+    CUSTOM(3, "自定"),
+    CLASSIC_FROSTED(4, "经典磨砂");
 
     companion object {
         fun fromValue(value: Int): LiquidGlassAdvancedPreset =
@@ -178,12 +188,13 @@ internal fun resolveLiquidGlassAdvancedPreset(
 ): LiquidGlassAdvancedSettings = when (preset) {
     LiquidGlassAdvancedPreset.READABLE -> LiquidGlassAdvancedSettings(
         preset = preset,
-        progressiveBlurRadius = 0.25f,
-        progressiveBlurExtent = 0.6f,
-        progressiveBlurCurve = 0.4f,
-        contentReadability = 1f,
-        chromaticAberration = 0.08f,
-        contentDistortion = 0f,
+        // 采用用户确认的通透玻璃配置：通透端材质叠加均衡系高级参数。
+        progressiveBlurRadius = 0.40173537f,
+        progressiveBlurExtent = 0.99956614f,
+        progressiveBlurCurve = 0.5504339f,
+        contentReadability = 0.62043387f,
+        chromaticAberration = 0.56173533f,
+        contentDistortion = 0.4523861f,
     )
     LiquidGlassAdvancedPreset.BALANCED -> LiquidGlassAdvancedSettings(
         preset = preset,
@@ -202,6 +213,15 @@ internal fun resolveLiquidGlassAdvancedPreset(
         contentReadability = 0.72f,
         chromaticAberration = 0.96f,
         contentDistortion = 1f,
+    )
+    LiquidGlassAdvancedPreset.CLASSIC_FROSTED -> LiquidGlassAdvancedSettings(
+        preset = preset,
+        progressiveBlurRadius = 0.55f,
+        progressiveBlurExtent = 1f,
+        progressiveBlurCurve = 0.5f,
+        contentReadability = 0.65f,
+        chromaticAberration = 0f,
+        contentDistortion = 0f,
     )
     LiquidGlassAdvancedPreset.CUSTOM -> LiquidGlassAdvancedSettings(preset = preset)
 }
@@ -387,7 +407,7 @@ internal fun resolveHomeHeaderBlurModePreference(
 ): HomeHeaderBlurMode {
     return if (rawMode != null) {
         HomeHeaderBlurMode.fromValue(rawMode)
-    } else if (legacyEnabled == false) {
+    } else if (legacyEnabled != true) {
         HomeHeaderBlurMode.ALWAYS_OFF
     } else {
         HomeHeaderBlurMode.FOLLOW_PRESET
@@ -650,9 +670,10 @@ enum class BottomBarLiquidGlassPreset(
     }
 }
 
+// 设置流加载前使用相同的轻量视觉默认值，避免首帧短暂启用模糊或卡片展开。
 data class HomeSettings(
     val displayMode: Int = 0,              // 展示模式 (0=网格, 1=故事卡片)
-    val isBottomBarFloating: Boolean = true,
+    val isBottomBarFloating: Boolean = false,
     val navigationIconCrossScaleEnabled: Boolean = true,
     val bottomBarLabelMode: Int = 0,       // (0=图标+文字, 1=仅图标, 2=仅文字)
     val topTabLabelMode: Int = 2,          // (0=图标+文字, 1=仅图标, 2=仅文字)
@@ -660,8 +681,8 @@ data class HomeSettings(
     val hideTopTabs: Boolean = false,
     val homeTopRightAction: HomeTopRightAction = HomeTopRightAction.SETTINGS,
     val homeTopLayoutOrder: HomeTopLayoutOrder = HomeTopLayoutOrder.SEARCH_THEN_TABS,
-    val isHeaderBlurEnabled: Boolean = true,
-    val headerBlurMode: HomeHeaderBlurMode = HomeHeaderBlurMode.FOLLOW_PRESET,
+    val isHeaderBlurEnabled: Boolean = false,
+    val headerBlurMode: HomeHeaderBlurMode = HomeHeaderBlurMode.ALWAYS_OFF,
     val isBottomBarBlurEnabled: Boolean = false,
     val isTopBarLiquidGlassEnabled: Boolean = false,
     val isHomeSearchLiquidGlassEnabled: Boolean = false,
@@ -678,6 +699,7 @@ data class HomeSettings(
     val bottomBarSearchLayoutMode: BottomBarSearchLayoutMode =
         BottomBarSearchLayoutMode.FULL_DOCK,
     val androidNativeLiquidGlassEnabled: Boolean = false,
+    val liquidGlassScenes: com.android.purebilibili.core.ui.AppLiquidGlassSettings = com.android.purebilibili.core.ui.AppLiquidGlassSettings(),
     val liquidGlassStyle: LiquidGlassStyle = LiquidGlassStyle.CLASSIC, // [New]
     val liquidGlassMode: LiquidGlassMode = LiquidGlassMode.BALANCED,
     val liquidGlassStrength: Float = 0.52f,
@@ -691,19 +713,20 @@ data class HomeSettings(
         CommonListHeaderCollapseMode.SHOW_AT_TOP_ONLY,
     val isHeaderCollapseEnabled: Boolean = true,
     val showPgcTimeline: Boolean = true,
-    val gridColumnCount: Int = 0, // [New] 网格列数 (0=自动, 1-7=固定)——宽屏（折叠屏内屏/平板）
+    val gridColumnCount: Int = 0, // 宽屏横屏列数 (0=自动, 1-7=固定)
     val gridColumnCountCompact: Int = 0, // [New] 窄屏（折叠屏外屏/手机竖屏）独立列数记忆 (0=自动)
+    val gridColumnCountWidePortrait: Int = gridColumnCount,
     val gridColumnCustomizationEnabled: Boolean = true,
     val gridColumnsSharedAcrossPages: Boolean = true,
     val pinchToChangeGridColumnsEnabled: Boolean = true, // [新增] 双指缩放切换网格列数
     val homeFeedCardWidthPreset: HomeFeedCardWidthPreset = HomeFeedCardWidthPreset.AUTO,
     val homeFeedCardStyle: HomeFeedCardStyle = HomeFeedCardStyle.BILIPAI,
-    val homeHeroCarouselEnabled: Boolean = true,
+    val homeHeroCarouselEnabled: Boolean = false,
     val homeHeroCarouselAutoplayEnabled: Boolean = false,
     val homeRefreshTipVisible: Boolean = true, // 推荐流刷新后在旧内容分界处显示提示
     val homeRefreshUndoVisible: Boolean = false, // 刷新后的撤销按钮默认隐藏
     val cardAnimationEnabled: Boolean = false,    //  卡片进场动画（默认关闭）
-    val cardTransitionEnabled: Boolean = true,    //  卡片过渡动画（默认开启）
+    val cardTransitionEnabled: Boolean = false,   // 卡片展开过渡按需开启
     val videoSharedTransitionSpeed: VideoSharedTransitionSpeed = VideoSharedTransitionSpeed.STANDARD,
     val videoSharedTransitionCustomDurationMillis: Int =
         VIDEO_SHARED_TRANSITION_CUSTOM_DEFAULT_MILLIS,
@@ -720,7 +743,7 @@ data class HomeSettings(
     val showHomeInfoGlassBadges: Boolean = false,
     val homeCardBadgeEffectMode: HomeCardBadgeEffectMode = HomeCardBadgeEffectMode.OFF,
     val homeCardInfoGlassMode: HomeCardInfoGlassMode = HomeCardInfoGlassMode.OFF,
-    val homeWallpaperEffectMode: HomeWallpaperEffectMode = HomeWallpaperEffectMode.SOFT_BLUR,
+    val homeWallpaperEffectMode: HomeWallpaperEffectMode = HomeWallpaperEffectMode.OFF,
     val homeWallpaperEffectScope: HomeWallpaperEffectScope = HomeWallpaperEffectScope.HOME_ONLY,
     val showHomeUpBadges: Boolean = false, // 首页和相关推荐 UP 主标识显示(默认关闭,设置后全局生效)
     val showHomeUpAvatars: Boolean = false, // 首页视频卡片 UP 主头像显示(默认关闭,设置后全局生效)
@@ -735,8 +758,18 @@ data class HomeSettings(
     // 当 Flow 加载完成后，如果实际值是 false，LaunchedEffect 会再次触发并显示弹窗
     val crashTrackingConsentShown: Boolean = true
 ) {
-    val isLiquidGlassEnabled: Boolean
-        get() = androidNativeLiquidGlassEnabled
+    fun isGlassSceneEnabled(scene: com.android.purebilibili.core.ui.AppLiquidGlassScene): Boolean =
+        androidNativeLiquidGlassEnabled && liquidGlassScenes.isEnabled(scene)
+
+    val bottomDockGlassEnabled: Boolean get() = isGlassSceneEnabled(com.android.purebilibili.core.ui.AppLiquidGlassScene.BOTTOM_DOCK)
+    val homeTopGlassEnabled: Boolean get() = isGlassSceneEnabled(com.android.purebilibili.core.ui.AppLiquidGlassScene.HOME_TOP_BAR)
+    val homeSearchGlassEnabled: Boolean get() = isGlassSceneEnabled(com.android.purebilibili.core.ui.AppLiquidGlassScene.HOME_SEARCH)
+    val commentBarGlassEnabled: Boolean get() = isGlassSceneEnabled(com.android.purebilibili.core.ui.AppLiquidGlassScene.COMMENT_BAR)
+    val otherGlassEnabled: Boolean get() = isGlassSceneEnabled(com.android.purebilibili.core.ui.AppLiquidGlassScene.OTHER_COMPONENTS)
+    val playerGlassEnabled: Boolean get() = isGlassSceneEnabled(com.android.purebilibili.core.ui.AppLiquidGlassScene.PLAYER_CONTROLS)
+    val popupGlassEnabled: Boolean get() = isGlassSceneEnabled(com.android.purebilibili.core.ui.AppLiquidGlassScene.MENUS_DIALOGS)
+    val nowPlayingGlassEnabled: Boolean get() = isGlassSceneEnabled(com.android.purebilibili.core.ui.AppLiquidGlassScene.NOW_PLAYING)
+    val isLiquidGlassEnabled: Boolean get() = otherGlassEnabled
 }
 
 internal fun resolveHomeCardFrostedGlassEnabled(
@@ -1065,9 +1098,6 @@ data class AppNavigationSettings(
     val predictiveBackExitDirection: String = "always_right",
     val miuixTransitionBlurEnabled: Boolean = true,
     val miuixPredictiveBackMaxProgressPercent: Int = 100,
-    val videoSharedReturnGestureFollowEnabled: Boolean = true,
-    val videoSharedReturnGestureTranslationEnabled: Boolean = true,
-    val videoReturnContentFollowProgressEnabled: Boolean = true,
     val settingsContainerMorphEnabled: Boolean = true,
     val settingsContainerRealtimeBlurEnabled: Boolean = false,
     val liquidIndicatorWobbleEnabled: Boolean = true,
@@ -1429,6 +1459,7 @@ object SettingsManager {
         stringPreferencesKey("single_choice_presentation")
     private val KEY_BG_PLAY = booleanPreferencesKey("bg_play")
     //  [新增] 触感反馈 (默认开启)
+    private val KEY_LIQUID_GLASS_SCENES_DISABLED = intPreferencesKey("liquid_glass_scenes_disabled")
     private val KEY_HAPTIC_SCENES_DISABLED = intPreferencesKey("haptic_scenes_disabled")
     private val KEY_HAPTIC_FEEDBACK_ENABLED = booleanPreferencesKey("haptic_feedback_enabled")
     private val KEY_GLOBAL_TEXT_TAP_COPY_ENABLED =
@@ -1621,6 +1652,7 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
     private val KEY_SCREEN_DISPLAY_MODE_ID = intPreferencesKey("screen_display_mode_id")
     //  [新增] 网格列数 (0=Auto)
     private val KEY_GRID_COLUMN_COUNT = intPreferencesKey("grid_column_count")
+    private val KEY_GRID_COLUMN_COUNT_WIDE_PORTRAIT = intPreferencesKey("grid_column_count_wide_portrait")
     //  [新增] 窄屏（折叠屏外屏/手机竖屏）独立列数记忆，与宽屏（内屏/平板）的
     //  KEY_GRID_COLUMN_COUNT 互不影响；0=Auto（外屏自动解析为 2 列）。
     private val KEY_GRID_COLUMN_COUNT_COMPACT = intPreferencesKey("grid_column_count_compact")
@@ -1752,6 +1784,7 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
         booleanPreferencesKey("comment_avatar_push_enabled")
     private val KEY_COMMENT_MEMBER_DECORATIONS_ENABLED =
         booleanPreferencesKey("comment_member_decorations_enabled")
+    private val KEY_COMMENT_IP_LOCATION_ENABLED = booleanPreferencesKey("comment_ip_location_enabled")
     private val KEY_DETAILED_COMMENT_TIME_ENABLED =
         booleanPreferencesKey("detailed_comment_time_enabled")
     private val KEY_COMMENT_REPLY_PREVIEW_VISIBLE =
@@ -1839,7 +1872,7 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
         )
         return HomeSettings(
             displayMode = preferences[KEY_DISPLAY_MODE] ?: 0,
-            isBottomBarFloating = preferences[KEY_BOTTOM_BAR_FLOATING] ?: true,
+            isBottomBarFloating = preferences[KEY_BOTTOM_BAR_FLOATING] ?: false,
             navigationIconCrossScaleEnabled =
                 preferences[KEY_NAVIGATION_ICON_CROSS_SCALE_ENABLED] ?: true,
             bottomBarLabelMode = preferences[KEY_BOTTOM_BAR_LABEL_MODE] ?: BottomBarLabelMode.ICON_AND_TEXT,
@@ -1876,6 +1909,7 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
             androidNativeLiquidGlassEnabled =
                 preferences[KEY_ANDROID_NATIVE_LIQUID_GLASS_ENABLED]
                     ?: false,
+            liquidGlassScenes = com.android.purebilibili.core.ui.AppLiquidGlassSettings(preferences[KEY_LIQUID_GLASS_SCENES_DISABLED] ?: 0),
             liquidGlassStyle = legacyLiquidGlassStyle,
             liquidGlassMode = liquidGlassMode,
             liquidGlassStrength = liquidGlassStrength,
@@ -1894,6 +1928,9 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
             showPgcTimeline = preferences[KEY_SHOW_PGC_TIMELINE] ?: true,
             gridColumnCount = preferences[KEY_GRID_COLUMN_COUNT] ?: 0,
             gridColumnCountCompact = preferences[KEY_GRID_COLUMN_COUNT_COMPACT] ?: 0,
+            // 老设置只保存宽屏一份列数，拆分前两种方向都沿用该值。
+            gridColumnCountWidePortrait = preferences[KEY_GRID_COLUMN_COUNT_WIDE_PORTRAIT]
+                ?: preferences[KEY_GRID_COLUMN_COUNT] ?: 0,
             gridColumnCustomizationEnabled = preferences[KEY_GRID_COLUMN_CUSTOMIZATION_ENABLED] ?: true,
             gridColumnsSharedAcrossPages = preferences[KEY_GRID_COLUMNS_SHARED_ACROSS_PAGES] ?: true,
             pinchToChangeGridColumnsEnabled =
@@ -1910,7 +1947,7 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
             homeRefreshTipVisible = preferences[KEY_HOME_REFRESH_TIP_VISIBLE] ?: true,
             homeRefreshUndoVisible = preferences[KEY_HOME_REFRESH_UNDO_VISIBLE] ?: false,
             cardAnimationEnabled = preferences[KEY_CARD_ANIMATION_ENABLED] ?: false,
-            cardTransitionEnabled = preferences[KEY_CARD_TRANSITION_ENABLED] ?: true,
+            cardTransitionEnabled = preferences[KEY_CARD_TRANSITION_ENABLED] ?: false,
             videoSharedTransitionSpeed = VideoSharedTransitionSpeed.fromValue(
                 preferences[KEY_VIDEO_SHARED_TRANSITION_SPEED]
                     ?: VideoSharedTransitionSpeed.STANDARD.value
@@ -1932,7 +1969,7 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
             homeCardBadgeEffectMode = HomeCardBadgeEffectMode.OFF,
             homeCardInfoGlassMode = HomeCardInfoGlassMode.OFF,
             homeWallpaperEffectMode = HomeWallpaperEffectMode.fromValue(
-                preferences[KEY_HOME_WALLPAPER_EFFECT_MODE] ?: HomeWallpaperEffectMode.SOFT_BLUR.value
+                preferences[KEY_HOME_WALLPAPER_EFFECT_MODE] ?: HomeWallpaperEffectMode.OFF.value
             ),
             homeWallpaperEffectScope = HomeWallpaperEffectScope.fromValue(
                 preferences[KEY_HOME_WALLPAPER_EFFECT_SCOPE] ?: HomeWallpaperEffectScope.HOME_ONLY.value
@@ -3379,11 +3416,21 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
 
     suspend fun setGridColumnCount(context: Context, count: Int) {
         context.settingsDataStore.edit { preferences ->
+            // 首次调整横屏时冻结原宽屏值，不能连带改动尚未单独编辑的竖屏列数。
+            if (preferences[KEY_GRID_COLUMN_COUNT_WIDE_PORTRAIT] == null) {
+                preferences[KEY_GRID_COLUMN_COUNT_WIDE_PORTRAIT] = preferences[KEY_GRID_COLUMN_COUNT] ?: 0
+            }
             preferences[KEY_GRID_COLUMN_COUNT] = count.coerceIn(0, 7)
         }
     }
 
-    //  窄屏（折叠屏外屏/手机竖屏）独立列数记忆；内屏/平板写 setGridColumnCount。
+    suspend fun setGridColumnCountWidePortrait(context: Context, count: Int) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[KEY_GRID_COLUMN_COUNT_WIDE_PORTRAIT] = count.coerceIn(0, 7)
+        }
+    }
+
+    // 窄屏（折叠屏外屏/窄分屏）保持独立，不借用宽屏任一方向的列数。
     suspend fun setGridColumnCountCompact(context: Context, count: Int) {
         context.settingsDataStore.edit { preferences ->
             preferences[KEY_GRID_COLUMN_COUNT_COMPACT] = count.coerceIn(0, 4)
@@ -3495,9 +3542,9 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
         }
     }
     
-    //  [新增] --- 卡片过渡动画开关 ---
+    // 卡片展开过渡默认关闭，已保存的用户选择保持优先。
     fun getCardTransitionEnabled(context: Context): Flow<Boolean> = context.settingsDataStore.data
-        .map { preferences -> preferences[KEY_CARD_TRANSITION_ENABLED] ?: true }  // 默认开启
+        .map { preferences -> preferences[KEY_CARD_TRANSITION_ENABLED] ?: false }
 
     suspend fun setCardTransitionEnabled(context: Context, value: Boolean) {
         context.settingsDataStore.edit { preferences -> preferences[KEY_CARD_TRANSITION_ENABLED] = value }
@@ -3807,7 +3854,7 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
     fun getHomeWallpaperEffectMode(context: Context): Flow<HomeWallpaperEffectMode> = context.settingsDataStore.data
         .map { preferences ->
             HomeWallpaperEffectMode.fromValue(
-                preferences[KEY_HOME_WALLPAPER_EFFECT_MODE] ?: HomeWallpaperEffectMode.SOFT_BLUR.value
+                preferences[KEY_HOME_WALLPAPER_EFFECT_MODE] ?: HomeWallpaperEffectMode.OFF.value
             )
         }
 
@@ -4148,7 +4195,7 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
 
     //  [新增] --- 底部栏样式 ---
     fun getBottomBarFloating(context: Context): Flow<Boolean> = context.settingsDataStore.data
-        .map { preferences -> preferences[KEY_BOTTOM_BAR_FLOATING] ?: true }
+        .map { preferences -> preferences[KEY_BOTTOM_BAR_FLOATING] ?: false }
 
     suspend fun setBottomBarFloating(context: Context, value: Boolean) {
         context.settingsDataStore.edit { preferences -> preferences[KEY_BOTTOM_BAR_FLOATING] = value }
@@ -4751,6 +4798,18 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
         }
     }
 
+    fun getLiquidGlassScenes(context: Context): Flow<com.android.purebilibili.core.ui.AppLiquidGlassSettings> =
+        context.settingsDataStore.data.map {
+            com.android.purebilibili.core.ui.AppLiquidGlassSettings(it[KEY_LIQUID_GLASS_SCENES_DISABLED] ?: 0)
+        }
+
+    suspend fun setLiquidGlassSceneEnabled(context: Context, scene: com.android.purebilibili.core.ui.AppLiquidGlassScene, enabled: Boolean) {
+        context.settingsDataStore.edit { preferences ->
+            val current = com.android.purebilibili.core.ui.AppLiquidGlassSettings(preferences[KEY_LIQUID_GLASS_SCENES_DISABLED] ?: 0)
+            preferences[KEY_LIQUID_GLASS_SCENES_DISABLED] = current.withEnabled(scene, enabled).disabledMask
+        }
+    }
+
     fun getAndroidNativeLiquidGlassEnabled(context: Context): Flow<Boolean> =
         context.settingsDataStore.data
             .map { preferences ->
@@ -4907,8 +4966,23 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
     suspend fun setLiquidGlassAdvancedSettings(
         context: Context,
         settings: LiquidGlassAdvancedSettings,
+        presetProgress: Float? = null,
     ) {
         context.settingsDataStore.edit { preferences ->
+            // 一键预设同时提交材质与高级参数，避免出现半套配方。
+            presetProgress?.let { progress ->
+                val normalized = normalizeLiquidGlassProgress(progress)
+                preferences[KEY_LIQUID_GLASS_PROGRESS] = normalized
+                preferences[KEY_LIQUID_GLASS_MODE] = resolveLiquidGlassModeFromProgress(normalized).value
+                preferences[KEY_LIQUID_GLASS_STRENGTH] = resolveLiquidGlassStrengthFromProgress(normalized)
+                preferences[KEY_LIQUID_GLASS_STYLE] = resolveLegacyLiquidGlassStyleFromProgress(normalized).value
+                if (settings.preset == LiquidGlassAdvancedPreset.CLASSIC_FROSTED) {
+                    preferences[com.android.purebilibili.core.store.home.glassDockMotionStylePreferencesKey] =
+                        com.android.purebilibili.core.store.home.GlassMotionStyle.STANDARD.value
+                    preferences[com.android.purebilibili.core.store.home.glassPopupMotionStylePreferencesKey] =
+                        com.android.purebilibili.core.store.home.GlassMotionStyle.STANDARD.value
+                }
+            }
             preferences[KEY_LIQUID_GLASS_ADVANCED_PRESET] = settings.preset.value
             preferences[KEY_LIQUID_GLASS_PROGRESSIVE_BLUR_RADIUS] =
                 normalizeLiquidGlassAdvancedValue(settings.progressiveBlurRadius, 0.5f)
@@ -6697,6 +6771,16 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
         }
     }
 
+    fun getCommentIpLocationEnabled(context: Context): Flow<Boolean> =
+        context.settingsDataStore.data
+            .map { preferences -> preferences[KEY_COMMENT_IP_LOCATION_ENABLED] ?: true }
+
+    suspend fun setCommentIpLocationEnabled(context: Context, enabled: Boolean) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[KEY_COMMENT_IP_LOCATION_ENABLED] = enabled
+        }
+    }
+
     fun getDetailedCommentTimeEnabled(context: Context): Flow<Boolean> =
         context.settingsDataStore.data
             .map { preferences -> preferences[KEY_DETAILED_COMMENT_TIME_ENABLED] ?: false }
@@ -7664,6 +7748,7 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
     private val KEY_DANMAKU_HOT_BAR_ENABLED =
         booleanPreferencesKey("danmaku_hot_bar_enabled")
     private val KEY_HORIZONTAL_ADAPTATION = booleanPreferencesKey("horizontal_adaptation_enabled")
+    private val KEY_LANDSCAPE_BACK_COMMENTS = booleanPreferencesKey("landscape_back_shows_comments")
     private val KEY_FULLSCREEN_MODE = intPreferencesKey("fullscreen_mode")
     private val KEY_FULLSCREEN_ASPECT_RATIO = intPreferencesKey("fullscreen_aspect_ratio")
     const val DEFAULT_COMMENT_COLLAPSED_REPLY_PREVIEW_LIMIT = 3
@@ -8250,6 +8335,13 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
         }
     }
 
+    fun getLandscapeBackShowsComments(context: Context): Flow<Boolean> = context.settingsDataStore.data
+        .map { it[KEY_LANDSCAPE_BACK_COMMENTS] ?: false }
+
+    suspend fun setLandscapeBackShowsComments(context: Context, enabled: Boolean) {
+        context.settingsDataStore.edit { it[KEY_LANDSCAPE_BACK_COMMENTS] = enabled }
+    }
+
     fun getHorizontalAdaptationEnabled(context: Context): Flow<Boolean> = context.settingsDataStore.data
         .map { preferences ->
             preferences[KEY_HORIZONTAL_ADAPTATION] ?: isLargeScreenOrFoldableConfiguration(context)
@@ -8310,10 +8402,6 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
     private val KEY_PREDICTIVE_BACK_EXIT_DIRECTION = stringPreferencesKey("predictive_back_exit_direction")
     private val KEY_MIUIX_TRANSITION_BLUR_ENABLED =
         booleanPreferencesKey("miuix_transition_blur_enabled")
-    private val KEY_VIDEO_SHARED_RETURN_GESTURE_FOLLOW_ENABLED =
-        booleanPreferencesKey("video_shared_return_gesture_follow_enabled")
-    private val KEY_VIDEO_SHARED_RETURN_GESTURE_TRANSLATION_ENABLED =
-        booleanPreferencesKey("video_shared_return_gesture_translation_enabled")
     
     /**
      *  平板导航模式
@@ -8370,16 +8458,10 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
             miuixPredictiveBackMaxProgressPercent =
                 (preferences[miuixPredictiveBackMaxProgressPercentPreferencesKey] ?: 100)
                     .coerceIn(0, 100),
-            videoSharedReturnGestureFollowEnabled =
-                preferences[KEY_VIDEO_SHARED_RETURN_GESTURE_FOLLOW_ENABLED] ?: true,
-            videoReturnContentFollowProgressEnabled =
-                preferences[booleanPreferencesKey("video_return_content_follow_progress_enabled")] ?: true,
             settingsContainerMorphEnabled =
                 preferences[booleanPreferencesKey("settings_container_morph_enabled")] ?: true,
             settingsContainerRealtimeBlurEnabled =
                 preferences[booleanPreferencesKey("settings_container_realtime_blur_enabled")] ?: false,
-            videoSharedReturnGestureTranslationEnabled =
-                preferences[KEY_VIDEO_SHARED_RETURN_GESTURE_TRANSLATION_ENABLED] ?: true,
         )
     }
 
@@ -8437,14 +8519,6 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
         NavigationSettingsStore.setMiuixPredictiveBackMaxProgressPercent(context, percent)
     }
 
-    suspend fun setVideoSharedReturnGestureFollowEnabled(context: Context, enabled: Boolean) {
-        NavigationSettingsStore.setVideoSharedReturnGestureFollowEnabled(context, enabled)
-    }
-
-    suspend fun setVideoReturnContentFollowProgressEnabled(context: Context, enabled: Boolean) {
-        NavigationSettingsStore.setVideoReturnContentFollowProgressEnabled(context, enabled)
-    }
-
     fun getSettingsContainerRealtimeBlurEnabled(context: Context): Flow<Boolean> =
         NavigationSettingsStore.getSettingsContainerRealtimeBlurEnabled(context)
 
@@ -8457,10 +8531,6 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
 
     suspend fun setSettingsContainerMorphEnabled(context: Context, enabled: Boolean) {
         NavigationSettingsStore.setSettingsContainerMorphEnabled(context, enabled)
-    }
-
-    suspend fun setVideoSharedReturnGestureTranslationEnabled(context: Context, enabled: Boolean) {
-        NavigationSettingsStore.setVideoSharedReturnGestureTranslationEnabled(context, enabled)
     }
 
     fun getFullScreenSwipeBackEnabled(context: Context): Flow<Boolean> =
@@ -8733,6 +8803,7 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
                 KEY_ANDROID_NATIVE_LIQUID_GLASS_ENABLED,
                 SettingsShareSection.APPEARANCE
             ),
+            IntShareablePreferenceDefinition(KEY_LIQUID_GLASS_SCENES_DISABLED, SettingsShareSection.APPEARANCE),
             BooleanShareablePreferenceDefinition(KEY_LIQUID_GLASS_ENABLED, SettingsShareSection.APPEARANCE),
             IntShareablePreferenceDefinition(KEY_LIQUID_GLASS_STYLE, SettingsShareSection.APPEARANCE),
             IntShareablePreferenceDefinition(KEY_LIQUID_GLASS_MODE, SettingsShareSection.APPEARANCE),
@@ -8781,6 +8852,7 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
             IntShareablePreferenceDefinition(KEY_DISPLAY_MODE, SettingsShareSection.APPEARANCE),
             IntShareablePreferenceDefinition(KEY_GRID_COLUMN_COUNT, SettingsShareSection.APPEARANCE),
             IntShareablePreferenceDefinition(KEY_GRID_COLUMN_COUNT_COMPACT, SettingsShareSection.APPEARANCE),
+            IntShareablePreferenceDefinition(KEY_GRID_COLUMN_COUNT_WIDE_PORTRAIT, SettingsShareSection.APPEARANCE),
             BooleanShareablePreferenceDefinition(KEY_GRID_COLUMN_CUSTOMIZATION_ENABLED, SettingsShareSection.APPEARANCE),
             BooleanShareablePreferenceDefinition(KEY_GRID_COLUMNS_SHARED_ACROSS_PAGES, SettingsShareSection.APPEARANCE),
             BooleanShareablePreferenceDefinition(
@@ -8795,6 +8867,7 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
             BooleanShareablePreferenceDefinition(KEY_HOME_HERO_CAROUSEL_ENABLED, SettingsShareSection.APPEARANCE),
             BooleanShareablePreferenceDefinition(KEY_HOME_HERO_CAROUSEL_AUTOPLAY_ENABLED, SettingsShareSection.APPEARANCE),
             BooleanShareablePreferenceDefinition(KEY_CARD_ANIMATION_ENABLED, SettingsShareSection.APPEARANCE),
+            BooleanShareablePreferenceDefinition(SkeletonSettingsStore.breathingKey, SettingsShareSection.APPEARANCE),
             BooleanShareablePreferenceDefinition(KEY_MAID_LOTTIE_ANIMATION_ENABLED, SettingsShareSection.APPEARANCE),
             BooleanShareablePreferenceDefinition(KEY_UI_ENTRANCE_ANIMATION_ENABLED, SettingsShareSection.APPEARANCE),
             BooleanShareablePreferenceDefinition(KEY_GLOBAL_DRAG_FEEDBACK_ENABLED, SettingsShareSection.APPEARANCE),
@@ -8807,18 +8880,13 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
                 SettingsShareSection.APPEARANCE,
             ),
             BooleanShareablePreferenceDefinition(KEY_CARD_TRANSITION_ENABLED, SettingsShareSection.APPEARANCE),
-            BooleanShareablePreferenceDefinition(
-                booleanPreferencesKey("video_return_content_follow_progress_enabled"),
-                SettingsShareSection.APPEARANCE,
-            ),
-            BooleanShareablePreferenceDefinition(
-                KEY_LIVE_SURFACE_CARD_TRANSITION_ENABLED,
-                SettingsShareSection.APPEARANCE
-            ),
+            BooleanShareablePreferenceDefinition(KEY_LIVE_SURFACE_CARD_TRANSITION_ENABLED, SettingsShareSection.APPEARANCE),
+
             BooleanShareablePreferenceDefinition(
                 booleanPreferencesKey("settings_container_realtime_blur_enabled"),
                 SettingsShareSection.APPEARANCE,
             ),
+
             BooleanShareablePreferenceDefinition(
                 KEY_VIDEO_TRANSITION_REALTIME_BLUR_ENABLED,
                 SettingsShareSection.APPEARANCE
@@ -8831,19 +8899,8 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
                 miuixPredictiveBackMaxProgressPercentPreferencesKey,
                 SettingsShareSection.APPEARANCE,
             ),
-            BooleanShareablePreferenceDefinition(
-                KEY_VIDEO_SHARED_RETURN_GESTURE_FOLLOW_ENABLED,
-                SettingsShareSection.APPEARANCE,
-            ),
-            BooleanShareablePreferenceDefinition(
-                KEY_VIDEO_SHARED_RETURN_GESTURE_TRANSLATION_ENABLED,
-                SettingsShareSection.APPEARANCE,
-            ),
-            IntShareablePreferenceDefinition(KEY_VIDEO_SHARED_TRANSITION_SPEED, SettingsShareSection.APPEARANCE),
-            IntShareablePreferenceDefinition(
-                KEY_VIDEO_SHARED_TRANSITION_CUSTOM_DURATION_MILLIS,
-                SettingsShareSection.APPEARANCE
-            ),
+
+
             BooleanShareablePreferenceDefinition(KEY_COMPACT_VIDEO_STATS_ON_COVER, SettingsShareSection.APPEARANCE),
             StringShareablePreferenceDefinition(KEY_HOME_WALLPAPER_URI, SettingsShareSection.APPEARANCE),
             FloatShareablePreferenceDefinition(KEY_HOME_WALLPAPER_SCALE_MOBILE, SettingsShareSection.APPEARANCE),
@@ -8894,6 +8951,7 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
             BooleanShareablePreferenceDefinition(KEY_COMMENT_FRAUD_DETECTION_ENABLED, SettingsShareSection.PLAYBACK),
             BooleanShareablePreferenceDefinition(KEY_COMMENT_AVATAR_PUSH_ENABLED, SettingsShareSection.PLAYBACK),
             BooleanShareablePreferenceDefinition(KEY_COMMENT_MEMBER_DECORATIONS_ENABLED, SettingsShareSection.PLAYBACK),
+            BooleanShareablePreferenceDefinition(KEY_COMMENT_IP_LOCATION_ENABLED, SettingsShareSection.PLAYBACK),
             BooleanShareablePreferenceDefinition(KEY_DETAILED_COMMENT_TIME_ENABLED, SettingsShareSection.PLAYBACK),
             BooleanShareablePreferenceDefinition(KEY_IMAGE_PREVIEW_LONG_PRESS_SAVE_ENABLED, SettingsShareSection.PLAYBACK),
             BooleanShareablePreferenceDefinition(KEY_IMAGE_PREVIEW_3D_PAGE_ENABLED, SettingsShareSection.PLAYBACK),
@@ -8946,6 +9004,7 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
                 SettingsShareSection.PLAYBACK,
             ),
             BooleanShareablePreferenceDefinition(KEY_HORIZONTAL_ADAPTATION, SettingsShareSection.PLAYBACK),
+            BooleanShareablePreferenceDefinition(KEY_LANDSCAPE_BACK_COMMENTS, SettingsShareSection.PLAYBACK),
             BooleanShareablePreferenceDefinition(KEY_HIDE_VIDEO_PAGE_STATUS_BAR, SettingsShareSection.PLAYBACK),
             IntShareablePreferenceDefinition(KEY_TABLET_COMMENT_PANEL_WIDTH_PRESET, SettingsShareSection.PLAYBACK),
             IntShareablePreferenceDefinition(KEY_TABLET_SECONDARY_DEFAULT_TAB, SettingsShareSection.PLAYBACK),
@@ -9086,6 +9145,7 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
     private val liquidGlassShareableStorageKeys: Set<String> by lazy {
         setOf(
             KEY_ANDROID_NATIVE_LIQUID_GLASS_ENABLED.name,
+            KEY_LIQUID_GLASS_SCENES_DISABLED.name,
             KEY_LIQUID_CONTROLS_USE_THEME_COLOR.name,
             KEY_LIQUID_GLASS_ENABLED.name,
             KEY_TOP_BAR_LIQUID_GLASS_ENABLED.name,
@@ -9153,6 +9213,7 @@ private val KEY_APP_FONT_WEIGHT = intPreferencesKey("app_font_weight")
             KEY_LIQUID_CONTROLS_USE_THEME_COLOR.name to JsonPrimitive(
                 preferences[KEY_LIQUID_CONTROLS_USE_THEME_COLOR] ?: false
             ),
+            KEY_LIQUID_GLASS_SCENES_DISABLED.name to JsonPrimitive(preferences[KEY_LIQUID_GLASS_SCENES_DISABLED] ?: 0),
             KEY_ANDROID_NATIVE_LIQUID_GLASS_ENABLED.name to JsonPrimitive(
                 preferences[KEY_ANDROID_NATIVE_LIQUID_GLASS_ENABLED] ?: true
             ),

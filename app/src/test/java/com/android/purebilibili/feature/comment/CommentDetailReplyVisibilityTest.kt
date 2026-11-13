@@ -58,6 +58,9 @@ class CommentDetailReplyVisibilityTest {
             Result.success(remotePage(arg(0), arg(1), arg(2), arg(3), arg(4), arg(5)))
         }
         coEvery {
+            CommentRepository.getDialogCommentsForSubject(any(), any(), any(), any(), any(), any())
+        } returns Result.success(ReplyData(cursor = ReplyCursor(isEnd = true)))
+        coEvery {
             CommentRepository.addCommentForSubject(any(), any(), any(), any(), any(), any(), any())
         } returns Result.success(sent)
         coEvery { CommentRepository.deleteCommentForSubject(any(), any(), any()) } returns Result.success(Unit)
@@ -74,6 +77,61 @@ class CommentDetailReplyVisibilityTest {
         SentCommentReplyStores.clear()
         unmockkAll()
         Dispatchers.resetMain()
+    }
+
+    @Test
+    fun `target without readable root remains visible and can refresh into the complete thread`() = runTest(dispatcher) {
+        val target = first.copy(rpid = 91L, root = 90L, oid = 1001L, parent = 92L, dialog = 92L)
+        var complete = false
+        val requestedTargets = mutableListOf<Long>()
+        remotePage = { _, _, _, _, _, targetId ->
+            requestedTargets += targetId
+            if (complete) page(listOf(target, second.copy(root = 90L)), root = root.copy(rpid = 90L))
+            else ReplyData(replies = listOf(target), cursor = ReplyCursor(isEnd = true), isTargetOnly = true)
+        }
+        model.loadInitial(1001L, 90L, targetReplyId = 91L)
+        runCurrent()
+        assertNull(model.subReplyState.value.rootReply)
+        assertTrue(model.subReplyState.value.visible)
+        assertEquals(target, model.subReplyState.value.conversationAnchor)
+        assertEquals(90L, model.subReplyState.value.threadRootId)
+        assertEquals(listOf(91L), ids())
+        assertNull(model.subReplyState.value.error)
+        model.loadMore()
+        runCurrent()
+        assertEquals(listOf(91L), requestedTargets)
+
+        complete = true
+        model.refresh()
+        runCurrent()
+        assertEquals(listOf(91L, 91L), requestedTargets)
+        assertEquals(90L, model.subReplyState.value.rootReply?.rpid)
+        assertEquals(listOf(91L, 30L), ids())
+    }
+
+    @Test
+    fun `unreadable root does not block replying to the recovered target or hide it after failed refresh`() = runTest(dispatcher) {
+        val target = first.copy(rpid = 91L, root = 90L, oid = 1001L, parent = 92L, dialog = 92L)
+        remotePage = { _, _, _, _, _, _ ->
+            ReplyData(replies = listOf(target), cursor = ReplyCursor(isEnd = true), isTargetOnly = true)
+        }
+        model.loadInitial(1001L, 90L, targetReplyId = 91L)
+        runCurrent()
+        send(target)
+        assertEquals(listOf(91L, 50L), ids())
+        assertEquals(90L, model.subReplyState.value.items.last().root)
+        assertEquals(91L, model.subReplyState.value.items.last().parent)
+        assertFalse(model.isSending.value)
+
+        coEvery {
+            CommentRepository.getMobileSortedSubCommentsForSubject(any(), any(), any(), any(), any(), any(), any())
+        } returns Result.failure(IllegalStateException("offline"))
+        model.refresh()
+        runCurrent()
+        assertNull(model.subReplyState.value.rootReply)
+        assertEquals(91L, model.subReplyState.value.targetReplyId)
+        assertEquals(listOf(91L, 50L), ids())
+        assertEquals("offline", model.subReplyState.value.error)
     }
 
     @Test
@@ -226,23 +284,25 @@ class CommentDetailReplyVisibilityTest {
     }
 
     @Test
-    fun `conversation mode preserves the existing unfiltered item contract when sending and paging`() = runTest(dispatcher) {
-        remotePage = { _, _, _, _, offset, _ ->
-            if (offset == null) page(listOf(first), "more") else page(listOf(second))
-        }
+    fun `conversation mode loads the dialog list and restores the floor on close`() = runTest(dispatcher) {
+        val anchor = first.copy(rpid = 25L, parent = 20L, dialog = 20L)
+        remotePage = { _, _, _, _, _, _ -> page(listOf(first, anchor)) }
+        coEvery {
+            CommentRepository.getDialogCommentsForSubject(any(), any(), any(), any(), any(), any())
+        } returns Result.success(
+            ReplyData(replies = listOf(anchor), cursor = ReplyCursor(isEnd = true))
+        )
         model.refresh()
         runCurrent()
-        model.openConversation(first)
-        send(first)
-        model.loadMore()
+        model.openConversation(anchor)
         runCurrent()
 
-        assertEquals(first, model.subReplyState.value.conversationAnchor)
-        assertEquals(listOf(20L, 30L, 50L), ids())
-        assertEquals(model.subReplyState.value.items, model.subReplyState.value.baseItems)
+        assertEquals(anchor, model.subReplyState.value.conversationAnchor)
+        assertEquals(listOf(25L), ids())
         model.closeConversation()
+        runCurrent()
         assertNull(model.subReplyState.value.conversationAnchor)
-        assertEquals(listOf(20L, 30L, 50L), ids())
+        assertEquals(listOf(20L, 25L), ids())
     }
 
     @Test
@@ -590,11 +650,9 @@ class CommentDetailReplyVisibilityTest {
     @Test
     fun `wrong server root is an error and retry can open a root only thread without children`() = runTest(dispatcher) {
         var correctRoot = false
-        val targets = mutableListOf<Long>()
         coEvery {
             CommentRepository.getMobileSortedSubCommentsForSubject(any(), any(), any(), any(), any(), any(), any())
         } coAnswers {
-            targets += arg<Long>(5)
             Result.success(page(emptyList(), root = root.copy(
                 rpid = if (correctRoot) 90L else 10L, count = 0, rcount = 0,
             )))
@@ -606,7 +664,7 @@ class CommentDetailReplyVisibilityTest {
         correctRoot = true
         model.loadMore()
         runCurrent()
-        assertEquals(listOf(0L, 0L), targets)
+        assertEquals(0L, model.subReplyState.value.targetReplyId)
         assertEquals(90L, model.subReplyState.value.rootReply?.rpid)
         assertTrue(ids().isEmpty())
         assertNull(model.subReplyState.value.error)

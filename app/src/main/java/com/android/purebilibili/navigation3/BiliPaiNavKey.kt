@@ -191,6 +191,14 @@ internal sealed interface BiliPaiNavKey : NavKey {
     }
 
     @Serializable
+    data class PersonalRecapUps(
+        val window: com.android.purebilibili.feature.list.PersonalRecapWindow,
+        val stats: com.android.purebilibili.feature.list.PersonalVideoRecapStats,
+    ) : BiliPaiNavKey {
+        override val routeBase: String = "personal_recap_ups"
+    }
+
+    @Serializable
     data class HistorySearch(val query: String = "") : BiliPaiNavKey {
         override val routeBase: String = "history_search"
     }
@@ -472,6 +480,7 @@ internal sealed interface BiliPaiNavKey : NavKey {
         val sourceRoute: String? = null,
         /** 每次进入详情时刷新，避免同一视频复用已退出会话的 SaveableState。 */
         val openId: Long = 0L,
+        val title: String = "",
     ) : BiliPaiNavKey {
         override val routeBase: String = "video"
     }

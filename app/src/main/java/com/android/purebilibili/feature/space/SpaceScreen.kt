@@ -2,7 +2,7 @@ package com.android.purebilibili.feature.space
 
 import com.android.purebilibili.navigation.tabIndicatorPosition
 import com.android.purebilibili.navigation.isTabSelectionInProgress
-import com.android.purebilibili.feature.home.effectiveGridColumnCount
+import com.android.purebilibili.feature.home.effectiveGridColumnCountForWindow
 import com.android.purebilibili.feature.home.effectiveGridColumnCountCompact
 import com.android.purebilibili.feature.home.gridColumnPinchEnabled
 import androidx.lifecycle.viewmodel.initializer
@@ -172,7 +172,7 @@ import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.boundsInRoot
+import com.android.purebilibili.core.ui.transition.videoCardSourceBoundsInRoot
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
@@ -253,7 +253,7 @@ import com.android.purebilibili.core.ui.transition.videoCoverSharedElementKey
 import com.android.purebilibili.core.ui.transition.videoSharedElementBoundsTransformSpec
 import com.android.purebilibili.core.ui.transition.rememberNativeVideoCardSnapshotController
 import com.android.purebilibili.core.ui.transition.shouldUseVideoCardShellSharedBounds
-import com.android.purebilibili.core.ui.transition.videoCardShellSharedBoundsOrEmpty
+import com.android.purebilibili.core.ui.transition.videoCardSourceAnchor
 import com.android.purebilibili.core.ui.transition.withMeasuredCoverDecodeSize
 import com.android.purebilibili.feature.home.components.cards.videoCardShellReturnChromeAlpha
 import com.android.purebilibili.feature.home.resolveHomeFeedCardLayout
@@ -285,6 +285,7 @@ import com.android.purebilibili.data.model.response.VideoSortOrder
 import com.android.purebilibili.feature.dynamic.DynamicDeleteAction
 import com.android.purebilibili.feature.dynamic.DynamicViewModel
 import com.android.purebilibili.feature.dynamic.components.DynamicCardV2
+import com.android.purebilibili.feature.plugin.rememberSponsorFeedBadgeLabel
 import com.android.purebilibili.feature.dynamic.components.DynamicCardActions
 import com.android.purebilibili.feature.dynamic.components.DynamicCardInteractionActions
 import com.android.purebilibili.feature.dynamic.components.DynamicCardNavigationActions
@@ -1521,16 +1522,11 @@ private fun SpaceContent(
         },
         prepareNeighbors = { sourcePage ->
             val source = pageGridStates.getValue(displayedMainTabs[sourcePage].tab)
-            // All pages share the hero and primary rail. Match their vertical anchor before
-            // exposing a neighbor; content history is kept when the hero is already collapsed.
+            // 资料头或标签仍在视口时，覆盖目标页的旧正文位置并保留标签局部偏移。
+            // 两页均进入正文后才保留各自的内容历史，避免切到投稿时主标签突然消失。
             displayedMainTabs.forEachIndexed { index, tab ->
                 if (index != sourcePage) {
-                    val target = pageGridStates.getValue(tab.tab)
-                    if (source.firstVisibleItemIndex == 0) {
-                        target.requestScrollToItem(0, source.firstVisibleItemScrollOffset)
-                    } else if (target.firstVisibleItemIndex == 0) {
-                        target.requestScrollToItem(1)
-                    }
+                    alignSpacePageHeader(source, pageGridStates.getValue(tab.tab))
                 }
             }
         },
@@ -1819,7 +1815,7 @@ private fun SpaceContent(
             fixedColumnCount = resolveHomeFeedStoredColumnCount(
                 widthSizeClass = windowSizeClass.widthSizeClass,
                 compactColumnCount = homeSettings.effectiveGridColumnCountCompact,
-                defaultColumnCount = homeSettings.effectiveGridColumnCount,
+                defaultColumnCount = homeSettings.effectiveGridColumnCountForWindow(windowSizeClass),
             ),
             cardWidthPreset = homeSettings.homeFeedCardWidthPreset,
             contentMaxWidthDp = adaptiveLayoutSpec.contentMaxWidthDp,
@@ -1961,12 +1957,7 @@ private fun SpaceContent(
                     },
                     onContributionTabSelected = { id ->
                         if (id != state.selectedContributionTabId) {
-                            val target = contributionGridStateFor(id)
-                            if (gridState.firstVisibleItemIndex == 0) {
-                                target.requestScrollToItem(0, gridState.firstVisibleItemScrollOffset)
-                            } else if (target.firstVisibleItemIndex == 0) {
-                                target.requestScrollToItem(1)
-                            }
+                            alignSpacePageHeader(gridState, contributionGridStateFor(id))
                         }
                         onContributionTabSelected(id)
                     },
@@ -2686,7 +2677,8 @@ private fun SpaceContent(
                                                 localPositionMs = localProgressMs,
                                                 syncedProgress = state.watchProgressByBvid[video.bvid]
                                             ),
-                                            statusLabels = video.statusLabels,
+                                            statusLabels = video.statusLabels +
+                                                listOfNotNull(rememberSponsorFeedBadgeLabel(video.bvid)),
                                             isLocateHighlight = highlightedLocateBvid == video.bvid &&
                                                 isLocateHighlightVisible,
                                             modifier = boundedListModifier,
@@ -4093,7 +4085,7 @@ private fun SpaceSecondarySwitchRow(
     // Contribution categories keep the same content-sized Miuix buttons with
     // either glass preference. Scope the override to this row only.
     val tabThemeConfig = if (uiStyle == AppUiStyle.MIUIX) {
-        themeConfig.copy(liquidGlassEnabled = false)
+        themeConfig.copy(liquidGlassEnabled = false, popupGlassEnabled = false, playerGlassEnabled = false)
     } else {
         themeConfig
     }
@@ -4435,6 +4427,7 @@ private fun SpaceHomeVideoCard(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val sponsorStatusLabel = rememberSponsorFeedBadgeLabel(video.bvid)
     val locateHighlightColor by animateColorAsState(
         targetValue = if (isLocateHighlight) {
             AppContentColors.accent()
@@ -4513,20 +4506,12 @@ private fun SpaceHomeVideoCard(
 
     Column(
         modifier = modifier
-            .videoCardShellSharedBoundsOrEmpty(
-                enabled = useCardShellSharedBounds,
-                sharedTransitionScope = sharedTransitionScope,
-                animatedVisibilityScope = animatedVisibilityScope,
-                bvid = sharedTransitionKey.orEmpty(),
-                sourceRoute = sourceRoute,
-                motionSpec = cardSharedTransitionMotionSpec,
-                clipShape = coverShape
-            )
+            .videoCardSourceAnchor(sharedTransitionKey.orEmpty(), coverShape)
             .border(width = 3.dp, color = locateHighlightColor, shape = coverShape)
             .then(nativeCardSnapshot.modifier)
             .clip(coverShape)
             .onGloballyPositioned { coordinates ->
-                cardBounds = coordinates.boundsInRoot()
+                cardBounds = coordinates.videoCardSourceBoundsInRoot()
             }
             .appActionClickable spaceCardClick@{
                 if (CardPositionManager.isVideoNavigationDebounceActive()) {
@@ -4568,7 +4553,7 @@ private fun SpaceHomeVideoCard(
         Box(
             modifier = coverModifier
                 .onGloballyPositioned { coordinates ->
-                    coverBounds = coordinates.boundsInRoot()
+                    coverBounds = coordinates.videoCardSourceBoundsInRoot()
                 }
                 .fillMaxWidth()
                 .clip(coverShape)
@@ -4589,7 +4574,7 @@ private fun SpaceHomeVideoCard(
                     .then(nativeCardSnapshot.coverOverlayModifier),
             ) {
             VideoStatusBadges(
-                labels = video.statusLabels,
+                labels = video.statusLabels + listOfNotNull(sponsorStatusLabel),
                 modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
             )
             if (!badgeLabel.isNullOrBlank()) {
@@ -4704,6 +4689,7 @@ private fun SpaceAggregateMediaCard(
     animatedVisibilityScope: AnimatedVisibilityScope? = null
 ) {
     val context = LocalContext.current
+    val sponsorStatusLabel = rememberSponsorFeedBadgeLabel(item.bvid)
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val screenWidthPx = remember(configuration.screenWidthDp, density) {
@@ -4742,10 +4728,11 @@ private fun SpaceAggregateMediaCard(
     Column(
         modifier = modifier
             .padding(horizontal = 8.dp)
+            .videoCardSourceAnchor(sharedTransitionKey.orEmpty(), coverShape)
             .then(nativeCardSnapshot.modifier)
             .clip(coverShape)
             .onGloballyPositioned { coordinates ->
-                cardBounds = coordinates.boundsInRoot()
+                cardBounds = coordinates.videoCardSourceBoundsInRoot()
             }
             .appActionClickable spaceCardClick@{
                 if (CardPositionManager.isVideoNavigationDebounceActive()) {
@@ -4787,7 +4774,7 @@ private fun SpaceAggregateMediaCard(
         Box(
             modifier = coverModifier
                 .onGloballyPositioned { coordinates ->
-                    coverBounds = coordinates.boundsInRoot()
+                    coverBounds = coordinates.videoCardSourceBoundsInRoot()
                 }
                 .fillMaxWidth()
                 .height(118.dp)
@@ -4802,7 +4789,7 @@ private fun SpaceAggregateMediaCard(
             )
 
             VideoStatusBadges(
-                labels = item.statusLabels,
+                labels = item.statusLabels + listOfNotNull(sponsorStatusLabel),
                 modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
             )
             if (item.length.isNotBlank()) {
@@ -4891,6 +4878,7 @@ private fun SpaceTopVideoCard(
         publishTime = video.reason.ifBlank { FormatUtils.formatPublishTime(video.pubdate) },
         play = video.stat.view,
         secondaryCount = video.stat.danmaku,
+        statusLabels = listOfNotNull(rememberSponsorFeedBadgeLabel(video.bvid)),
         badgeLabel = "置顶",
         showTrailingMore = false,
         onClick = onClick,
@@ -4972,7 +4960,8 @@ private fun SpaceContributionArchiveVideoItem(
                 title = video.title,
                 cover = video.pic,
                 duration = video.length,
-                statusLabels = video.statusLabels,
+                statusLabels = video.statusLabels +
+                    listOfNotNull(rememberSponsorFeedBadgeLabel(video.bvid)),
                 publishTime = FormatUtils.formatPublishTime(video.created),
                 play = video.play.toLong(),
                 secondaryCount = video.comment.toLong(),
@@ -5098,22 +5087,13 @@ private fun SpaceArchiveListItemRow(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .videoCardShellSharedBoundsOrEmpty(
-                enabled = useCardShellSharedBounds,
-                sharedTransitionScope = sharedTransitionScope,
-                animatedVisibilityScope = animatedVisibilityScope,
-                bvid = sharedTransitionKey.orEmpty(),
-                sourceRoute = sourceRoute,
-                motionSpec = cardSharedTransitionMotionSpec,
-                clipShape = cardShellShape,
-                crossfadeSourceContent = true,
-            )
+            .videoCardSourceAnchor(sharedTransitionKey.orEmpty(), cardShellShape)
             .then(nativeCardSnapshot.modifier)
             .clip(cardShellShape)
             .background(AppSurfaceTokens.cardContainer())
             .border(width = 3.dp, color = locateHighlightColor, shape = cardShellShape)
             .onGloballyPositioned { coordinates ->
-                cardBounds = coordinates.boundsInRoot()
+                cardBounds = coordinates.videoCardSourceBoundsInRoot()
             }
             .appActionClickable spaceCardClick@{
                 if (CardPositionManager.isVideoNavigationDebounceActive()) {
@@ -5160,7 +5140,7 @@ private fun SpaceArchiveListItemRow(
             },
         coverModifier = Modifier
                 .onGloballyPositioned { coordinates ->
-                    coverBounds = coordinates.boundsInRoot()
+                    coverBounds = coordinates.videoCardSourceBoundsInRoot()
                 },
         coverContent = {
             AsyncImage(
@@ -6251,7 +6231,8 @@ private fun SpaceHeaderTitleBadge(
             if (title.subTitle.isNotBlank()) {
                 AppText(
                     text = title.subTitle,
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    fontFamily = com.android.purebilibili.core.ui.ClientDigitalIdFont,
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Normal),
                     color = subTitleColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis

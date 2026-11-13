@@ -28,6 +28,10 @@ internal fun SubReplyUiState.resetForSort(mode: SubReplySortMode): SubReplyUiSta
 internal fun isSortedSubReplyPageEnd(cursorIsEnd: Boolean, nextOffset: String?): Boolean =
     com.android.purebilibili.data.repository.isSortedSubReplyPageEnd(cursorIsEnd, nextOffset)
 
+/** No readable floor: only the recovered target (and its dialog) is available. */
+internal val SubReplyUiState.hasUnavailableFloor: Boolean
+    get() = rootReply == null && items.isNotEmpty()
+
 /** A new local reply belongs at the tail, not beside its parent in an earlier time page. */
 internal fun insertSentSubReply(
     items: List<ReplyItem>,
@@ -67,11 +71,9 @@ internal fun resolveSentSubReply(
     replyType = replyType,
     root = rootId,
     parent = parentId,
-    dialog = reply.dialog.takeIf { it > 0L } ?: target?.takeIf { it.rpid != rootId }?.let {
-        it.dialog.takeIf { id -> id > 0L }
-            ?: it.parent.takeIf { id -> id > 0L && id != rootId }
-            ?: it.rpid
-    } ?: 0L
+    dialog = reply.dialog.takeIf { it > 0L }
+        ?: target?.takeIf { it.root == rootId && it.parent != rootId }?.dialog?.takeIf { it > 0L }
+        ?: 0L
 )
 
 internal fun shouldApplySentSubReplyResult(
@@ -80,13 +82,13 @@ internal fun shouldApplySentSubReplyResult(
     currentSession: Long,
     state: SubReplyUiState
 ): Boolean = expectedRootId > 0L && expectedSession == currentSession &&
-    state.visible && state.rootReply?.rpid == expectedRootId
+    state.visible && state.threadRootId == expectedRootId
 
 internal fun SubReplyUiState.withSentSubReply(
     reply: ReplyItem,
     conversationItemsAreFiltered: Boolean = true
 ): SubReplyUiState {
-    if (!visible || rootReply?.rpid != reply.root) return this
+    if (!visible || threadRootId != reply.root) return this
     val allItems = if (conversationAnchor == null) items else baseItems
     val alreadyLoaded = allItems.any { it.rpid == reply.rpid } || items.any { it.rpid == reply.rpid }
     val updatedBase = insertSentSubReply(allItems, reply).toImmutableList()
@@ -94,16 +96,12 @@ internal fun SubReplyUiState.withSentSubReply(
     val belongsToConversation = anchor == null || !conversationItemsAreFiltered ||
         reply.parent == anchor.rpid ||
         (reply.parent != reply.root && items.any { it.rpid == reply.parent }) ||
-        (reply.dialog > 0L && reply.dialog == (
-            anchor.dialog.takeIf { it > 0L }
-                ?: anchor.parent.takeIf { it > 0L && it != reply.root }
-                ?: anchor.rpid
-            ))
+        (reply.dialog > 0L && reply.dialog == anchor.dialog)
     return copy(
         items = if (anchor == null) updatedBase else if (belongsToConversation) {
             insertSentSubReply(items, reply).toImmutableList()
         } else items,
         baseItems = updatedBase,
-        totalCount = totalCount + if (alreadyLoaded) 0 else 1
+        totalCount = if (rootReply == null) totalCount else totalCount + if (alreadyLoaded) 0 else 1
     )
 }
