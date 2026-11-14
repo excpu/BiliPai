@@ -7,22 +7,30 @@ import kotlin.test.assertTrue
 
 /**
  * 原生底栏几何策略：内嵌档（竖屏详情播放器）进度条贴满屏幕宽度、轨道贴底、
- * 与按钮行只留 2dp；横屏全屏保持 20dp 留白、轨道居中与 4dp 间距。
+ * 槽位与按钮行零间距（非玻璃预留 2dp、玻璃预留 4dp）；横屏全屏保持 20dp 留白、轨道居中与 4dp 间距。
  */
 class BottomControlBarGeometryPolicyTest {
 
     @Test
     fun progressGap_isTighterForInlineThanFullscreen() {
         assertEquals(4, piliPlayerProgressGapDp(isFullscreen = true))
-        assertEquals(2, piliPlayerProgressGapDp(isFullscreen = false))
+        assertEquals(0, piliPlayerProgressGapDp(isFullscreen = false))
+    }
+
+    @Test
+    fun bottomAnchorReserve_tightensInlineNonGlassWhileProtectingGlassPills() {
+        assertEquals(null, piliPlayerProgressBottomAnchorReserveDp(isFullscreen = true, liquidGlassEnabled = false))
+        assertEquals(null, piliPlayerProgressBottomAnchorReserveDp(isFullscreen = true, liquidGlassEnabled = true))
+        assertEquals(2, piliPlayerProgressBottomAnchorReserveDp(isFullscreen = false, liquidGlassEnabled = false))
+        assertEquals(4, piliPlayerProgressBottomAnchorReserveDp(isFullscreen = false, liquidGlassEnabled = true))
     }
 
     @Test
     fun columnHeight_tracksInlineGapForAvoidanceSeeds() {
-        // 内嵌无章节：行 30 + 间距 2 + 轨道槽 14 + 顶部留白 6。
-        assertEquals(52, piliPlayerBottomColumnHeightDp(hasChapters = false, isFullscreen = false))
+        // 内嵌无章节：行 30 + 间距 0 + 轨道槽 14 + 顶部留白 6。
+        assertEquals(50, piliPlayerBottomColumnHeightDp(hasChapters = false, isFullscreen = false))
         // 内嵌有章节：轨道槽换成 23dp 章节高度。
-        assertEquals(61, piliPlayerBottomColumnHeightDp(hasChapters = true, isFullscreen = false))
+        assertEquals(59, piliPlayerBottomColumnHeightDp(hasChapters = true, isFullscreen = false))
         // 全屏：间距 4 + 上下留白各 6。
         assertEquals(60, piliPlayerBottomColumnHeightDp(hasChapters = false, isFullscreen = true))
         assertEquals(69, piliPlayerBottomColumnHeightDp(hasChapters = true, isFullscreen = true))
@@ -51,7 +59,7 @@ class BottomControlBarGeometryPolicyTest {
             "槽位与按钮行的间距必须走同一策略函数，避免避让高度与实际布局分叉。",
         )
         assertTrue(source.contains("trackBottomAnchored = !isFullscreen"))
-        assertTrue(source.contains("bottomAnchorReserveDp = if (isFullscreen) null else 4.dp"))
+        assertTrue(source.contains("bottomAnchorReserveDp = piliPlayerProgressBottomAnchorReserveDp("))
     }
 
     @Test

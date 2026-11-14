@@ -34,13 +34,28 @@ enum class PlayerControlAnchor { QUALITY, SPEED, EPISODES, RATIO, TRANSLATION, S
 internal const val PILI_PLAYER_BOTTOM_ROW_HEIGHT_DP = 30
 internal const val PILI_PLAYER_BOTTOM_VERTICAL_PADDING_DP = 6
 internal const val PILI_PLAYER_PROGRESS_GAP_DP = 4
-/** 内嵌档轨道贴底后与按钮行的留白；全屏沿用 4dp。 */
-internal const val PILI_PLAYER_INLINE_PROGRESS_GAP_DP = 2
+/** 内嵌档轨道贴底后与按钮行零间距，保持图标上下视觉均衡；全屏沿用 4dp。 */
+internal const val PILI_PLAYER_INLINE_PROGRESS_GAP_DP = 0
 internal const val PILI_PLAYER_PROGRESS_HEIGHT_DP = 14
 internal const val PILI_PLAYER_CHAPTER_PROGRESS_HEIGHT_DP = 23
 
 internal fun piliPlayerProgressGapDp(isFullscreen: Boolean): Int =
     if (isFullscreen) PILI_PLAYER_PROGRESS_GAP_DP else PILI_PLAYER_INLINE_PROGRESS_GAP_DP
+
+/**
+ * 内嵌档轨道贴底预留高度：
+ * - 非玻璃：图标在 30dp 行内居中、底边外留白为 0dp，收紧为 2dp 预留让轨道底边贴近行顶，
+ *   缩小图标上方到进度条的距离，与图标下方到视频底边保持均衡。
+ * - 液态玻璃：34dp 圆形/胶囊向上下各溢出 2dp，保留 4dp 让轨道贴在玻璃胶囊上方而不重叠。
+ */
+internal fun piliPlayerProgressBottomAnchorReserveDp(
+    isFullscreen: Boolean,
+    liquidGlassEnabled: Boolean,
+): Int? = when {
+    isFullscreen -> null
+    liquidGlassEnabled -> 4
+    else -> 2
+}
 
 internal fun piliPlayerBottomControlsHeightDp(
     hasChapters: Boolean,

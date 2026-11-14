@@ -287,7 +287,7 @@ fun BottomControlBar(
                 WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)
             }
             val hasSegments = showViewPoints && viewPoints.isNotEmpty()
-            // 内嵌档轨道贴底后只留 2dp 呼吸；全屏保持原有间距。
+            // 内嵌档进度槽贴紧按钮行；全屏保持原有间距。
             Box(Modifier.windowInsetsPadding(seekInsets)
                 .padding(bottom = piliPlayerProgressGapDp(isFullscreen).dp)
                 .height((if (hasSegments) PILI_PLAYER_CHAPTER_PROGRESS_HEIGHT_DP else PILI_PLAYER_PROGRESS_HEIGHT_DP).dp)) {
@@ -312,7 +312,10 @@ fun BottomControlBar(
                     // 横竖屏与玻璃开关共用该槽位，控件行的位置不随拖动改变。
                     // 内嵌档轨道贴到槽位底部，收紧与按钮行之间的空白；全屏保持居中。
                     trackBottomAnchored = !isFullscreen,
-                    bottomAnchorReserveDp = if (isFullscreen) null else 4.dp,
+                    bottomAnchorReserveDp = piliPlayerProgressBottomAnchorReserveDp(
+                        isFullscreen = isFullscreen,
+                        liquidGlassEnabled = glass,
+                    )?.dp,
                     modifier = Modifier
                         .align(androidx.compose.ui.Alignment.BottomCenter)
                         .testTag("player_progress")
