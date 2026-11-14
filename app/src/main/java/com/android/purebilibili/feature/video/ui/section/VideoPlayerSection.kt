@@ -1964,7 +1964,30 @@ private fun VideoPlayerSectionContent(
             }
             .focusable()
     }
-    val playerContentModifier = Modifier
+    val adaptiveInfo = com.android.purebilibili.core.util.LocalAppWindowAdaptiveInfo.current
+    var playerTopInWindowPx by remember { mutableIntStateOf(0) }
+    // Tabletop 的媒体层共用上屏视口；控制栏仍在整窗底部，玻璃、MD3、Miuix 使用同一边界。
+    // 位置只在测量阶段读取，铰链窗口坐标需扣除播放器实际起点。
+    val tabletopPlayback = isFullscreen && !isInPipMode &&
+        adaptiveInfo.posture == com.android.purebilibili.core.util.AppFoldPosture.Tabletop
+    val tabletopMediaModifier = if (tabletopPlayback) Modifier.layout { measurable, constraints ->
+        val policy = com.android.purebilibili.core.util.resolvePlayerTabletopLayoutPolicy(
+            foldPosture = adaptiveInfo.posture,
+            hingeOrientation = adaptiveInfo.foldingFeature.hingeOrientation,
+            hingeTopPx = adaptiveInfo.foldingFeature.hingeBounds?.top?.minus(playerTopInWindowPx),
+            windowWidthPx = constraints.maxWidth,
+            windowHeightPx = constraints.maxHeight,
+            density = density,
+        )
+        val mediaHeight = policy.videoHostHeightDp?.dp?.roundToPx()
+        val placeable = measurable.measure(
+            if (mediaHeight != null) constraints.copy(minHeight = mediaHeight, maxHeight = mediaHeight)
+            else constraints,
+        )
+        // matchParentSize 的固定高度仍由外层占满，内部上屏视口从顶部摆放，避免被居中补偿。
+        layout(placeable.width, constraints.maxHeight) { placeable.placeRelative(0, 0) }
+    } else Modifier
+    val playerContentModifier = tabletopMediaModifier
         .fillMaxSize()
         .padding(top = contentTopInset)
         .layout { measurable, constraints ->
@@ -2003,13 +2026,15 @@ private fun VideoPlayerSectionContent(
         if (pageGlassSupported) hasUsedPageGlassTexture = true
     }
     // Keep page recording through chrome/paused-center exits without a polling job.
-    val pageGlassRequested = !suppressTransientOverlaysForTransition && (
+    val pageGlassRequested = playerVisualWorkActive && !suppressTransientOverlaysForTransition && (
         showControls || !observedIsPlaying ||
             (isGestureVisible && (gestureMode == VideoGestureMode.Brightness || gestureMode == VideoGestureMode.Volume))
         )
     val pageGlassVisibility = animateFloatAsState(
-        targetValue = if (pageGlassRequested) 1f else 0f,
-        animationSpec = if (suppressTransientOverlaysForTransition) snap() else continuityTween<Float>(
+        targetValue = if (pageGlassSupported && pageGlassRequested) 1f else 0f,
+        animationSpec = if (!playerVisualWorkActive || !pageGlassSupported ||
+            suppressTransientOverlaysForTransition
+        ) snap() else continuityTween<Float>(
             com.android.purebilibili.feature.video.ui.overlay.PLAYER_GLASS_VISIBILITY_DURATION_MS,
         ),
         label = "playerPageCaptureVisibility",
@@ -2021,10 +2046,28 @@ private fun VideoPlayerSectionContent(
         glassSupported = pageGlassSupported,
         controlsRequestCapture = pageGlassRequested,
         controlsExitVisible = pageGlassCaptureVisible,
-        hostStarted = hostLifecycleStarted,
+        visualWorkActive = playerVisualWorkActive,
         miniMode = MiniPlayerManager.getInstance(context).isMiniMode,
         overlaysSuppressed = suppressTransientOverlaysForTransition,
     )
+    val pageChromeBackdrop = playerPageBackdrop.backdrop.takeIf {
+        capturePlayerPage && playerPageBackdrop.video.isReady &&
+            playerViewRef?.videoSurfaceView is TextureView
+    }
+    val stageBackdropOutlet = LocalStagePageBackdropOutlet.current
+    if (stageBackdropOutlet != null) {
+        DisposableEffect(stageBackdropOutlet) {
+            onDispose {
+                stageBackdropOutlet.backdrop = null
+                stageBackdropOutlet.visible = false
+            }
+        }
+        // 出口不依赖 Success 控制层是否挂载；隐藏或播放器移走时也能撤销旧采样。
+        SideEffect {
+            stageBackdropOutlet.backdrop = pageChromeBackdrop
+            stageBackdropOutlet.visible = pageGlassRequested
+        }
+    }
     // 应用共享元素
     val livePlayerSharedElementEnabled = shouldEnableLivePlayerSharedElement(
             transitionEnabled = transitionEnabled,
@@ -2080,6 +2123,7 @@ private fun VideoPlayerSectionContent(
             .onGloballyPositioned {
                 danmakuTapCoordinates.value = it
                 val bounds = it.boundsInWindow()
+                playerTopInWindowPx = bounds.top.roundToInt()
                 val rootBounds = it.findRootCoordinates().boundsInWindow()
                 playerInViewport = it.isAttached && bounds.width > 0f && bounds.height > 0f && bounds.overlaps(rootBounds)
                 playerRightInWindow = it.boundsInWindow().right.roundToInt()
@@ -4050,7 +4094,7 @@ private fun VideoPlayerSectionContent(
         }
 
         // Keep the parent gesture stream reachable with hidden controls and native video output.
-        PlayerGestureInputSurface(modifier = Modifier.matchParentSize())
+        PlayerGestureInputSurface(modifier = tabletopMediaModifier.matchParentSize())
 
         LaunchedEffect(anime4kSurfaceReady, anime4kDisplayedFirstFrame) {
             if (anime4kSurfaceReady && anime4kDisplayedFirstFrame) {
@@ -4483,9 +4527,7 @@ private fun VideoPlayerSectionContent(
                     )
                 }
 
-                if (entryPresentationSpec.showManualStartPlayButton &&
-                    !com.android.purebilibili.feature.video.ui.overlay.rememberHideCenterPlayback()
-                ) {
+                if (entryPresentationSpec.showManualStartPlayButton) {
                     if (manualStartPlayButtonLayoutSpec.showCoverScrim) {
                         Box(
                             modifier = Modifier
@@ -5005,7 +5047,7 @@ private fun VideoPlayerSectionContent(
         }
 
         Box(
-            modifier = Modifier
+            modifier = tabletopMediaModifier
                 .matchParentSize()
                 .then(if (capturePlayerPage) playerPageBackdrop.subtitles.modifier else Modifier),
         ) {
@@ -5024,11 +5066,11 @@ private fun VideoPlayerSectionContent(
                 isAudioOnly = isAudioOnly,
                 suppressSubtitleOverlay = suppressSubtitleOverlay,
                 isFullscreen = isFullscreen,
-                controlsVisible = showControls,
+                controlsVisible = showControls && !tabletopPlayback,
                 endDrawerReservedWidthProvider = endDrawerReservedWidthProvider,
                 playerViewportSize = measuredPlayerViewportSize,
-                bottomControlsHeightPx = measuredBottomControlsHeightPx,
-                persistentBottomOverlayHeightProvider = { persistentChapterBarHeightPx },
+                bottomControlsHeightPx = if (tabletopPlayback) 0 else measuredBottomControlsHeightPx,
+                persistentBottomOverlayHeightProvider = { if (tabletopPlayback) 0 else persistentChapterBarHeightPx },
             )
         }
 
@@ -5700,10 +5742,7 @@ private fun VideoPlayerSectionContent(
                     LocalPlayerPanelViewport provides panelViewport.takeIf { panelAvoidanceEnabled },
                     com.android.purebilibili.feature.video.ui.overlay.LocalPlayerLevelGestureActive provides shouldShowLevelIndicator,
                     com.android.purebilibili.feature.video.ui.overlay.LocalPlayerPageBackdrop provides
-                        playerPageBackdrop.backdrop.takeIf {
-                            capturePlayerPage && playerPageBackdrop.video.isReady &&
-                                playerViewRef?.videoSurfaceView is TextureView
-                        },
+                        pageChromeBackdrop,
                 ) {
                     renderVideoPlayerOverlay()
                 }

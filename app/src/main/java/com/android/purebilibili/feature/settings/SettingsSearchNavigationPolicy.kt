@@ -3,6 +3,10 @@ package com.android.purebilibili.feature.settings
 import com.android.purebilibili.navigation3.BiliPaiNavKey
 
 internal fun resolveSettingsSearchNavigation(result: SettingsSearchResult): BiliPaiNavKey? {
+    // 场景内具体条目已指定分类时，不再被通用入口映射到其他子页。
+    if (isSceneSettingsSearchTarget(result.target)) {
+        result.page?.let { return resolveSettingsCategoryNavKey(it) }
+    }
     resolveSettingsSceneDetailFocus(result.target)?.let { detailFocus ->
         return when (detailFocus.target) {
             SettingsSearchTarget.APPEARANCE -> BiliPaiNavKey.AppearanceSettings
@@ -30,6 +34,7 @@ internal fun resolveSettingsSearchNavigation(result: SettingsSearchResult): Bili
         SettingsSearchTarget.WEBDAV_BACKUP -> BiliPaiNavKey.WebDavBackup
         SettingsSearchTarget.OPEN_SOURCE_LICENSES -> BiliPaiNavKey.OpenSourceLicenses
         SettingsSearchTarget.TIPS -> BiliPaiNavKey.TipsSettings
+        SettingsSearchTarget.KEYBOARD_SHORTCUTS -> BiliPaiNavKey.KeyboardShortcutsSettings
         // Leaf entries such as GitHub, update check and Telegram are actions hosted by their
         // root category. They used to resolve to null, so tapping a valid search result did
         // nothing. Open the owning category; the normal settings callbacks remain authoritative.

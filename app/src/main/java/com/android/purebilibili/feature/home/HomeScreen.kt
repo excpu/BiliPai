@@ -131,6 +131,10 @@ import com.android.purebilibili.core.ui.animation.gl.isThanosEffectSupported
 import com.android.purebilibili.core.ui.blur.rememberRecoverableHazeState
 import com.android.purebilibili.core.ui.blur.recoverableBlurEnabled
 import com.android.purebilibili.core.ui.blur.shouldAllowRenderEffectBackedHazeEffect
+import com.android.purebilibili.core.util.WindowHeightSizeClass
+import com.android.purebilibili.core.util.VideoDetailPresentationMode
+import com.android.purebilibili.core.util.VideoDetailPresentationInput
+import com.android.purebilibili.core.util.resolveVideoDetailPresentation
 import com.android.purebilibili.core.util.responsiveContentWidth
 import com.android.purebilibili.core.ui.adaptive.resolveDeviceUiProfile
 import com.android.purebilibili.core.ui.adaptive.resolveEffectiveMotionTier
@@ -202,6 +206,9 @@ val LocalHomeFeedScrollInProgress = compositionLocalOf { mutableStateOf(false) }
 fun HomeScreen(
     viewModel: HomeViewModel = viewModel(),
     onVideoClick: (HomeVideoClickRequest) -> Unit,
+    onCompanionVideoClick: (HomeVideoClickRequest) -> Unit = {},
+    availableFeedWidth: Dp? = null,
+    companionPaneEnabled: Boolean = true,
     onAvatarClick: () -> Unit,
     onProfileClick: () -> Unit,
     onLogout: (() -> Unit)? = null,
@@ -797,12 +804,6 @@ fun HomeScreen(
         )
     }
     val isLiquidGlassEnabled = homePerformanceConfig.isAnyLiquidGlassEnabled
-    val overlayPillColors = rememberHomeGlassPillColors(
-        glassEnabled = isLiquidGlassEnabled,
-        blurEnabled = isHeaderBlurEnabled || isBottomBarBlurEnabled,
-        emphasized = true,
-        baseColor = AppSurfaceTokens.cardContainer()
-    )
     val appThemeConfig = com.android.purebilibili.core.ui.LocalAppThemeConfig.current
     val chromeCategoryStateFlow = remember(viewModel, currentCategory, popularSubCategory) {
         if (currentCategory == HomeCategory.POPULAR) {
@@ -940,10 +941,12 @@ fun HomeScreen(
         onReturnAnimationConsumed = onVideoDetailReturnAnimationConsumed,
     )
 
+    // 列表面板按实际宽度排卡片；窗口分档仍用于决定视频是否可在右侧打开。
+    val feedWidth = availableFeedWidth ?: windowSizeClass.widthDp
     val contentWidth = if (windowSizeClass.isExpandedScreen) {
-        minOf(windowSizeClass.widthDp, resolveHomeFeedMaxContentWidth())
+        minOf(feedWidth, resolveHomeFeedMaxContentWidth())
     } else {
-        windowSizeClass.widthDp
+        feedWidth
     }
 
     // 是否为单列模式 (Story or Cinematic)
@@ -981,7 +984,12 @@ fun HomeScreen(
     )
     var isPinchPillVisible by remember { mutableStateOf(false) }
     var pinchPillDismissJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-    val effectiveGridColumns = gridColumnPreference.columns
+    val effectiveGridColumns = resolveHomeFeedPaneColumns(
+        requestedColumns = gridColumnPreference.columns,
+        paneWidthDp = availableFeedWidth?.value?.toInt(),
+        displayMode = displayMode,
+        cardWidthPreset = homeSettings.homeFeedCardWidthPreset,
+    )
     // 请求条数按列数换算（官方客户端由服务端按屏幕形态决定下发量，web 接口只能自己算）。
     LaunchedEffect(effectiveGridColumns) {
         viewModel.updateFeedGridColumns(effectiveGridColumns)
@@ -1309,7 +1317,11 @@ fun HomeScreen(
         resolveHomeTopPresetStyle(topChromePolicy, homeSettings.topTabLabelMode)
     }
     val homeTopSearchMetrics = resolveHomeTopSearchRowMetrics(
-        configuredHeight = homeTopPresetStyle.searchBarHeight,
+        // 与顶栏搜索场景使用相同测量，避免原生入口变高后内容预留与折叠距离仍用旧值。
+        configuredHeight = if (appUiStyle == com.android.purebilibili.core.theme.AppUiStyle.MIUIX &&
+            !homeSettings.homeSearchGlassEnabled
+        ) maxOf(homeTopPresetStyle.searchBarHeight, top.yukonga.miuix.kmp.basic.SearchBarDefaults.InputFieldMinHeight)
+            else homeTopPresetStyle.searchBarHeight,
         configuredTabsSpacing = homeTopPresetStyle.searchToTabsSpacing,
         bottomBarSearchEnabled = homeSettings.isBottomBarSearchEnabled,
         hideTopTabs = effectiveHomeSettings.hideTopTabs,
@@ -1497,6 +1509,21 @@ fun HomeScreen(
                 headerScrollState.setOffsetImmediately(headerOffsetProvider())
             }
     }
+    // 伴随面板窗口级资格：Expanded+ 宽度、非紧凑高度、非铰链避让姿态。
+    // 请求级条件（竖屏视频）在点击时逐次判定。
+    val companionPaneWindowEligible by rememberUpdatedState(
+        companionPaneEnabled && resolveVideoDetailPresentation(
+            VideoDetailPresentationInput(
+                isExpandedWindow = windowSizeClass.isExpandedScreen &&
+                    windowSizeClass.heightSizeClass != WindowHeightSizeClass.Compact,
+                foldPosture = appWindowAdaptiveInfo.posture,
+                isVerticalVideo = false,
+                requestsLandscapeFullscreen = false,
+                shouldAvoidHinge = appWindowAdaptiveInfo.shouldAvoidHinge,
+            )
+        ) == VideoDetailPresentationMode.COMPANION_PANE
+    )
+    val latestOnCompanionVideoClick by rememberUpdatedState(onCompanionVideoClick)
     //  包装 onVideoClick：点击视频时先隐藏底栏再导航
     val wrappedOnVideoClick: (HomeVideoClickRequest) -> Unit = remember(
         feedNavigation,
@@ -1512,6 +1539,11 @@ fun HomeScreen(
             if (request.episodeId > 0L ||
                 (request.dynamicId.isNotBlank() && !request.bvid.startsWith("BV", ignoreCase = true))) {
                 feedNavigation.onVideoClick(request)
+                return@homeClick
+            }
+            // 伴随面板：Expanded+ 窗口的普通横屏视频不推栈，feed 驻留左侧；竖屏视频保持整页接管。
+            if (companionPaneWindowEligible && !request.isVerticalVideo) {
+                latestOnCompanionVideoClick(request)
                 return@homeClick
             }
             val activeGridState = if (currentCategory == HomeCategory.POPULAR) {
@@ -1708,6 +1740,9 @@ fun HomeScreen(
                             beyondViewportPageCount = 0,
                             userScrollEnabled = homeTopPagerSwipeEnabled,
                             shouldYieldGesture = shouldYieldHomePagerToHeroCarousel,
+                            // 轮播按下时只停用外层识别器；移除 Miuix 接管节点会取消子树触摸。
+                            // 仅首页嵌套分页使用此策略，MD3 与玻璃材质的布局参数保持原样。
+                            useNativeGestures = true,
                             modifier = Modifier
                                 .fillMaxSize(),
                             key = { index -> resolveHomeTopTabEntryKey(topTabEntries, index) }
@@ -2273,7 +2308,6 @@ fun HomeScreen(
                                              }
                                              viewModel.refresh(category)
                                          },
-                                         overlayPillColors = overlayPillColors,
                                          todayWatchEnabled = todayWatch.enabled,
                                          todayWatchMode = todayWatch.mode,
                                          todayWatchPlan = todayWatch.plan,
@@ -2548,7 +2582,6 @@ fun HomeScreen(
                     oldContentStartIndex = recommendOldContentStartIndex,
                     refreshTipVisible = homeSettings.homeRefreshTipVisible,
                 ),
-                overlayPillColors = overlayPillColors,
             )
         }
 

@@ -99,7 +99,6 @@ import com.android.purebilibili.feature.home.resolveHomeTopCollapsedHandleHeight
 import com.android.purebilibili.feature.home.resolveHomeTopTabPresentationHeight
 import com.android.purebilibili.feature.home.HomeGlassResolvedColors
 import com.android.purebilibili.feature.home.rememberHomeGlassChromeColors
-import com.android.purebilibili.feature.home.rememberHomeGlassPillColors
 import com.android.purebilibili.feature.home.resolveHomeGlassChromeStyle
 import com.android.purebilibili.feature.home.resolveHomeGlassPillStyle
 import com.android.purebilibili.feature.home.components.liquid.vibrancy
@@ -398,8 +397,11 @@ internal fun resolveHomeTopTabYOffsetDp(isTabFloating: Boolean): Float {
 
 internal fun resolveHomeTopSearchBarHeight(
     chromePolicy: AppTopChromePolicy,
+    nativeMiuixSearch: Boolean = false,
 ): Dp {
-    return resolveHomeTopPresetStyle(chromePolicy, labelMode = 2).searchBarHeight
+    val presetHeight = resolveHomeTopPresetStyle(chromePolicy, labelMode = 2).searchBarHeight
+    return if (nativeMiuixSearch) maxOf(presetHeight, top.yukonga.miuix.kmp.basic.SearchBarDefaults.InputFieldMinHeight)
+        else presetHeight
 }
 
 internal data class HomeHeaderScrollLayout(
@@ -1473,6 +1475,59 @@ internal fun Modifier.homeTopChromeSurface(
 }
 
 @Composable
+private fun HomeTopRightActionButton(
+    nativeMiuix: Boolean,
+    onClick: () -> Unit,
+    contentDescription: String,
+    visualSize: Dp,
+    elasticState: com.android.purebilibili.core.ui.components.AppElasticPressState,
+    transformInBackdrop: Boolean,
+    modifier: Modifier = Modifier,
+    surfaceModifier: Modifier = Modifier,
+    overlay: @Composable BoxScope.() -> Unit = {},
+    content: @Composable () -> Unit,
+) {
+    val descriptionModifier = Modifier.semantics { this.contentDescription = contentDescription }
+    // 顶栏场景关闭玻璃时由原生按钮处理按压；其余材质保留既有形变。
+    if (nativeMiuix) {
+        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+            top.yukonga.miuix.kmp.basic.IconButton(
+                onClick = com.android.purebilibili.core.ui.components.appActionWithFeedback(onClick),
+                modifier = Modifier
+                    .matchParentSize()
+                    .then(descriptionModifier)
+                    .then(surfaceModifier),
+                backgroundColor = Color.Transparent,
+                content = content,
+            )
+            // 角标不参与按钮轮廓裁剪。
+            overlay()
+        }
+    } else {
+        Box(
+            modifier = modifier
+                .appElasticPress(
+                    visualSize = visualSize,
+                    state = elasticState,
+                    transformInBackdrop = transformInBackdrop,
+                )
+                .then(surfaceModifier)
+                .appActionClickable(
+                    interactionSource = null,
+                    indication = null,
+                    role = Role.Button,
+                    onClick = onClick,
+                )
+                .then(descriptionModifier),
+            contentAlignment = Alignment.Center,
+        ) {
+            content()
+            overlay()
+        }
+    }
+}
+
+@Composable
 private fun HomeHeaderControlBounds(
     modifier: Modifier,
     content: @Composable BoxWithConstraintsScope.() -> Unit,
@@ -1601,6 +1656,7 @@ fun HomeHeader(
     val searchLiquidGlassEnabled = resolveHomeTopSearchLiquidGlassEnabled(
         homeSettings = homeSettings,
     )
+    val nativeMiuixSearch = LocalAppUiStyle.current == AppUiStyle.MIUIX && !searchLiquidGlassEnabled
     // Local search/settings surfaces follow their own header/glass switches.
     // Progressive header blur and bottom dock blur must not frost these controls.
     val searchChromeMaterialMode = resolveHomeTopChromeMaterialMode(
@@ -1797,6 +1853,7 @@ fun HomeHeader(
     // Until the feed source is ready, keep the tinted/blur fallback without recording ourselves.
     val topActionBackdrop = miuixBackdrop
     val topActionGlassActive = topChromeLiquidGlassEnabled && topActionBackdrop != null
+    val useNativeTopAction = LocalAppUiStyle.current == AppUiStyle.MIUIX && !topChromeLiquidGlassEnabled
     val topActionElasticState = rememberAppElasticPressState(
         visualSize = resolveHomeTopSettingsButtonSize(topChromePolicy),
     )
@@ -1866,7 +1923,7 @@ fun HomeHeader(
     val bottomBarSearchEnabled = homeSettings?.isBottomBarSearchEnabled == true &&
         homeSettings?.keepHomeTopSearchWithBottomSearch != true
     val topSearchMetrics = resolveHomeTopSearchRowMetrics(
-        configuredHeight = resolveHomeTopSearchBarHeight(topChromePolicy),
+        configuredHeight = resolveHomeTopSearchBarHeight(topChromePolicy, nativeMiuixSearch),
         configuredTabsSpacing = resolveHomeTopSearchToTabsSpacing(topChromePolicy),
         bottomBarSearchEnabled = homeSettings?.isBottomBarSearchEnabled == true,
         hideTopTabs = hideTopTabs,
@@ -2478,23 +2535,24 @@ fun HomeHeader(
                 Box(modifier = Modifier.weight(1f)) {
                     renderTabs()
                 }
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .appElasticPress(
-                            visualSize = resolveHomeTopSettingsButtonSize(topChromePolicy),
-                            state = topActionElasticState,
-                            transformInBackdrop = topActionGlassActive,
-                        )
-                        .appActionClickable(
-                            interactionSource = null,
-                            indication = null,
-                            role = Role.Button,
-                        ) {
-                            performHomeTopBarTap(haptic = haptic, onClick = onTopRightActionClick)
+                HomeTopRightActionButton(
+                    nativeMiuix = useNativeTopAction,
+                    onClick = { performHomeTopBarTap(haptic = haptic, onClick = onTopRightActionClick) },
+                    contentDescription = topRightActionContentDescription,
+                    visualSize = resolveHomeTopSettingsButtonSize(topChromePolicy),
+                    elasticState = topActionElasticState,
+                    transformInBackdrop = topActionGlassActive,
+                    modifier = Modifier.size(48.dp),
+                    overlay = {
+                        if (topRightUnreadBadge != null) {
+                            HomeTopUnreadBadge(
+                                text = topRightUnreadBadge,
+                                layout = topRightUnreadBadgeLayout,
+                                borderColor = AppSurfaceTokens.cardContainer(),
+                                modifier = Modifier.align(Alignment.TopEnd),
+                            )
                         }
-                        .semantics { contentDescription = topRightActionContentDescription },
-                    contentAlignment = Alignment.Center,
+                    },
                 ) {
                     Box(
                         modifier = Modifier
@@ -2507,14 +2565,6 @@ fun HomeHeader(
                             contentDescription = null,
                             tint = topForegroundColor,
                             modifier = Modifier.size(resolveHomeTopSettingsIconSize(topChromePolicy)),
-                        )
-                    }
-                    if (topRightUnreadBadge != null) {
-                        HomeTopUnreadBadge(
-                            text = topRightUnreadBadge,
-                            layout = topRightUnreadBadgeLayout,
-                            borderColor = AppSurfaceTokens.cardContainer(),
-                            modifier = Modifier.align(Alignment.TopEnd),
                         )
                     }
                 }
@@ -2943,9 +2993,9 @@ fun HomeHeader(
                                     modifier = Modifier
                                         .weight(1f)
                                         .widthIn(max = AppSpacingTokens.TripleExtraLarge * 13 + AppSpacingTokens.Large)
-                                        // 搜索胶囊与头像/消息按钮共用 36dp 边缘控件高度；关闭液态玻璃时
-                                        // 不再回退到库组件原生高度（48/56dp）。
-                                        .height(resolveHomeTopEdgeControlHeight())
+                                        // 原生搜索入口使用自身高度；玻璃与 MD3 继续使用紧凑边缘控件尺寸。
+                                        .height(if (nativeMiuixSearch) top.yukonga.miuix.kmp.basic.SearchBarDefaults.InputFieldMinHeight
+                                            else resolveHomeTopEdgeControlHeight())
                                         .then(
                                             if (useTopControlBlur && !useBottomBarMatchedTopControls) {
                                                 Modifier.homeTopChromeSurface(
@@ -3010,21 +3060,27 @@ fun HomeHeader(
                                             )
                                         }
                                     } else {
-                                        AppSearchEntry(
-                                            onClick = {
-                                                haptic(HapticType.LIGHT)
-                                                onSearchClick()
-                                            },
-                                            // 首页只显示图标，其他搜索入口保留默认提示。
-                                            showPlaceholder = false,
-                                            centeredContent = false,
-                                            containerColor = if (useTopControlBlur) {
-                                                Color.Transparent
-                                            } else {
-                                                Color.Unspecified
-                                            },
-                                            modifier = Modifier.fillMaxWidth(),
-                                        )
+                                        CompositionLocalProvider(
+                                            // 搜索场景独立于全局及顶栏材质；入口按自己的场景选择原生样式。
+                                            com.android.purebilibili.core.ui.LocalAppThemeConfig provides
+                                                appThemeConfig.copy(liquidGlassEnabled = searchLiquidGlassEnabled),
+                                        ) {
+                                            AppSearchEntry(
+                                                onClick = {
+                                                    haptic(HapticType.LIGHT)
+                                                    onSearchClick()
+                                                },
+                                                // 首页只显示图标，其他搜索入口保留默认提示。
+                                                showPlaceholder = false,
+                                                centeredContent = false,
+                                                containerColor = if (useTopControlBlur) {
+                                                    Color.Transparent
+                                                } else {
+                                                    Color.Unspecified
+                                                },
+                                                modifier = Modifier.fillMaxWidth(),
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -3043,27 +3099,17 @@ fun HomeHeader(
                                         )
                                     )
                             ) {
-                                Box(
+                                HomeTopRightActionButton(
+                                    nativeMiuix = useNativeTopAction,
+                                    onClick = { performHomeTopBarTap(haptic = haptic, onClick = onTopRightActionClick) },
+                                    contentDescription = topRightActionContentDescription,
+                                    visualSize = topRightActionButtonSize,
+                                    elasticState = topActionElasticState,
+                                    transformInBackdrop = topActionGlassActive,
                                     modifier = Modifier
                                         .align(Alignment.CenterStart)
-                                        .size(topRightActionButtonSize)
-                                        .appElasticPress(
-                                            visualSize = topRightActionButtonSize,
-                                            state = topActionElasticState,
-                                            transformInBackdrop = topActionGlassActive,
-                                        )
-                                        .then(topActionSurfaceModifier)
-                                        .appActionClickable(
-                                            interactionSource = null,
-                                            indication = null,
-                                            role = Role.Button,
-                                        ) {
-                                            performHomeTopBarTap(haptic = haptic, onClick = onTopRightActionClick)
-                                        }
-                                        .semantics {
-                                            contentDescription = topRightActionContentDescription
-                                        },
-                                    contentAlignment = Alignment.Center
+                                        .size(topRightActionButtonSize),
+                                    surfaceModifier = topActionSurfaceModifier,
                                 ) {
                                     // Keep the glyph inside the moving shell. Sampling an unmoving
                                     // exported glyph layer shifts/crops it as the consumer stretches.

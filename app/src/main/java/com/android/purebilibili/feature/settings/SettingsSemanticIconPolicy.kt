@@ -54,12 +54,18 @@ internal enum class SettingsIconRole {
     VIEW_RELEASE_NOTES,
     REPLAY_ONBOARDING,
     TIPS,
+    KEYBOARD_SHORTCUTS,
+    VIDEO_COMPANION,
     OPEN_LINKS,
     DONATE,
     DISCLAIMER,
     RELEASE_CHANNEL,
     CRASH_TRACKING,
     ANALYTICS,
+    PERFORMANCE_CAPTURE,
+    PERFORMANCE_MARK,
+    PERFORMANCE_REPORT,
+    PERFORMANCE_PREVIEW,
     FEED_API,
     REFRESH_COUNT,
     DYNAMIC_PREVIEW_TEXT,
@@ -337,6 +343,10 @@ internal fun resolveSettingsMaterialSymbolResource(role: SettingsIconRole): Int 
     SettingsIconRole.INTERACTION_COMMENT -> R.drawable.ms_chat_bubble_outline_24
     SettingsIconRole.DATA_BACKUP -> R.drawable.ms_backup_24
     SettingsIconRole.PRIVACY_PERMISSION -> R.drawable.ms_lock_24
+    SettingsIconRole.PERFORMANCE_MARK -> R.drawable.ic_settings_performance_mark_24
+    SettingsIconRole.PERFORMANCE_CAPTURE -> R.drawable.ms_speed_24
+    SettingsIconRole.PERFORMANCE_PREVIEW -> R.drawable.ms_find_in_page_24
+    SettingsIconRole.PERFORMANCE_REPORT -> R.drawable.ms_share_24
     SettingsIconRole.DIAGNOSTICS -> R.drawable.ms_terminal_24
     SettingsIconRole.ABOUT_SUPPORT -> R.drawable.ms_info_24
     SettingsIconRole.APPEARANCE -> R.drawable.ms_palette_24
@@ -373,6 +383,8 @@ internal fun resolveSettingsMaterialSymbolResource(role: SettingsIconRole): Int 
     SettingsIconRole.VIEW_RELEASE_NOTES -> R.drawable.ms_newspaper_24
     SettingsIconRole.REPLAY_ONBOARDING -> R.drawable.ms_replay_24
     SettingsIconRole.TIPS -> R.drawable.ms_lightbulb_24
+    SettingsIconRole.KEYBOARD_SHORTCUTS -> R.drawable.ms_keyboard_24
+    SettingsIconRole.VIDEO_COMPANION -> R.drawable.ic_settings_video_split_24
     SettingsIconRole.OPEN_LINKS -> R.drawable.ms_link_24
     SettingsIconRole.DONATE -> R.drawable.ms_card_giftcard_24
     SettingsIconRole.DISCLAIMER -> R.drawable.ms_warning_amber_24
@@ -682,6 +694,7 @@ internal fun resolveSettingsSearchTargetIconRole(
     SettingsSearchTarget.VIEW_RELEASE_NOTES -> SettingsIconRole.VIEW_RELEASE_NOTES
     SettingsSearchTarget.REPLAY_ONBOARDING -> SettingsIconRole.REPLAY_ONBOARDING
     SettingsSearchTarget.TIPS -> SettingsIconRole.TIPS
+    SettingsSearchTarget.KEYBOARD_SHORTCUTS -> SettingsIconRole.KEYBOARD_SHORTCUTS
     SettingsSearchTarget.OPEN_LINKS -> SettingsIconRole.OPEN_LINKS
     SettingsSearchTarget.DONATE -> SettingsIconRole.DONATE
     SettingsSearchTarget.TELEGRAM -> SettingsIconRole.OPEN_LINKS

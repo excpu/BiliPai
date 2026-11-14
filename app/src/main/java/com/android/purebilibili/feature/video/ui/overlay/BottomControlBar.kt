@@ -230,8 +230,6 @@ fun BottomControlBar(
         com.android.purebilibili.core.ui.components.rememberAppGlassMenuSource()
     }
     val widthDp = viewportWidthDpOverride ?: LocalConfiguration.current.screenWidthDp
-    val compactInline = !isFullscreen &&
-        LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
     val slotWidth = if (viewportIsLandscape && isFullscreen) 42.dp else 35.dp
     val showExtendedOptions = isFullscreen || widthDp >= 500
     // 画面宽高描述视频视口，不代表页面方向；竖屏页面播放横向视频也属于内嵌控制栏。
@@ -267,36 +265,28 @@ fun BottomControlBar(
             onActionSourceChanged(action, menuSources.getValue(action))
         }.appGlassMenuSource(menuSources.getValue(action))
     val density = LocalDensity.current
-    // Reference player chrome uses fixed 13sp labels; menus still respect system font scaling.
-    CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1f)) {
+    // 竖屏全屏使用独立布局；内嵌与横屏保留原有参数、槽位与菜单行为。
+    if (isFullscreen && simplifiedPortrait) {
         Column(
-            modifier = modifier.fillMaxWidth()
+            modifier = modifier
+                .fillMaxWidth()
                 .semantics { testTagsAsResourceId = true }
-                .windowInsetsPadding(playerControlHorizontalInsets(isFullscreen, !viewportIsLandscape))
-                .padding(top = PILI_PLAYER_BOTTOM_VERTICAL_PADDING_DP.dp)
-                .padding(bottom = (piliPlayerBottomVerticalPaddingDp(isFullscreen) -
-                    PILI_PLAYER_BOTTOM_VERTICAL_PADDING_DP).dp),
+                .windowInsetsPadding(playerControlHorizontalInsets(true, true))
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
-            val seekInsets = if (isFullscreen) {
-                WindowInsets.systemGestures.only(WindowInsetsSides.Horizontal).union(
-                    WindowInsets(left = 20.dp, right = 20.dp),
-                )
-            } else {
-                // 内嵌档进度条铺满播放窗口宽度：不缩进 20dp，也不让系统返回手势区
-                // 的横向 inset 在两侧留出空隙。
-                WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)
-            }
-            val hasSegments = showViewPoints && viewPoints.isNotEmpty()
-            // 内嵌档进度槽贴紧按钮行；全屏保持原有间距。
-            Box(Modifier.windowInsetsPadding(seekInsets)
-                .padding(bottom = piliPlayerProgressGapDp(isFullscreen).dp)
-                .height((if (hasSegments) PILI_PLAYER_CHAPTER_PROGRESS_HEIGHT_DP else PILI_PLAYER_PROGRESS_HEIGHT_DP).dp)) {
+            Box(modifier = Modifier.fillMaxWidth().height(40.dp)) {
                 PlayerControlProgressBar(
                     progressProvider = progressProvider,
                     displayPositionProvider = displayPosition,
                     isSeekScrubbing = isSeekScrubbing,
-                    layoutPolicy = progressLayout,
-                    seekAreaHeight = PILI_PLAYER_PROGRESS_HEIGHT_DP.dp,
+                    layoutPolicy = progressLayout.copy(
+                        trackHeightDp = if (isSeekScrubbing) 5f else 2f,
+                        thumbIdleSizeDp = 0,
+                        thumbDraggingSizeDp = 12,
+                    ),
+                    seekAreaHeight = 40.dp,
+                    horizontalSeekOnly = true,
                     onSeek = onSeek,
                     onSeekStart = onSeekStart,
                     onSeekDragStart = onSeekDragStart,
@@ -308,155 +298,220 @@ fun BottomControlBar(
                     pbpRidgeSamples = if (heatmapEnabled) pbpRidgeSamples else emptyList(),
                     currentChapterProvider = { null },
                     onChapterClick = onChapterClick,
-                    // 进度条槽位固定为 14dp；预览按完整高度向上展开，不能被槽位压缩到按钮区。
-                    // 横竖屏与玻璃开关共用该槽位，控件行的位置不随拖动改变。
-                    // 内嵌档轨道贴到槽位底部，收紧与按钮行之间的空白；全屏保持居中。
-                    trackBottomAnchored = !isFullscreen,
-                    bottomAnchorReserveDp = piliPlayerProgressBottomAnchorReserveDp(
-                        isFullscreen = isFullscreen,
-                        liquidGlassEnabled = glass,
-                    )?.dp,
                     modifier = Modifier
                         .align(androidx.compose.ui.Alignment.BottomCenter)
                         .testTag("player_progress")
                         .wrapContentHeight(androidx.compose.ui.Alignment.Bottom, unbounded = isSeekScrubbing),
                 )
-                PlayerControlViewPointSegments(
-                    progressProvider = progressProvider,
-                    positionProvider = displayPosition,
-                    viewPoints = if (showViewPoints) viewPoints else emptyList(),
-                    onSeek = onSeek,
-                    spacing = 0.dp,
-                    interactive = false,
-                    modifier = Modifier.align(androidx.compose.ui.Alignment.TopCenter).height(PILI_PLAYER_PROGRESS_HEIGHT_DP.dp).testTag("player_viewpoint_segments"),
-                )
             }
-            PiliPlayerBar(
-                groupGlassControls = false,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp).height(PILI_PLAYER_BOTTOM_ROW_HEIGHT_DP.dp)
-                    .testTag("player_control_row"),
-                left = {
-                    if (showPlayPauseButton) {
-                        // 播放/暂停固定在控制栏最左侧，占用与其它图标相同的槽位。
-                        PlayerControlIconAction(
-                            icon = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            description = if (isPlaying) "暂停播放" else "开始播放",
-                            width = slotWidth, height = 30.dp, onClick = onPlayPauseClick,
-                            modifier = Modifier.testTag("player_play_pause"),
-                        )
-                    }
-                    PlayerControlGlassDock(enabled = glass, shape = androidx.compose.foundation.shape.RoundedCornerShape(50)) {
-                        ProgressTimeText(
-                            positionProvider = displayPosition,
-                            durationProvider = { progressProvider().duration },
-                            modifier = Modifier
-                                .heightIn(min = controlContentHeight)
-                                .padding(horizontal = 8.dp)
-                                .testTag("player_time_viewport"),
-                        )
-                    }
-                },
-                right = {
-                    // 竖屏内嵌控制栏优先提供画质入口，热度曲线仍按原设置绘制。
-                    if (showInlineQuality) {
-                        PlayerControlTextAction(
-                            height = controlContentHeight,
-                            text = currentQualityLabel.ifBlank { "画质" },
-                            description = "画质",
-                            onClick = onQualityClick,
-                            modifier = anchor(PlayerControlAnchor.QUALITY, "player_quality_action"),
-                        )
-                    } else if (!simplifiedPortrait && pbpRidgeSamples.isNotEmpty()) {
-                        PlayerControlIconAction(
-                            icon = Icons.Filled.ShowChart, description = "高能进度条",
-                            width = slotWidth, height = 30.dp, onClick = onHeatmapToggle,
-                            selected = heatmapEnabled, dimmed = !heatmapEnabled,
-                            modifier = Modifier.testTag("player_heatmap_action"),
-                        )
-                    }
-                    if (!simplifiedPortrait && anime4kAvailable) {
-                        PlayerControlTextAction(
-                            height = controlContentHeight,
-                            text = if (!anime4kEnabled) "禁用" else if (anime4kPreset == Anime4KPreset.FAST) "效率" else "画质",
-                            description = "超分辨率",
-                            modifier = anchor(PlayerControlAnchor.ENHANCEMENT, "player_enhancement_action"),
-                            onClick = { localMenu = PlayerControlAnchor.ENHANCEMENT },
-                        )
-                    }
-                    if (!simplifiedPortrait && viewPoints.isNotEmpty()) {
-                        PlayerControlIconAction(
-                            icon = Icons.AutoMirrored.Filled.ViewList, description = "分段信息",
-                            width = slotWidth, height = 30.dp, onClick = onChapterClick,
-                            onLongClick = onViewPointsToggle,
-                            dimmed = !showViewPoints, selected = showViewPoints,
-                            modifier = anchor(PlayerControlAnchor.CHAPTERS, "player_chapter_action"),
-                        )
-                    }
-                    // 非全屏内嵌控制栏不提供合集（选集）入口，合集列表仍可在详情页查看。
-                    if (hasEpisodeEntry && isFullscreen) {
-                        PlayerControlIconAction(
-                            icon = Icons.AutoMirrored.Filled.PlaylistPlay, description = "选集",
-                            width = slotWidth, height = 30.dp, onClick = onEpisodeClick,
-                            modifier = anchor(PlayerControlAnchor.EPISODES, "player_episode_action"),
-                        )
-                    }
-                    if (!simplifiedPortrait && showExtendedOptions) {
-                        PlayerControlTextAction(
-                            height = controlContentHeight,
-                            text = currentRatio.displayName, description = "画面比例", onClick = onRatioClick,
-                            modifier = anchor(PlayerControlAnchor.RATIO, "player_ratio_action"),
-                        )
-                    }
-                    if (!simplifiedPortrait && !aiAudioInfo?.items.isNullOrEmpty()) {
-                        PlayerControlIconAction(
-                            icon = Icons.Filled.Translate, description = "翻译",
-                            width = slotWidth, height = 30.dp, iconSize = 18.dp,
-                            onClick = { localMenu = PlayerControlAnchor.TRANSLATION },
-                            modifier = anchor(PlayerControlAnchor.TRANSLATION, "player_translation_action"),
-                        )
-                    }
-                    if ((!simplifiedPortrait || !isFullscreen) && subtitleControlState.trackAvailable) {
-                        PlayerControlIconAction(
-                            icon = if (subtitleControlState.enabled) Icons.Filled.ClosedCaption else Icons.Outlined.ClosedCaptionOff,
-                            description = "字幕", width = slotWidth, height = 30.dp,
-                            selected = subtitleControlState.enabled,
-                            selectedTint = com.android.purebilibili.core.ui.AppContentColors.accent(),
-                            onClick = { localMenu = PlayerControlAnchor.SUBTITLE },
-                            modifier = anchor(PlayerControlAnchor.SUBTITLE, "player_subtitle_action"),
-                        )
-                    }
-                    PlayerControlTextAction(
-                        height = controlContentHeight,
-                        text = "${currentSpeed}X", description = "倍速", onClick = onSpeedClick,
-                        modifier = anchor(PlayerControlAnchor.SPEED, "player_speed_action"),
+            PortraitPlaybackControls(
+                isPlaying = isPlaying,
+                onPlayPause = onPlayPauseClick,
+                positionProvider = displayPosition,
+                durationProvider = { progressProvider().duration },
+                speed = currentSpeed,
+                quality = currentQualityLabel,
+                onSpeedClick = onSpeedClick,
+                onQualityClick = onQualityClick,
+                speedModifier = anchor(PlayerControlAnchor.SPEED, "player_speed_action"),
+                qualityModifier = anchor(PlayerControlAnchor.QUALITY, "player_quality_action"),
+                modifier = Modifier.fillMaxWidth().testTag("player_control_row"),
+            )
+        }
+    } else {
+        // Reference player chrome uses fixed 13sp labels; menus still respect system font scaling.
+        CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1f)) {
+            Column(
+                modifier = modifier.fillMaxWidth()
+                    .semantics { testTagsAsResourceId = true }
+                    .windowInsetsPadding(playerControlHorizontalInsets(isFullscreen, !viewportIsLandscape))
+                    .padding(top = PILI_PLAYER_BOTTOM_VERTICAL_PADDING_DP.dp)
+                    .padding(bottom = (piliPlayerBottomVerticalPaddingDp(isFullscreen) -
+                        PILI_PLAYER_BOTTOM_VERTICAL_PADDING_DP).dp),
+            ) {
+                val seekInsets = if (isFullscreen) {
+                    WindowInsets.systemGestures.only(WindowInsetsSides.Horizontal).union(
+                        WindowInsets(left = 20.dp, right = 20.dp),
                     )
-                    // 竖屏详情入口共用同一动作，玻璃与原生只由按钮材质决定外观。
-                    if (!isFullscreen && LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT) {
-                        onPortraitFullscreen?.let { enterPortrait ->
-                            PlayerControlTextAction(
-                                height = controlContentHeight,
-                                text = "竖屏", description = "竖屏播放", onClick = enterPortrait,
-                                modifier = Modifier.testTag("player_portrait_fullscreen"),
+                } else {
+                    // 内嵌档进度条铺满播放窗口宽度：不缩进 20dp，也不让系统返回手势区
+                    // 的横向 inset 在两侧留出空隙。
+                    WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)
+                }
+                val hasSegments = showViewPoints && viewPoints.isNotEmpty()
+                // 内嵌档进度槽贴紧按钮行；全屏保持原有间距。
+                Box(Modifier.windowInsetsPadding(seekInsets)
+                    .padding(bottom = piliPlayerProgressGapDp(isFullscreen).dp)
+                    .height((if (hasSegments) PILI_PLAYER_CHAPTER_PROGRESS_HEIGHT_DP else PILI_PLAYER_PROGRESS_HEIGHT_DP).dp)) {
+                    PlayerControlProgressBar(
+                        progressProvider = progressProvider,
+                        displayPositionProvider = displayPosition,
+                        isSeekScrubbing = isSeekScrubbing,
+                        layoutPolicy = progressLayout,
+                        seekAreaHeight = PILI_PLAYER_PROGRESS_HEIGHT_DP.dp,
+                        onSeek = onSeek,
+                        onSeekStart = onSeekStart,
+                        onSeekDragStart = onSeekDragStart,
+                        onSeekDragUpdate = onSeekDragUpdate,
+                        onSeekDragCancel = onSeekDragCancel,
+                        videoshotData = videoshotData,
+                        viewPoints = if (showViewPoints) viewPoints else emptyList(),
+                        sponsorMarkers = sponsorMarkers,
+                        pbpRidgeSamples = if (heatmapEnabled) pbpRidgeSamples else emptyList(),
+                        currentChapterProvider = { null },
+                        onChapterClick = onChapterClick,
+                        // 进度条槽位固定为 14dp；预览按完整高度向上展开，不能被槽位压缩到按钮区。
+                        // 横竖屏与玻璃开关共用该槽位，控件行的位置不随拖动改变。
+                        // 内嵌档轨道贴到槽位底部，收紧与按钮行之间的空白；全屏保持居中。
+                        trackBottomAnchored = !isFullscreen,
+                        bottomAnchorReserveDp = piliPlayerProgressBottomAnchorReserveDp(
+                            isFullscreen = isFullscreen,
+                            liquidGlassEnabled = glass,
+                        )?.dp,
+                        modifier = Modifier
+                            .align(androidx.compose.ui.Alignment.BottomCenter)
+                            .testTag("player_progress")
+                            .wrapContentHeight(androidx.compose.ui.Alignment.Bottom, unbounded = isSeekScrubbing),
+                    )
+                    PlayerControlViewPointSegments(
+                        progressProvider = progressProvider,
+                        positionProvider = displayPosition,
+                        viewPoints = if (showViewPoints) viewPoints else emptyList(),
+                        onSeek = onSeek,
+                        spacing = 0.dp,
+                        interactive = false,
+                        modifier = Modifier.align(androidx.compose.ui.Alignment.TopCenter).height(PILI_PLAYER_PROGRESS_HEIGHT_DP.dp).testTag("player_viewpoint_segments"),
+                    )
+                }
+                PiliPlayerBar(
+                    groupGlassControls = false,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp).height(PILI_PLAYER_BOTTOM_ROW_HEIGHT_DP.dp)
+                        .testTag("player_control_row"),
+                    left = {
+                        if (showPlayPauseButton) {
+                            // 播放/暂停固定在控制栏最左侧，占用与其它图标相同的槽位。
+                            PlayerControlIconAction(
+                                icon = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                description = if (isPlaying) "暂停播放" else "开始播放",
+                                width = slotWidth,
+                                height = 30.dp,
+                                onClick = onPlayPauseClick,
+                                modifier = Modifier.testTag("player_play_pause"),
                             )
                         }
-                    }
-                    if (!showInlineQuality && (simplifiedPortrait || showExtendedOptions) && currentQualityLabel.isNotEmpty()) {
+                        PlayerControlGlassDock(enabled = glass, shape = androidx.compose.foundation.shape.RoundedCornerShape(50)) {
+                            ProgressTimeText(
+                                positionProvider = displayPosition,
+                                durationProvider = { progressProvider().duration },
+                                modifier = Modifier
+                                    .heightIn(min = controlContentHeight)
+                                    .padding(horizontal = 8.dp)
+                                    .testTag("player_time_viewport"),
+                            )
+                        }
+                    },
+                    right = {
+                        // 竖屏内嵌控制栏优先提供画质入口，热度曲线仍按原设置绘制。
+                        if (showInlineQuality) {
+                            PlayerControlTextAction(
+                                height = controlContentHeight,
+                                text = currentQualityLabel.ifBlank { "画质" },
+                                description = "画质",
+                                onClick = onQualityClick,
+                                modifier = anchor(PlayerControlAnchor.QUALITY, "player_quality_action"),
+                            )
+                        } else if (!simplifiedPortrait && pbpRidgeSamples.isNotEmpty()) {
+                            PlayerControlIconAction(
+                                icon = Icons.Filled.ShowChart, description = "高能进度条",
+                                width = slotWidth, height = 30.dp, onClick = onHeatmapToggle,
+                                selected = heatmapEnabled, dimmed = !heatmapEnabled,
+                                modifier = Modifier.testTag("player_heatmap_action"),
+                            )
+                        }
+                        if (!simplifiedPortrait && anime4kAvailable) {
+                            PlayerControlTextAction(
+                                height = controlContentHeight,
+                                text = if (!anime4kEnabled) "禁用" else if (anime4kPreset == Anime4KPreset.FAST) "效率" else "画质",
+                                description = "超分辨率",
+                                modifier = anchor(PlayerControlAnchor.ENHANCEMENT, "player_enhancement_action"),
+                                onClick = { localMenu = PlayerControlAnchor.ENHANCEMENT },
+                            )
+                        }
+                        if (!simplifiedPortrait && viewPoints.isNotEmpty()) {
+                            PlayerControlIconAction(
+                                icon = Icons.AutoMirrored.Filled.ViewList, description = "分段信息",
+                                width = slotWidth, height = 30.dp, onClick = onChapterClick,
+                                onLongClick = onViewPointsToggle,
+                                dimmed = !showViewPoints, selected = showViewPoints,
+                                modifier = anchor(PlayerControlAnchor.CHAPTERS, "player_chapter_action"),
+                            )
+                        }
+                        // 非全屏内嵌控制栏不提供合集（选集）入口，合集列表仍可在详情页查看。
+                        if (hasEpisodeEntry && isFullscreen) {
+                            PlayerControlIconAction(
+                                icon = Icons.AutoMirrored.Filled.PlaylistPlay, description = "选集",
+                                width = slotWidth, height = 30.dp, onClick = onEpisodeClick,
+                                modifier = anchor(PlayerControlAnchor.EPISODES, "player_episode_action"),
+                            )
+                        }
+                        if (!simplifiedPortrait && showExtendedOptions) {
+                            PlayerControlTextAction(
+                                height = controlContentHeight,
+                                text = currentRatio.displayName, description = "画面比例", onClick = onRatioClick,
+                                modifier = anchor(PlayerControlAnchor.RATIO, "player_ratio_action"),
+                            )
+                        }
+                        if (!simplifiedPortrait && !aiAudioInfo?.items.isNullOrEmpty()) {
+                            PlayerControlIconAction(
+                                icon = Icons.Filled.Translate, description = "翻译",
+                                width = slotWidth, height = 30.dp, iconSize = 18.dp,
+                                onClick = { localMenu = PlayerControlAnchor.TRANSLATION },
+                                modifier = anchor(PlayerControlAnchor.TRANSLATION, "player_translation_action"),
+                            )
+                        }
+                        if ((!simplifiedPortrait || !isFullscreen) && subtitleControlState.trackAvailable) {
+                            PlayerControlIconAction(
+                                icon = if (subtitleControlState.enabled) Icons.Filled.ClosedCaption else Icons.Outlined.ClosedCaptionOff,
+                                description = "字幕", width = slotWidth, height = 30.dp,
+                                selected = subtitleControlState.enabled,
+                                selectedTint = com.android.purebilibili.core.ui.AppContentColors.accent(),
+                                onClick = { localMenu = PlayerControlAnchor.SUBTITLE },
+                                modifier = anchor(PlayerControlAnchor.SUBTITLE, "player_subtitle_action"),
+                            )
+                        }
                         PlayerControlTextAction(
                             height = controlContentHeight,
-                            text = currentQualityLabel, description = "画质", onClick = onQualityClick,
-                            modifier = anchor(PlayerControlAnchor.QUALITY, "player_quality_action"),
+                            text = "${currentSpeed}X", description = "倍速", onClick = onSpeedClick,
+                            modifier = anchor(PlayerControlAnchor.SPEED, "player_speed_action"),
                         )
-                    }
-                    if (!isFullscreen || viewportIsLandscape) {
-                        PlayerControlIconAction(
-                            icon = if (isFullscreen) Icons.Outlined.FullscreenExit else Icons.Outlined.Fullscreen,
-                            description = if (isFullscreen) "退出全屏" else "全屏",
-                            width = slotWidth, height = 30.dp, iconSize = 24.dp,
-                            onClick = onToggleFullscreen, modifier = Modifier.testTag("player_fullscreen_toggle"),
-                        )
-                    }
-                },
-            )
+                        // 竖屏详情入口共用同一动作，玻璃与原生只由按钮材质决定外观。
+                        if (!isFullscreen && LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT) {
+                            onPortraitFullscreen?.let { enterPortrait ->
+                                PlayerControlTextAction(
+                                    height = controlContentHeight,
+                                    text = "竖屏", description = "竖屏播放", onClick = enterPortrait,
+                                    modifier = Modifier.testTag("player_portrait_fullscreen"),
+                                )
+                            }
+                        }
+                        if (!showInlineQuality && (simplifiedPortrait || showExtendedOptions) && currentQualityLabel.isNotEmpty()) {
+                            PlayerControlTextAction(
+                                height = controlContentHeight,
+                                text = currentQualityLabel, description = "画质", onClick = onQualityClick,
+                                modifier = anchor(PlayerControlAnchor.QUALITY, "player_quality_action"),
+                            )
+                        }
+                        if (!isFullscreen || viewportIsLandscape) {
+                            PlayerControlIconAction(
+                                icon = if (isFullscreen) Icons.Outlined.FullscreenExit else Icons.Outlined.Fullscreen,
+                                description = if (isFullscreen) "退出全屏" else "全屏",
+                                width = slotWidth, height = 30.dp, iconSize = 24.dp,
+                                onClick = onToggleFullscreen, modifier = Modifier.testTag("player_fullscreen_toggle"),
+                            )
+                        }
+                    },
+                )
+            }
         }
     }
     localMenu?.let { menu ->

@@ -119,6 +119,11 @@ import com.android.purebilibili.feature.video.playback.audio.AudioStreamKind
 import com.android.purebilibili.feature.video.playback.audio.isPremiumAudioPlaybackFailure
 import com.android.purebilibili.feature.video.playback.audio.resolveRequestedAudioQuality
 import com.android.purebilibili.feature.video.playback.policy.PlaybackPostLoadTask
+import com.android.purebilibili.feature.video.playback.policy.VideoUiWorkConsumer
+import com.android.purebilibili.feature.video.playback.policy.VideoUiWorkKind
+import com.android.purebilibili.feature.video.playback.policy.VideoUiWorkMedia
+import com.android.purebilibili.feature.video.playback.policy.resolveVideoUiWorkPermission
+import com.android.purebilibili.feature.video.playback.policy.runVisibleVideoUiWork
 import com.android.purebilibili.core.player.policy.PlaybackQualityMode
 import com.android.purebilibili.feature.video.playback.policy.PlaybackHeartbeatSnapshot
 import com.android.purebilibili.feature.video.playback.policy.OnlineCountMediaKey
@@ -1290,7 +1295,8 @@ internal fun clearSubtitleFields(state: VideoPlaybackUiState.Success): VideoPlay
 }
 
 internal fun clearTransientPlaybackPreviewData(state: VideoPlaybackUiState.Success): VideoPlaybackUiState.Success {
-    return if (state.videoshotData == null) state else state.copy(videoshotData = null)
+    return if (state.videoshotData == null && state.aiSummary == null && state.aiSummaryPrompt == null) state
+    else state.copy(videoshotData = null, aiSummary = null, aiSummaryPrompt = null)
 }
 
 internal fun shouldApplyVideoshotResult(
@@ -1551,6 +1557,40 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
     val detailState = _detailState.asStateFlow()
     private val playbackPreparationAllowed = MutableStateFlow(true)
     private val relatedPublicationAllowed = MutableStateFlow(true)
+    private val videoUiWorkConsumers = MutableStateFlow<Map<Any, VideoUiWorkConsumer>>(emptyMap())
+
+    internal fun setVideoUiWorkConsumer(owner: Any, consumer: VideoUiWorkConsumer?) {
+        videoUiWorkConsumers.update { if (consumer == null) it - owner else it + (owner to consumer) }
+        if (consumer != null && consumer.kind != VideoUiWorkKind.DETAIL) requestDemandedVideoUiWork()
+    }
+
+    private fun requestDemandedVideoUiWork() {
+        val success = _uiState.value as? VideoPlaybackUiState.Success ?: return
+        val media = VideoUiWorkMedia(success.info.bvid, success.info.cid)
+        val kinds = videoUiWorkConsumers.value.values.filter { it.media == media }.map { it.kind }
+        if (VideoUiWorkKind.AI_SUMMARY in kinds && success.aiSummary == null &&
+            success.aiSummaryPrompt == null && aiSummaryJob?.isActive != true
+        ) loadAiSummary(media.bvid, media.cid, success.info.owner.mid)
+        if (VideoUiWorkKind.SEEK_PREVIEW in kinds && success.videoshotData == null) {
+            loadVideoshot(media.bvid, media.cid)
+        }
+    }
+
+    private suspend fun <T> visibleVideoUiWork(
+        requestToken: Long,
+        media: VideoUiWorkMedia,
+        kind: VideoUiWorkKind? = null,
+        work: suspend () -> T,
+    ): T = runVisibleVideoUiWork(
+        permissions = combine(videoUiWorkConsumers, backgroundStateFlow(), playbackSessionStore.state) { consumers, background, session ->
+            resolveVideoUiWorkPermission(
+                media, requestToken,
+                VideoUiWorkMedia(session.currentBvid, session.currentCid), session.currentLoadRequestToken,
+                consumers.values, background, kind,
+            )
+        }.distinctUntilChanged(),
+        work = work,
+    )
     private var relatedLoadJob: Job? = null
     private var relatedPreloadJob: Job? = null
     private var relatedPlaybackPreparedToken = -1L
@@ -1973,6 +2013,8 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
 
     private var playerInfoJob: Job? = null
     private var aiSummaryJob: Job? = null
+    private var videoshotJob: Job? = null
+    private var videoshotRequest: VideoUiWorkMedia? = null
     private var videoNoteJob: Job? = null
     
     //  Public Player Accessor
@@ -3303,6 +3345,7 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
             return
         }
         aiSummaryJob?.cancel()
+        videoshotJob?.cancel()
         videoNoteJob?.cancel()
         
         //  [修复] 更智能的重复检测：只有播放器真正在播放同一视频时才跳过
@@ -6053,6 +6096,7 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
         if (com.android.purebilibili.core.store.TokenManager.sessDataCache.isNullOrEmpty()) return
         val session = repository.interactionSession()
         val requestToken = currentLoadRequestToken
+        val media = VideoUiWorkMedia(currentBvid, currentCid)
         val request = session to requestToken
         val followingRevision = repository.followingStatusRevision(session) ?: return
         if (followingMidsRequest == request) return
@@ -6085,7 +6129,9 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
                 for (page in 1..4) {
                     if (currentLoadRequestToken != requestToken || repository.interactionSession() != session ||
                         repository.followingStatusRevision(session) != followingRevision) return@launch
-                    val result = com.android.purebilibili.core.network.NetworkModule.api.getFollowings(loginMid, page, pageSize)
+                    val result = visibleVideoUiWork(requestToken, media) {
+                        com.android.purebilibili.core.network.NetworkModule.api.getFollowings(loginMid, page, pageSize)
+                    }
                     if (result.code != 0 || result.data == null) return@launch
                     val list = requireNotNull(result.data).list.orEmpty()
                     allMids.addAll(list.map { it.mid })
@@ -6183,8 +6229,11 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
     ) {
         if (ownerMid <= 0L) return
         val requestToken = currentLoadRequestToken
+        val media = VideoUiWorkMedia(bvid, currentCid)
         viewModelScope.launch {
-            VideoRepository.getCreatorCardStats(ownerMid).onSuccess { stats ->
+            visibleVideoUiWork(requestToken, media) {
+                VideoRepository.getCreatorCardStats(ownerMid)
+            }.onSuccess { stats ->
                 _uiState.update { current ->
                     if (current is VideoPlaybackUiState.Success && current.info.bvid == bvid &&
                         current.info.owner.mid == ownerMid && currentLoadRequestToken == requestToken) {
@@ -6201,9 +6250,13 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
     }
 
     private fun loadVideoTags(bvid: String) {
+        val requestToken = currentLoadRequestToken
+        val media = VideoUiWorkMedia(bvid, currentCid)
         viewModelScope.launch {
             try {
-                val response = com.android.purebilibili.core.network.NetworkModule.api.getVideoTags(bvid)
+                val response = visibleVideoUiWork(requestToken, media) {
+                    com.android.purebilibili.core.network.NetworkModule.api.getVideoTags(bvid)
+                }
                 if (response.code == 0 && response.data != null) {
                     val checkedResponseData = requireNotNull(response.data)
                     _uiState.update { current ->
@@ -6214,6 +6267,8 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
                     MiniPlayerManager.getInstance(getApplication<Application>()).updateCachedVideoTags(bvid, checkedResponseData)
                     Logger.d("PlayerVM", "🏷️ Loaded ${checkedResponseData.size} video tags")
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.d("PlayerVM", " Failed to load video tags: ${e.message}")
             }
@@ -6222,12 +6277,20 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
     
     // 🖼️ 异步加载视频预览图数据（用于进度条拖动预览）
     private fun loadVideoshot(bvid: String, cid: Long) {
-        viewModelScope.launch {
+        val media = VideoUiWorkMedia(bvid, cid)
+        if (videoshotRequest == media && videoshotJob?.isActive == true) return
+        videoshotJob?.cancel()
+        videoshotRequest = media
+        val requestToken = currentLoadRequestToken
+        videoshotJob = viewModelScope.launch {
             try {
-                val videoshotData = VideoRepository.getVideoshot(bvid, cid)
+                val videoshotData = visibleVideoUiWork(requestToken, media, VideoUiWorkKind.SEEK_PREVIEW) {
+                    VideoRepository.getVideoshot(bvid, cid)
+                }
                 if (videoshotData != null && videoshotData.isValid) {
                     _uiState.update { current ->
                         if (current is VideoPlaybackUiState.Success &&
+                            currentLoadRequestToken == requestToken &&
                             shouldApplyVideoshotResult(
                                 currentState = current,
                                 videoshotBvid = bvid,
@@ -6239,6 +6302,8 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
                     }
                     Logger.d("PlayerVM", "🖼️ Loaded videoshot: ${videoshotData.image.size} images, ${videoshotData.index.size} frames")
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Logger.d("PlayerVM", "🖼️ Failed to load videoshot: ${e.message}")
             }
@@ -7203,6 +7268,8 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
         upMid: Long
     ) {
         aiSummaryJob?.cancel()
+        val requestToken = currentLoadRequestToken
+        val media = VideoUiWorkMedia(bvid, cid)
         aiSummaryJob = viewModelScope.launch {
             var queuedRetryCount = 0
             var requestRetryCount = 0
@@ -7210,7 +7277,7 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
             _uiState.update { current ->
                 if (
                     current is VideoPlaybackUiState.Success &&
-                    current.info.bvid == bvid &&
+                    current.info.bvid == bvid && current.info.cid == cid && currentLoadRequestToken == requestToken &&
                     current.aiSummary?.modelResult == null
                 ) {
                     current.copy(aiSummaryPrompt = loadingPrompt)
@@ -7219,16 +7286,9 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
 
             while (true) {
                 try {
-                    if (BackgroundManager.isInBackground) {
-                        delay(
-                            resolveAiSummaryRetryDelayMs(
-                                queuedRetryCount = queuedRetryCount,
-                                isInBackground = true
-                            )
-                        )
-                        continue
+                    val result = visibleVideoUiWork(requestToken, media, VideoUiWorkKind.AI_SUMMARY) {
+                        VideoRepository.getAiSummary(bvid, cid, upMid)
                     }
-                    val result = VideoRepository.getAiSummary(bvid, cid, upMid)
                     var shouldPollAgain = false
                     var nextDelayMs = 0L
                     var completedQueuedRetry = false
@@ -7242,7 +7302,7 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
                                 com.android.purebilibili.data.repository.AiSummaryFetchStatus.AVAILABLE &&
                                 response.data != null -> {
                                 _uiState.update { current ->
-                                    if (current is VideoPlaybackUiState.Success && current.info.bvid == bvid) {
+                                    if (current is VideoPlaybackUiState.Success && current.info.bvid == bvid && current.info.cid == cid && currentLoadRequestToken == requestToken) {
                                         current.copy(
                                             aiSummary = response.data,
                                             aiSummaryPrompt = null
@@ -7261,7 +7321,7 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
                             ) && diagnosis.shouldRetryLater -> {
                                 val prompt = resolveAiSummaryPromptState(diagnosis)
                                 _uiState.update { current ->
-                                    if (current is VideoPlaybackUiState.Success && current.info.bvid == bvid) {
+                                    if (current is VideoPlaybackUiState.Success && current.info.bvid == bvid && current.info.cid == cid && currentLoadRequestToken == requestToken) {
                                         current.copy(aiSummaryPrompt = prompt)
                                     } else current
                                 }
@@ -7281,7 +7341,7 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
                                 com.android.purebilibili.data.repository.AiSummaryFetchStatus.QUEUED -> {
                                 val prompt = queuedAiSummaryPendingPromptState()
                                 _uiState.update { current ->
-                                    if (current is VideoPlaybackUiState.Success && current.info.bvid == bvid) {
+                                    if (current is VideoPlaybackUiState.Success && current.info.bvid == bvid && current.info.cid == cid && currentLoadRequestToken == requestToken) {
                                         current.copy(aiSummaryPrompt = prompt)
                                     } else current
                                 }
@@ -7294,7 +7354,7 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
                             else -> {
                                 val prompt = resolveAiSummaryPromptState(diagnosis)
                                 _uiState.update { current ->
-                                    if (current is VideoPlaybackUiState.Success && current.info.bvid == bvid) {
+                                    if (current is VideoPlaybackUiState.Success && current.info.bvid == bvid && current.info.cid == cid && currentLoadRequestToken == requestToken) {
                                         current.copy(aiSummaryPrompt = prompt)
                                     } else current
                                 }
@@ -7322,7 +7382,7 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
                         }
                         val prompt = resolveAiSummaryPromptState(diagnosis)
                         _uiState.update { current ->
-                            if (current is VideoPlaybackUiState.Success && current.info.bvid == bvid) {
+                            if (current is VideoPlaybackUiState.Success && current.info.bvid == bvid && current.info.cid == cid && currentLoadRequestToken == requestToken) {
                                 current.copy(aiSummaryPrompt = prompt)
                             } else current
                         }
@@ -7343,6 +7403,7 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
                     if (
                         currentSuccess?.info?.bvid != bvid ||
                         currentSuccess.info.cid != cid ||
+                        currentLoadRequestToken != requestToken ||
                         currentSuccess.aiSummary?.modelResult != null
                     ) {
                         return@launch
@@ -8365,6 +8426,7 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
                         // its internal-CID guard can reload the previous part after auto-advance.
                         onPageIdentityCommitted?.invoke(targetBvid, page.cid)
                         currentCid = page.cid
+                        aiSummaryJob?.cancel()
                         _uiState.value = switchedState
                         exoPlayer?.let { PlayerHistorySessions.forPlayer(it).bindMedia(targetBvid, page.cid) }
                         playResolvedPlayback(
@@ -8381,7 +8443,7 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
                         startHeartbeat()
                         interactiveCurrentEdgeId = 0L
                         loadPlayerInfo(targetBvid, page.cid)
-                        loadVideoshot(targetBvid, page.cid)
+                        requestDemandedVideoUiWork()
                         toast("\u5df2\u5207\u6362\u81f3 P${pageIndex + 1}")
                         return@launch
                     }
@@ -8612,6 +8674,7 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
             )
 
             currentCid = targetCid
+            aiSummaryJob?.cancel()
             subtitleLoadToken += 1
             _uiState.value = clearTransientPlaybackPreviewData(clearSubtitleFields(current)).copy(
                 info = current.info.copy(cid = targetCid),
@@ -8641,7 +8704,7 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
                 targetCid,
                 preferredEdgeId = targetEdgeId ?: interactiveCurrentEdgeId.takeIf { it > 0L }
             )
-            loadVideoshot(currentBvid, targetCid)
+            requestDemandedVideoUiWork()
             true
         } catch (e: Exception) {
             Logger.w("PlayerVM", "switchToInteractiveCid failed: ${e.message}")
@@ -8813,6 +8876,8 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
         isLoggedIn: Boolean,
         requestToken: Long
     ) {
+        // 首次发布或换 P 时，只有当前已打开的面板/拖动预览才需要这些内容。
+        requestDemandedVideoUiWork()
         buildPlaybackPostLoadPlan(isLoggedIn = isLoggedIn)
             .groupBy { spec -> spec.delayMs }
             .toSortedMap()
@@ -8831,7 +8896,6 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
                                 cid = loadedCid,
                                 requestToken = requestToken
                             )
-                            PlaybackPostLoadTask.VIDEO_SHOT -> loadVideoshot(loadedBvid, loadedCid)
                             PlaybackPostLoadTask.REFRESH_DEFERRED_SIGNALS -> refreshDeferredPlaybackSignals(
                                 bvid = loadedBvid,
                                 aid = loadedAid,
@@ -8844,11 +8908,6 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
                                 ownerMid = loadedOwnerMid
                             )
                             PlaybackPostLoadTask.VIDEO_TAGS -> loadVideoTags(loadedBvid)
-                            PlaybackPostLoadTask.AI_SUMMARY -> loadAiSummary(
-                                loadedBvid,
-                                loadedCid,
-                                loadedOwnerMid
-                            )
                             PlaybackPostLoadTask.ONLINE_COUNT -> bindOnlineCountRequest(
                                 loadedBvid,
                                 loadedCid
@@ -10281,6 +10340,7 @@ class VideoPlaybackViewModel(application: Application) : AndroidViewModel(applic
         onlineCountJob?.cancel()  // 👀 取消在线人数轮询
         playbackTransitionMonitorJob?.cancel()
         aiSummaryJob?.cancel()
+        videoshotJob?.cancel()
         videoNoteJob?.cancel()
         activeLoadJob?.cancel()
         playerInfoJob?.cancel()

@@ -5,6 +5,7 @@ import com.android.purebilibili.core.cache.PlayUrlCache
 import com.android.purebilibili.core.coroutines.AppScope
 import com.android.purebilibili.core.network.AppSignUtils
 import com.android.purebilibili.core.network.NetworkModule
+import com.android.purebilibili.core.network.TokenRefreshHelper
 import com.android.purebilibili.core.network.WbiKeyManager
 import com.android.purebilibili.core.network.WbiUtils
 import com.android.purebilibili.core.store.AccountSessionIdentity
@@ -676,7 +677,10 @@ object VideoRepository {
             throw e
         } catch (e: Exception) {
             e.printStackTrace()
-            return Result.failure(e)
+            // 底层瞬时失败（超时等）给可读文案；有业务语义的 message 原样保留。
+            return Result.failure(
+                Exception(resolveBiliApiFriendlyErrorMessage(-1, e.message.orEmpty()), e)
+            )
         }
     }
     
@@ -695,7 +699,7 @@ object VideoRepository {
             val signedParams = WbiUtils.sign(params, imgKey, subKey)
             val feedResp = SharedContentRepository.recommendationResponse(signedParams)
             if (feedResp.code != 0) {
-                throw ContentRequestException(feedResp.code, feedResp.message)
+                throw ContentRequestException(feedResp.code, resolveBiliApiFriendlyErrorMessage(feedResp.code, feedResp.message))
             }
             
             //  [调试] 检查 API 是否返回 dimension 字段
@@ -756,15 +760,39 @@ object VideoRepository {
             return fetchHdMobileFeed(idx, token, session, columns, flush)
         }
         return try {
-            val params = buildSignedHomePhoneFeedParams(
-                idx = idx,
-                accessToken = token,
-                platform = platform,
-                columns = columns,
-                flush = flush,
+            var response = api.getMobileFeed(
+                buildSignedHomePhoneFeedParams(
+                    idx = idx,
+                    accessToken = token,
+                    platform = platform,
+                    columns = columns,
+                    flush = flush,
+                ),
+                session,
             )
-            val response = api.getMobileFeed(params, session)
-            if (response.code != 0) throw ContentRequestException(response.code, response.message)
+            // -101：TV token 过期时用 refresh_token 续期一次并重试，与播放链路同策略；
+            // 仅主会话（无用途绑定账号）且 TV 平台 token 支持，HD/Web token 无法续期。
+            if (response.code == -101 && account == null &&
+                platform == TokenManager.ACCESS_TOKEN_PLATFORM_TV
+            ) {
+                val context = NetworkModule.appContext
+                if (context != null && TokenRefreshHelper.refresh(context)) {
+                    val refreshedToken = TokenManager.accessTokenCache.orEmpty()
+                    if (refreshedToken.isNotBlank() && refreshedToken != token) {
+                        response = api.getMobileFeed(
+                            buildSignedHomePhoneFeedParams(
+                                idx = idx,
+                                accessToken = refreshedToken,
+                                platform = platform,
+                                columns = columns,
+                                flush = flush,
+                            ),
+                            session,
+                        )
+                    }
+                }
+            }
+            if (response.code != 0) throw ContentRequestException(response.code, resolveBiliApiFriendlyErrorMessage(response.code, response.message))
             Result.success(response.data?.items.orEmpty()
                 .filter { it.isSupportedRecommendation }
                 .map { it.toVideoItem() }
@@ -791,7 +819,7 @@ object VideoRepository {
             val signedParams = WbiUtils.sign(params, imgKey, subKey)
             val feedResp = SharedContentRepository.recommendationResponse(signedParams)
             if (feedResp.code != 0) {
-                throw ContentRequestException(feedResp.code, feedResp.message)
+                throw ContentRequestException(feedResp.code, resolveBiliApiFriendlyErrorMessage(feedResp.code, feedResp.message))
             }
 
             val rawItems = feedResp.data?.item.orEmpty()
@@ -844,9 +872,7 @@ object VideoRepository {
                 "build" to "2001100",
                 "c_locale" to "zh_CN",
                 "channel" to "master",
-                // 官方 App 接口没有 ps，条数由 column 决定，固定按 7 列要。
-                // 给 4 时实测只返回 8~10 条，填不满一屏之外还要等下一页。
-                "column" to HOME_FEED_REQUEST_COLUMN.toString(),
+                "column" to columns.toString(),
                 "device" to "pad",
                 "device_name" to "android",
                 "device_type" to "0",
@@ -865,7 +891,7 @@ object VideoRepository {
                 "network" to "wifi",
                 "platform" to "android",
                 "player_net" to "1",
-                "pull" to if (idx == 0) "true" else "false",  // 首页 true=刷新, 往后 false=加载更多
+                "pull" to if (flush == HOME_FEED_FLUSH_PULL_UP) "false" else "true",
                 "qn" to "32",
                 "recsys_mode" to "0",
                 "s_locale" to "zh_CN",
